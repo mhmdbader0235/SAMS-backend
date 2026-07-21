@@ -1,14 +1,10 @@
 """Students and Classes router."""
 
-from datetime import date, datetime
-from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from ..database import get_control_plane_pool, get_db_pool
-from ..dependencies import CurrentUser, get_current_user
-from ..repositories.control_plane_repository import ControlPlaneRepository
-from ..repositories.tenant_repository import TenantRepository, parse_id
-from ..schemas import (
+from app.core.database import get_db_pool
+from app.core.dependencies import CurrentUser, get_current_user
+from app.core.schemas import (
     ClassCreateRequest,
     ClassResponse,
     EnrollmentCreateRequest,
@@ -16,16 +12,17 @@ from ..schemas import (
     EnrollmentStateUpdateRequest,
     LevelCreateRequest,
     LevelResponse,
-    StudentCreateRequest,
-    StudentResponse,
-    StudentParentLinkRequest,
-    TeacherCreateRequest,
-    TeacherResponse,
     ParentResponse,
+    StudentCreateRequest,
     StudentHealthCreateRequest,
     StudentHealthResponse,
+    StudentParentLinkRequest,
+    StudentResponse,
+    TeacherCreateRequest,
+    TeacherResponse,
 )
-from ..services.tenant_service import TenantService
+from app.domains.tenant.service import TenantService
+from app.domains.tenant.tenant_repository import TenantRepository, parse_id
 
 router = APIRouter(prefix="/api/v1/students", tags=["students"])
 
@@ -92,6 +89,7 @@ async def create_teacher(
 
 
 from pydantic import BaseModel
+
 
 class StaffUserCreateRequest(BaseModel):
     email: str

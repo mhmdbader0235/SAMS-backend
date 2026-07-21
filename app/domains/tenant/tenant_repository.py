@@ -1,7 +1,8 @@
 """TenantRepository — database operations for tenant (school) databases."""
 
-from datetime import date, datetime
+from datetime import datetime
 from uuid import UUID
+
 import asyncpg
 
 

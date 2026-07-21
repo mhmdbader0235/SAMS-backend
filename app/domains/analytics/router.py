@@ -2,8 +2,8 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from ..dependencies import CurrentUser, get_current_user
-from ..services.analytics_service import AnalyticsService
+from app.core.dependencies import CurrentUser, get_current_user
+from app.domains.analytics.service import AnalyticsService
 
 router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
 

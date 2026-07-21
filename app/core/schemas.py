@@ -1,7 +1,8 @@
 """Pydantic schemas — request bodies and response models."""
 
-from datetime import date, datetime
+from datetime import datetime
 from uuid import UUID
+
 from pydantic import BaseModel, EmailStr
 
 
@@ -240,8 +241,10 @@ class StudentHealthResponse(BaseModel):
 # =============================================================================
 # Event Workflow & Resource schemas
 # =============================================================================
-from pydantic import Field
 from typing import Literal
+
+from pydantic import Field
+
 
 class ResourceTypeResponse(BaseModel):
     id: int

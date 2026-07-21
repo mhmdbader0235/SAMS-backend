@@ -1,15 +1,14 @@
 """Integration tests for repositories."""
 
-from datetime import date, datetime, timezone
-from uuid import UUID, uuid4
+from datetime import UTC, datetime
+from uuid import uuid4
 
 import asyncpg
-import pytest
 
-from app.repositories.control_plane_repository import ControlPlaneRepository
-from app.repositories.tenant_repository import TenantRepository
-from app.repositories.user_repository import UserRepository
-from app.services.auth_service import AuthService
+from app.domains.auth.service import AuthService
+from app.domains.tenant.control_plane_repository import ControlPlaneRepository
+from app.domains.tenant.tenant_repository import TenantRepository
+from app.domains.tenant.user_repository import UserRepository
 
 
 # =============================================================================
@@ -142,7 +141,7 @@ class TestTenantRepository:
             description="A trip to the cosmos",
             address="Planetarium Center",
             school_subsidy=5.00,
-            date_val=datetime.now(timezone.utc),
+            date_val=datetime.now(UTC),
             created_by=t_uid,
             class_mappings=[{
                 "class_id": class_id,

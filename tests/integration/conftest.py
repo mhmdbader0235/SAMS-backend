@@ -1,5 +1,6 @@
-import pytest
 import asyncpg
+import pytest
+
 
 @pytest.fixture(autouse=True)
 async def clean_db(db_pool: asyncpg.Pool):

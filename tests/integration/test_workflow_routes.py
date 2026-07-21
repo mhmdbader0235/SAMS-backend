@@ -1,8 +1,11 @@
-import pytest
+from datetime import UTC, datetime
+
 import asyncpg
-from datetime import datetime, UTC
+import pytest
 from httpx import AsyncClient
-from app.repositories.tenant_repository import TenantRepository
+
+from app.domains.tenant.tenant_repository import TenantRepository
+
 
 @pytest.mark.asyncio
 async def test_workflow_routes(test_client: AsyncClient, db_pool: asyncpg.Pool):

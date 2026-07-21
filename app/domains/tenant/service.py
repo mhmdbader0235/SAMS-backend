@@ -5,16 +5,16 @@ Implements PII encryption/decryption, masking, and audit logging.
 Does not import FastAPI or asyncpg directly.
 """
 
-from datetime import UTC, date, datetime, timedelta, timezone
+from datetime import UTC, datetime
 from uuid import UUID
+
 from cryptography.fernet import Fernet
 
-from ..config import ENCRYPTION_KEY
-from ..database import get_control_plane_pool, get_db_pool
-from ..repositories.control_plane_repository import ControlPlaneRepository
-from ..repositories.tenant_repository import TenantRepository, parse_id
-from ..repositories.user_repository import UserRepository
-from .auth_service import AuthService
+from app.core.config import ENCRYPTION_KEY
+from app.core.database import get_db_pool
+from app.domains.auth.service import AuthService
+from app.domains.tenant.tenant_repository import TenantRepository, parse_id
+from app.domains.tenant.user_repository import UserRepository
 
 _fernet = Fernet(ENCRYPTION_KEY.encode())
 
@@ -808,19 +808,13 @@ class TenantService:
                 return True
             return False
 
-        elif action == "edit_draft":
-            return role == "teacher" and is_owner and status == "draft"
-
-        elif action == "submit":
+        elif action == "edit_draft" or action == "submit":
             return role == "teacher" and is_owner and status == "draft"
 
         elif action == "manager_decision":
             return role in ("manager", "school_admin") and status == "proposed"
 
-        elif action == "finance_pricing":
-            return role in ("finance", "school_admin") and status == "finance_approval"
-
-        elif action == "finance_submit":
+        elif action == "finance_pricing" or action == "finance_submit":
             return role in ("finance", "school_admin") and status == "finance_approval"
 
         elif action == "final_decision":
@@ -890,7 +884,7 @@ class TenantService:
             for r in resources:
                 cost = await repo.get_resource_cost_by_resource_id(r["id"])
                 if not cost:
-                    raise ValueError(f"Every resource row must have a matching price row")
+                    raise ValueError("Every resource row must have a matching price row")
                     
         # Apply updates and side effects
         update_fields = {"status": next_status}

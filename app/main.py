@@ -10,19 +10,20 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .database import db_manager, get_control_plane_pool
-from .routers.analytics import router as analytics_router
-from .routers.auth import router as auth_router
-from .routers.events import router as events_router
-from .routers.notes import router as notes_router
-from .routers.students import router as students_router
-from .routers.notifications import router as notifications_router
+from app.core.database import db_manager, get_control_plane_pool
+from app.domains.analytics.router import router as analytics_router
+from app.domains.auth.router import router as auth_router
+from app.domains.events.router import router as events_router
+from app.domains.notes.router import router as notes_router
+from app.domains.notifications.router import router as notifications_router
+from app.domains.students.router import router as students_router
 
 
 async def event_reminders_scheduler():
     """Background task to poll and send event reminders every 10 seconds."""
     import asyncio
-    from .services.tenant_service import TenantService
+
+    from app.domains.tenant.service import TenantService
     print("[startup] Event Reminders Scheduler loop started.")
     while True:
         try:

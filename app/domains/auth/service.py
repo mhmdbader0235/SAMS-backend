@@ -7,21 +7,20 @@ Control-Plane vs. Tenant DB boundaries.
 
 import os
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
 
 import jwt
 from passlib.context import CryptContext
 
-from ..config import (
+from app.core.config import (
     JWT_EXPIRATION_MINUTES,
     JWT_PRIVATE_KEY_PATH,
     JWT_PUBLIC_KEY_PATH,
     JWT_SECRET,
 )
-from ..database import get_control_plane_pool, get_db_pool
-from ..repositories.control_plane_repository import ControlPlaneRepository
-from ..repositories.user_repository import UserRepository
-from ..repositories.tenant_repository import TenantRepository
+from app.core.database import get_control_plane_pool, get_db_pool
+from app.domains.tenant.control_plane_repository import ControlPlaneRepository
+from app.domains.tenant.tenant_repository import TenantRepository
+from app.domains.tenant.user_repository import UserRepository
 
 _pwd_context = CryptContext(schemes=["bcrypt_sha256"], deprecated="auto")
 
@@ -145,7 +144,7 @@ class AuthService:
                 raise ValueError("Tenant ID is required for school users")
 
             if role in ("teacher", "manager", "finance"):
-                from app.config import TEACHER_INVITE_CODE
+                from app.core.config import TEACHER_INVITE_CODE
                 if not invite_code or invite_code.strip() != TEACHER_INVITE_CODE:
                     raise PermissionError("Invalid or missing staff invite code")
 

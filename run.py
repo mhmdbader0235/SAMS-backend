@@ -1,8 +1,8 @@
+import os
+import signal
 import subprocess
 import sys
-import os
 import time
-import signal
 
 # Change to the directory where run.py is located so docker-compose and relative paths work
 os.chdir(os.path.dirname(os.path.abspath(__file__)))

@@ -1,27 +1,28 @@
 from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from ..database import get_db_pool
-from ..dependencies import CurrentUser, get_current_user
-from ..schemas import (
+
+from app.core.database import get_db_pool
+from app.core.dependencies import CurrentUser, get_current_user
+from app.core.schemas import (
     EventCreateRequest,
     EventResponse,
     EventsListResponse,
     FeedbackCreateRequest,
     FeedbackResponse,
-    PaymentResponse,
-    ResourceTypeResponse,
-    ResourceTypeCreateRequest,
-    ResourceLineIn,
-    ResourceLineResponse,
-    ResourceSummaryResponse,
-    ResourceCostIn,
-    ManagerDecision,
     FinalDecision,
+    ManagerDecision,
+    PaymentResponse,
     PublishedEventOut,
+    ResourceCostIn,
+    ResourceLineIn,
+    ResourceSummaryResponse,
+    ResourceTypeCreateRequest,
+    ResourceTypeResponse,
     TicketPriceUpdate,
 )
-from ..services.tenant_service import TenantService
-from ..repositories.tenant_repository import TenantRepository, parse_id
+from app.domains.tenant.service import TenantService
+from app.domains.tenant.tenant_repository import TenantRepository, parse_id
 
 router = APIRouter(prefix="/api/v1/events", tags=["events"])
 
@@ -187,6 +188,7 @@ async def list_feedbacks(
 # Event Workflow & Resources Static Endpoints (Task 8)
 # =============================================================================
 from pydantic import BaseModel
+
 
 class EventPatchRequest(BaseModel):
     title: str | None = None
@@ -455,6 +457,7 @@ async def update_event(
 # Event Workflow & Resources Endpoints (Task 8)
 # =============================================================================
 from pydantic import BaseModel
+
 
 class EventPatchRequest(BaseModel):
     title: str | None = None

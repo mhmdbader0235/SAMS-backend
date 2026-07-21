@@ -1,14 +1,11 @@
 """Integration tests for routers."""
 
-from datetime import date, datetime, timezone
-from uuid import UUID
+from datetime import UTC, datetime
 
 import asyncpg
-import pytest
 from httpx import AsyncClient
 
-from app.services.auth_service import AuthService
-from app.repositories.tenant_repository import TenantRepository, parse_id
+from app.domains.tenant.tenant_repository import TenantRepository
 
 
 # =============================================================================
@@ -50,7 +47,7 @@ class TestAuthRouter:
         assert me_resp.json()["tenant_id"] == "tenant_a"
 
     async def test_register_and_login_teacher(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
-        from app.config import TEACHER_INVITE_CODE
+        from app.core.config import TEACHER_INVITE_CODE
         
         reg_payload = {
             "email": "teacher@school.com",
@@ -89,7 +86,7 @@ class TestAuthRouter:
 # =============================================================================
 class TestStudentsAndClassesRouter:
     async def test_staff_can_manage_levels_and_classes(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
-        from app.config import TEACHER_INVITE_CODE
+        from app.core.config import TEACHER_INVITE_CODE
         # Setup teacher
         t_payload = {
             "email": "teacher@school.com",
@@ -127,7 +124,7 @@ class TestStudentsAndClassesRouter:
         assert cls_resp.json()["name"] == "Class A"
 
     async def test_duplicate_level_and_class_prevention(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
-        from app.config import TEACHER_INVITE_CODE
+        from app.core.config import TEACHER_INVITE_CODE
         # Setup teacher
         t_payload = {
             "email": "teacher_dup@school.com",
@@ -180,7 +177,7 @@ class TestStudentsAndClassesRouter:
         assert cls_id1 == cls_id2
 
     async def test_student_enrollments_and_approvals(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
-        from app.config import TEACHER_INVITE_CODE
+        from app.core.config import TEACHER_INVITE_CODE
         # 1. Setup teacher & class
         t_payload = {
             "email": "teacher@class.com",
@@ -223,7 +220,7 @@ class TestStudentsAndClassesRouter:
             "description": "Astronomy night",
             "address": "Astrodome",
             "school_subsidy": 4.0,
-            "date": datetime.now(timezone.utc).isoformat(),
+            "date": datetime.now(UTC).isoformat(),
             "class_mappings": [{
                 "class_id": class_id,
                 "ticket_price": 6.0,
@@ -292,7 +289,7 @@ class TestStudentsAndClassesRouter:
         assert app_resp.json()["state"] == "approved_by_teacher"
 
     async def test_parent_direct_enrollment_and_teacher_approval(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
-        from app.config import TEACHER_INVITE_CODE
+        from app.core.config import TEACHER_INVITE_CODE
         # 1. Setup teacher & class
         t_payload = {
             "email": "teacher2@class.com",
@@ -355,7 +352,7 @@ class TestStudentsAndClassesRouter:
             "description": "Star hunting",
             "address": "Astrodome",
             "school_subsidy": 5.0,
-            "date": datetime.now(timezone.utc).isoformat(),
+            "date": datetime.now(UTC).isoformat(),
             "class_mappings": [{
                 "class_id": class_id,
                 "ticket_price": 7.0,
@@ -401,7 +398,7 @@ class TestStudentsAndClassesRouter:
         assert app_resp.json()["state"] == "approved_by_teacher"
 
     async def test_student_class_match_and_one_time_enrollment(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
-        from app.config import TEACHER_INVITE_CODE
+        from app.core.config import TEACHER_INVITE_CODE
         # 1. Setup teacher, level, and Class A
         t_payload = {
             "email": "teacher3@class.com",
@@ -445,7 +442,7 @@ class TestStudentsAndClassesRouter:
             "description": "Stargazing night",
             "address": "Astrodome",
             "school_subsidy": 4.0,
-            "date": datetime.now(timezone.utc).isoformat(),
+            "date": datetime.now(UTC).isoformat(),
             "class_mappings": [
                 {
                     "class_id": class_id_1,
@@ -506,7 +503,7 @@ class TestStudentsAndClassesRouter:
         assert "already enrolled in this event" in dup_event_resp.json()["detail"]
 
     async def test_linked_profile_details(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
-        from app.config import TEACHER_INVITE_CODE
+        from app.core.config import TEACHER_INVITE_CODE
         # 1. Setup teacher and class
         t_payload = {
             "email": "teacher4@class.com",
@@ -593,7 +590,7 @@ class TestStudentsAndClassesRouter:
 # =============================================================================
 class TestNotificationsRouter:
     async def test_notification_delivery(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
-        from app.config import TEACHER_INVITE_CODE
+        from app.core.config import TEACHER_INVITE_CODE
         # 1. Setup teacher and class
         t_payload = {
             "email": "teacher@notif.com",
@@ -636,7 +633,7 @@ class TestNotificationsRouter:
             "description": "Ahoy mates",
             "address": "Ocean Harbor",
             "school_subsidy": 0.0,
-            "date": datetime.now(timezone.utc).isoformat(),
+            "date": datetime.now(UTC).isoformat(),
             "class_mappings": [{
                 "class_id": class_id,
                 "ticket_price": 0.0,
@@ -661,7 +658,7 @@ class TestNotificationsRouter:
 # =============================================================================
 class TestStudentHealthRouter:
     async def test_health_records_pii(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
-        from app.config import TEACHER_INVITE_CODE
+        from app.core.config import TEACHER_INVITE_CODE
         # Setup teacher
         t_payload = {
             "email": "teacher@health.com",
@@ -702,7 +699,7 @@ class TestStudentHealthRouter:
 
 class TestEventUpdateRouter:
     async def test_update_event_and_class_mappings(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
-        from app.config import TEACHER_INVITE_CODE
+        from app.core.config import TEACHER_INVITE_CODE
         # Setup teacher
         t_payload = {
             "email": "teacher@updateevent.com",
@@ -731,7 +728,7 @@ class TestEventUpdateRouter:
             "description": "Original description",
             "address": "Cave",
             "school_subsidy": 10.0,
-            "date": datetime.now(timezone.utc).isoformat(),
+            "date": datetime.now(UTC).isoformat(),
             "class_mappings": [{
                 "class_id": class_id,
                 "ticket_price": 5.0,
@@ -747,7 +744,7 @@ class TestEventUpdateRouter:
             "description": "Updated description",
             "address": "Mountain",
             "school_subsidy": 25.0,
-            "date": datetime.now(timezone.utc).isoformat(),
+            "date": datetime.now(UTC).isoformat(),
             "class_mappings": [{
                 "class_id": class_id,
                 "ticket_price": 15.0,
@@ -834,7 +831,7 @@ class TestAdminStaffCreation:
         assert fin_resp.json()["email"] == "new_finance@test.com"
 
         # 4. Teacher tries to create a manager (should fail with 403)
-        from app.config import TEACHER_INVITE_CODE
+        from app.core.config import TEACHER_INVITE_CODE
         teacher_payload = {
             "email": "teacher_rand@test.com",
             "password": "pass",

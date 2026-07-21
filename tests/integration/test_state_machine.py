@@ -1,10 +1,12 @@
-import pytest
+from datetime import UTC, datetime
+
 import asyncpg
-from datetime import datetime, UTC
-from app.services.tenant_service import TenantService
-from app.repositories.tenant_repository import TenantRepository
-from app.repositories.user_repository import UserRepository
-from app.services.auth_service import AuthService
+import pytest
+
+from app.domains.tenant.service import TenantService
+from app.domains.tenant.tenant_repository import TenantRepository
+from app.domains.tenant.user_repository import UserRepository
+
 
 class MockUser:
     def __init__(self, id: int, role: str, email: str = ""):
@@ -14,7 +16,7 @@ class MockUser:
 
 @pytest.mark.asyncio
 async def test_state_machine_workflow(db_pool: asyncpg.Pool, monkeypatch):
-    import app.database as db_module
+    import app.core.database as db_module
     async def _mock_get_pool(_tenant_id: str) -> asyncpg.Pool:
         return db_pool
     monkeypatch.setattr(db_module.db_manager, "get_pool", _mock_get_pool)

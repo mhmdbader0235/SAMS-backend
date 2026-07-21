@@ -14,7 +14,7 @@ import os
 
 import asyncpg
 
-from .config import CONTROL_PLANE_DB_NAME, DB_HOST, DB_PASSWORD, DB_PORT, DB_USER
+from app.core.config import CONTROL_PLANE_DB_NAME, DB_HOST, DB_PASSWORD, DB_PORT, DB_USER
 
 
 # =============================================================================

@@ -21,7 +21,7 @@ from httpx import ASGITransport, AsyncClient
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-from app.database import _initialize_control_plane_tables, _initialize_tenant_tables
+from app.core.database import _initialize_control_plane_tables, _initialize_tenant_tables
 from app.main import app
 
 # ─── Test database settings ──────────────────────────────────────────────────
@@ -80,7 +80,7 @@ async def test_client(db_pool: asyncpg.Pool, monkeypatch):
     Async HTTP client for the FastAPI app with the DB pools monkey-patched
     to use the test database instead of the real tenant databases.
     """
-    import app.database as db_module
+    import app.core.database as db_module
 
     async def _mock_get_pool(_tenant_id: str) -> asyncpg.Pool:
         return db_pool

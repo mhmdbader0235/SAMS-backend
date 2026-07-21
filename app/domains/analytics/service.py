@@ -7,9 +7,9 @@ Does not import FastAPI or asyncpg directly.
 
 import asyncio
 
-from ..database import get_control_plane_pool, get_db_pool
-from ..repositories.control_plane_repository import ControlPlaneRepository
-from ..repositories.tenant_repository import TenantRepository
+from app.core.database import get_control_plane_pool, get_db_pool
+from app.domains.tenant.control_plane_repository import ControlPlaneRepository
+from app.domains.tenant.tenant_repository import TenantRepository
 
 
 class AnalyticsService:

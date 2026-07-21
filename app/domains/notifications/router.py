@@ -2,11 +2,12 @@
 
 from datetime import datetime
 from uuid import UUID
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from ..dependencies import CurrentUser, get_current_user
-from ..services.tenant_service import TenantService
+from app.core.dependencies import CurrentUser, get_current_user
+from app.domains.tenant.service import TenantService
 
 router = APIRouter(prefix="/api/v1/notifications", tags=["notifications"])
 

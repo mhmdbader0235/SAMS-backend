@@ -1,6 +1,7 @@
 """UserRepository — user-related database queries for tenant databases."""
 
 from uuid import UUID
+
 import asyncpg
 
 

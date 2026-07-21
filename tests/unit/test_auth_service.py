@@ -8,9 +8,7 @@ All assertions test the AuthService methods in isolation.
 import time
 from uuid import uuid4
 
-import pytest
-
-from app.services.auth_service import AuthService
+from app.domains.auth.service import AuthService
 
 
 class TestPasswordHashing:

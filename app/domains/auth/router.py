@@ -2,15 +2,15 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPBearer
-
-from ..dependencies import CurrentUser, get_current_user
-from ..schemas import TokenResponse, UserLoginRequest, UserRegisterRequest
-from ..services.auth_service import AuthService
-from ..database import get_control_plane_pool, get_db_pool
-from ..repositories.control_plane_repository import ControlPlaneRepository
-from ..repositories.user_repository import UserRepository
-from ..repositories.tenant_repository import TenantRepository
 from pydantic import BaseModel
+
+from app.core.database import get_control_plane_pool, get_db_pool
+from app.core.dependencies import CurrentUser, get_current_user
+from app.core.schemas import TokenResponse, UserLoginRequest, UserRegisterRequest
+from app.domains.auth.service import AuthService
+from app.domains.tenant.control_plane_repository import ControlPlaneRepository
+from app.domains.tenant.tenant_repository import TenantRepository
+from app.domains.tenant.user_repository import UserRepository
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 _security = HTTPBearer(auto_error=False)
@@ -135,7 +135,7 @@ async def get_profile(current_user: CurrentUser = Depends(get_current_user)) -> 
                     parent_name = parent_info.get("name")
                     parent_email = parent_info.get("email")
             elif current_user.role == "teacher":
-                from ..services.tenant_service import TenantService
+                from app.domains.tenant.service import TenantService
                 class_info = await TenantService.get_class_by_head_teacher(current_user.tenant_id, current_user.id)
                 if class_info:
                     class_id = class_info.get("id")

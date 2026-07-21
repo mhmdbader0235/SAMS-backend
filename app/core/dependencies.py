@@ -4,12 +4,11 @@ Shared FastAPI dependencies.
 Extracts current user context from JWT tokens and performs role-based authorization guards.
 """
 
-from uuid import UUID
 
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
-from .services.auth_service import AuthService
+from app.domains.auth.service import AuthService
 
 _security = HTTPBearer(auto_error=False)
 
