@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Secrets — never commit
+.env
+deploy/certs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+*.xml
+
+# Ruff / Black cache
+.ruff_cache/

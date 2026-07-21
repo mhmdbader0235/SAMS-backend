@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: local_postgres_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secure_local_password
+      POSTGRES_DB: user_service_db
+    ports:
+      # Changed to 5433 so it doesn't conflict with your local install!
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # This line links your init.sql file to the container
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  seeder:
+    build:
+      context: .
+      dockerfile: Dockerfile.seeder
+    container_name: local_seeder
+    depends_on:
+      - db
+    environment:
+      - BASE_URL=http://host.docker.internal:8000
+      - DB_HOST=db
+      - DB_PORT=5432
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  pgdata:
+    external: true
+    name: doumind-backend_pgdata
