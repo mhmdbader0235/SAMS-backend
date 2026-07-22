@@ -357,19 +357,19 @@ async def seed():
         teacher_tok = t_login["access_token"]
 
         events_def = [
-            {"title": "Science Fair 2026",      "class_idx": 0, "subsidy": 20.0, "ticket": 15.0, "days": 30,
+            {"title": "Science Fair 2026",      "class_idx": 0, "subsidy": 20.0, "ticket": 15.0, "days": -10,
              "desc": "Annual science fair for Grade 7 class 7A.", "address": "Main Hall, 1st Floor",
              "budget_desc": "Lab materials", "budget_price": 200.0},
             {"title": "Math Olympiad",           "class_idx": 1, "subsidy": 10.0, "ticket":  5.0, "days": 45,
              "desc": "Math competition for class 7B students.",   "address": "Room 101",
              "budget_desc": "Stationery & prizes", "budget_price": 150.0},
-            {"title": "History Trip - Museum",   "class_idx": 2, "subsidy": 30.0, "ticket": 25.0, "days": 20,
+            {"title": "History Trip - Museum",   "class_idx": 2, "subsidy": 30.0, "ticket": 25.0, "days": -20,
              "desc": "Educational visit to National Museum for 8A.", "address": "National Museum, City Centre",
              "budget_desc": "Transport & entry fees", "budget_price": 400.0},
             {"title": "Art Exhibition",          "class_idx": 3, "subsidy": 15.0, "ticket": 10.0, "days": 60,
              "desc": "Student artworks showcase for class 8B.", "address": "Gallery Room, 2nd Floor",
              "budget_desc": "Art supplies & frames", "budget_price": 300.0},
-            {"title": "Sports Day",              "class_idx": 4, "subsidy": 50.0, "ticket":  0.0, "days": 15,
+            {"title": "Sports Day",              "class_idx": 4, "subsidy": 50.0, "ticket":  0.0, "days": -5,
              "desc": "Annual sports day competition for 9A.", "address": "School Football Field",
              "budget_desc": "Equipment & refreshments", "budget_price": 600.0},
             {"title": "Tech Workshop",           "class_idx": 5, "subsidy": 40.0, "ticket": 20.0, "days": 25,

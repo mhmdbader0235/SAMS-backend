@@ -5,7 +5,7 @@ Implements PII encryption/decryption, masking, and audit logging.
 Does not import FastAPI or asyncpg directly.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from cryptography.fernet import Fernet
@@ -284,6 +284,70 @@ class TenantService:
         return event
 
     @staticmethod
+    async def clone_event(
+        tenant_id: str,
+        event_id: int,
+        created_by_user_id: int,
+        user_role: str,
+        new_title: str | None = None,
+        new_date: datetime | None = None,
+    ) -> dict:
+        if user_role not in ("school_admin", "teacher"):
+            raise PermissionError("Only staff can clone events")
+
+        pool = await get_db_pool(tenant_id)
+        repo = TenantRepository(pool)
+
+        original = await repo.get_event_by_id(event_id)
+        if not original:
+            raise ValueError("Event not found")
+
+        title = new_title or f"Template - {original['title']}"
+        date_val = new_date or (datetime.utcnow() + timedelta(days=30))
+
+        class_mappings = [
+            {
+                "class_id": m["class_id"],
+                "ticket_price": float(m["ticket_price"]) if m.get("ticket_price") is not None else 0.0,
+                "budgets": [],
+            }
+            for m in original.get("class_mappings", [])
+        ]
+
+        # 1. Create the new draft event
+        new_event = await TenantService.create_event(
+            tenant_id=tenant_id,
+            title=title,
+            description=original.get("description", ""),
+            address=original.get("address"),
+            school_subsidy=float(original.get("school_subsidy", 0.0)),
+            date_val=date_val,
+            created_by=created_by_user_id,
+            class_mappings=class_mappings,
+            user_role=user_role,
+        )
+
+        # 2. Duplicate requested resources
+        original_resources = await repo.get_resources_for_event(event_id)
+        if original_resources:
+            resources_list = [
+                {
+                    "resource_type_id": r["resource_type_id"],
+                    "description": r.get("description"),
+                    "quantity": r.get("quantity", 1),
+                }
+                for r in original_resources
+            ]
+            await TenantService.add_resources_to_event(
+                tenant_id=tenant_id,
+                event_id=new_event["id"],
+                resources_list=resources_list,
+                added_by_user_id=created_by_user_id,
+            )
+
+        return await repo.get_event_by_id(new_event["id"])
+
+    @staticmethod
     async def update_event(
         tenant_id: str,
         event_id: int,
@@ -378,9 +442,22 @@ class TenantService:
                 self.role = role
         actor = Actor(user_id, user_role)
 
-        if user_role in ("school_admin", "teacher", "manager", "finance"):
+        if user_role in ("school_admin", "manager", "finance"):
             events = await repo.get_all_events()
             return [ev for ev in events if TenantService.check_event_permission(actor, ev, "read")]
+        elif user_role == "teacher":
+            # Teacher can read owned events, published events, and events for classes they head
+            teacher_class = await repo.get_class_by_head_teacher(actor.id)
+            teacher_class_id = teacher_class["id"] if teacher_class else None
+            events = await repo.get_all_events()
+            def has_access(ev):
+                if TenantService.check_event_permission(actor, ev, "read"):
+                    return True
+                if teacher_class_id and any(m.get("class_id") == teacher_class_id for m in ev.get("class_mappings", [])):
+                    return True
+                return False
+            return [ev for ev in events if has_access(ev)]
+            # removed duplicate lines
 
         elif user_role == "student":
             events = await repo.get_events_for_student(user_id)
@@ -799,7 +876,7 @@ class TenantService:
             if role in ("parent", "student"):
                 return status == "published"
             if role == "teacher":
-                return is_owner or status == "published"
+                return is_owner or status == "published"  # Teachers can read their own drafts and published events
             if role == "manager":
                 return status in ("proposed", "finance_approval", "final_review", "published")
             if role == "finance":

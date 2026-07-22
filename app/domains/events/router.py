@@ -80,6 +80,30 @@ async def create_event(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+@router.post("/{event_id}/clone", response_model=EventResponse, summary="Clone an existing event as a template draft")
+async def clone_event_endpoint(
+    event_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> EventResponse:
+    if current_user.role not in ("school_admin", "teacher"):
+        raise HTTPException(status_code=403, detail="Only staff can clone events")
+
+    try:
+        event = await TenantService.clone_event(
+            tenant_id=current_user.tenant_id,
+            event_id=event_id,
+            created_by_user_id=current_user.id,
+            user_role=current_user.role,
+        )
+        return EventResponse(**event)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 @router.delete(
     "/{event_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -862,6 +886,31 @@ async def update_ticket_prices(
         return {"status": "success"}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.put("/{event_id}/subsidy", summary="Update school subsidy for event (finance/manager/admin)")
+async def update_event_subsidy(
+    event_id: int,
+    payload: dict,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    if not current_user.tenant_id:
+        raise HTTPException(status_code=400, detail="Tenant context required")
+    if current_user.role not in ("finance", "school_admin", "manager"):
+        raise HTTPException(status_code=403, detail="Access denied. Only finance, manager or admin can modify school subsidy.")
+        
+    try:
+        pool = await get_db_pool(current_user.tenant_id)
+        subsidy = float(payload.get("school_subsidy", 0.0))
+        await pool.execute(
+            "UPDATE events SET school_subsidy = $1 WHERE id = $2",
+            subsidy,
+            event_id,
+        )
+        return {"status": "success", "school_subsidy": subsidy}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
 
 
 

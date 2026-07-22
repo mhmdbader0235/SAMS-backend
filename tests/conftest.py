@@ -16,7 +16,10 @@ import sys
 
 import asyncpg
 import pytest
+from dotenv import load_dotenv
 from httpx import ASGITransport, AsyncClient
+
+load_dotenv()
 
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
@@ -26,10 +29,10 @@ from app.main import app
 
 # ─── Test database settings ──────────────────────────────────────────────────
 TEST_DB = {
-    "host": os.getenv("TEST_DB_HOST", "127.0.0.1"),
-    "port": int(os.getenv("TEST_DB_PORT", "5433")),
-    "user": os.getenv("TEST_DB_USER", "admin"),
-    "password": os.getenv("TEST_DB_PASSWORD", "secure_local_password"),
+    "host": os.getenv("TEST_DB_HOST") or os.getenv("DB_HOST", "127.0.0.1"),
+    "port": int(os.getenv("TEST_DB_PORT") or os.getenv("DB_PORT", "5433")),
+    "user": os.getenv("TEST_DB_USER") or os.getenv("DB_USER", "admin"),
+    "password": os.getenv("TEST_DB_PASSWORD") or os.getenv("DB_PASSWORD", "secure_local_password"),
     "database": "doumind_test",
 }
 

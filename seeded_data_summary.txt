@@ -1,0 +1,67 @@
+========================================================================
+  SchoolDesk - Seeded Demo Data
+  All passwords : 123321
+  Tenant        : tenant_a
+========================================================================
+
+== ADMIN ==
+  admin@school.com   pw: 123321
+
+== LEVELS ==
+  [id=1]  Grade 7
+  [id=2]  Grade 8
+  [id=3]  Grade 9
+
+== CLASSES ==
+  [id=1]  7A  (Grade 7)  head: Ali Hassan
+  [id=2]  7B  (Grade 7)  head: Sara Karim
+  [id=3]  8A  (Grade 8)  head: Omar Nasser
+  [id=4]  8B  (Grade 8)  head: Lina Farouk
+  [id=5]  9A  (Grade 9)  head: Hassan Mahmoud
+  [id=6]  9B  (Grade 9)  head: Dina Rabie
+
+== TEACHERS ==
+  [id=7]  Ali Hassan   ali.hassan@school.com   pw: 123321
+  [id=8]  Sara Karim   sara.karim@school.com   pw: 123321
+  [id=9]  Omar Nasser   omar.nasser@school.com   pw: 123321
+  [id=10]  Lina Farouk   lina.farouk@school.com   pw: 123321
+  [id=11]  Hassan Mahmoud   hassan.mahmoud@school.com   pw: 123321
+  [id=12]  Dina Rabie   dina.rabie@school.com   pw: 123321
+
+== STUDENTS ==
+  [id=13]  Ahmed         ahmed.s1@student.com            pw: 123321   class: 7A (Grade 7)
+  [id=14]  Mariam        mariam.s2@student.com           pw: 123321   class: 7A (Grade 7)
+  [id=15]  Khalid        khalid.s3@student.com           pw: 123321   class: 7A (Grade 7)
+  [id=16]  Fatima        fatima.s4@student.com           pw: 123321   class: 7B (Grade 7)
+  [id=17]  Youssef       youssef.s5@student.com          pw: 123321   class: 7B (Grade 7)
+  [id=18]  Nour          nour.s6@student.com             pw: 123321   class: 7B (Grade 7)
+  [id=19]  Ziad          ziad.s7@student.com             pw: 123321   class: 8A (Grade 8)
+  [id=20]  Layla         layla.s8@student.com            pw: 123321   class: 8A (Grade 8)
+  [id=21]  Tariq         tariq.s9@student.com            pw: 123321   class: 8A (Grade 8)
+  [id=22]  Hana          hana.s10@student.com            pw: 123321   class: 8B (Grade 8)
+  [id=23]  Sami          sami.s11@student.com            pw: 123321   class: 8B (Grade 8)
+  [id=24]  Rana          rana.s12@student.com            pw: 123321   class: 8B (Grade 8)
+  [id=25]  Karim         karim.s13@student.com           pw: 123321   class: 9A (Grade 9)
+  [id=26]  Dalia         dalia.s14@student.com           pw: 123321   class: 9A (Grade 9)
+  [id=27]  Rami          rami.s15@student.com            pw: 123321   class: 9A (Grade 9)
+  [id=28]  Heba          heba.s16@student.com            pw: 123321   class: 9B (Grade 9)
+  [id=29]  Adel          adel.s17@student.com            pw: 123321   class: 9B (Grade 9)
+  [id=30]  Salma         salma.s18@student.com           pw: 123321   class: 9B (Grade 9)
+
+== PARENTS ==
+  [id=31]  Parent Al-Rashid      parent.al1@parent.com         pw: 123321   children: Ahmed, Mariam, Khalid
+  [id=32]  Parent Ben-Nour       parent.bn2@parent.com         pw: 123321   children: Fatima, Youssef, Nour
+  [id=33]  Parent Chami          parent.cm3@parent.com         pw: 123321   children: Ziad, Layla, Tariq
+  [id=34]  Parent Darwish        parent.da4@parent.com         pw: 123321   children: Hana, Sami, Rana
+  [id=35]  Parent El-Sayed       parent.el5@parent.com         pw: 123321   children: Karim, Dalia, Rami
+  [id=36]  Parent Farouk         parent.fa6@parent.com         pw: 123321   children: Heba, Adel, Salma
+
+== EVENTS ==
+  [id=1]  Science Fair 2026             class: 7A (Grade 7)  ticket: $15.0  subsidy: $20.0  date: 2026-07-11T09:09:50
+  [id=2]  Math Olympiad                 class: 7B (Grade 7)  ticket: $5.0  subsidy: $10.0  date: 2026-09-04T09:09:50
+  [id=3]  History Trip - Museum         class: 8A (Grade 8)  ticket: $25.0  subsidy: $30.0  date: 2026-07-01T09:09:50
+  [id=4]  Art Exhibition                class: 8B (Grade 8)  ticket: $10.0  subsidy: $15.0  date: 2026-09-19T09:09:50
+  [id=5]  Sports Day                    class: 9A (Grade 9)  ticket: $0.0  subsidy: $50.0  date: 2026-07-16T09:09:50
+  [id=6]  Tech Workshop                 class: 9B (Grade 9)  ticket: $20.0  subsidy: $40.0  date: 2026-08-15T09:09:50
+
+========================================================================

@@ -139,11 +139,11 @@ class AuthService:
 
             return AuthService.create_access_token(local_user_id, tenant_id=tenant_id, role="parent", email=email)
 
-        elif role in ("school_admin", "teacher", "student", "manager", "finance"):
+        elif role in ("school_admin", "teacher", "student", "manager", "finance", "event_scheduler"):
             if not tenant_id:
                 raise ValueError("Tenant ID is required for school users")
 
-            if role in ("teacher", "manager", "finance"):
+            if role in ("teacher", "manager", "finance", "event_scheduler"):
                 from app.core.config import TEACHER_INVITE_CODE
                 if not invite_code or invite_code.strip() != TEACHER_INVITE_CODE:
                     raise PermissionError("Invalid or missing staff invite code")

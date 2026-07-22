@@ -153,7 +153,7 @@ async def _initialize_tenant_tables(pool: asyncpg.Pool) -> None:
             CREATE TABLE IF NOT EXISTS users (
                 id            BIGSERIAL   PRIMARY KEY,
                 email         CITEXT      UNIQUE NOT NULL,
-                role          TEXT        NOT NULL CHECK (role IN ('school_admin', 'teacher', 'parent', 'student', 'manager', 'finance')),
+                role          TEXT        NOT NULL CHECK (role IN ('school_admin', 'teacher', 'parent', 'student', 'manager', 'finance', 'event_scheduler')),
                 password_hash TEXT        NOT NULL,
                 phone         VARCHAR(50) DEFAULT NULL,
                 address       TEXT        DEFAULT NULL,
@@ -162,7 +162,7 @@ async def _initialize_tenant_tables(pool: asyncpg.Pool) -> None:
             """
         )
         await conn.execute("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;")
-        await conn.execute("ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('school_admin', 'teacher', 'parent', 'student', 'manager', 'finance'));")
+        await conn.execute("ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('school_admin', 'teacher', 'parent', 'student', 'manager', 'finance', 'event_scheduler'));")
 
         # 2. levels
         await conn.execute(

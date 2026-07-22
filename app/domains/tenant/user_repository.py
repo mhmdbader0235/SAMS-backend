@@ -25,8 +25,8 @@ class UserRepository:
         self.pool = pool
 
     async def create_user(self, email: str, password_hash: str, role: str) -> int:
-        """Insert a new tenant user (school_admin, teacher, parent, student) and return their bigint ID."""
-        if role not in ('school_admin', 'teacher', 'parent', 'student', 'manager', 'finance'):
+        """Insert a new tenant user and return their bigint ID."""
+        if role not in ('school_admin', 'teacher', 'parent', 'student', 'manager', 'finance', 'event_scheduler'):
             raise ValueError(f"Invalid tenant user role: {role}")
         return await self.pool.fetchval(
             """

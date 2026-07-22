@@ -44,7 +44,7 @@ async def get_current_user(
     tenant_id = payload.get("tenant_id")
 
     # Guard: school users MUST have a valid tenant_id context
-    if role in ("school_admin", "teacher", "student", "parent", "manager", "finance") and not tenant_id:
+    if role in ("school_admin", "teacher", "student", "parent", "manager", "finance", "event_scheduler") and not tenant_id:
         raise HTTPException(
             status_code=401,
             detail="Missing tenant context in token for school users",

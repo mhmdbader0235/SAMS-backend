@@ -664,6 +664,7 @@ class TenantRepository:
             JOIN class c ON ecm.class_id = c.id
             JOIN event e ON ecm.event_id = e.id
             WHERE c.head_teacher_id = $1
+              AND en.state NOT IN ('requested_by_student', 'rejected_by_parent')
             """,
             parse_id(teacher_id),
         )
