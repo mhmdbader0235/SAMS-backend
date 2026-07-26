@@ -581,6 +581,101 @@ class TestStudentsAndClassesRouter:
         t_prof = t_prof_resp.json()
         assert t_prof["class_name"] == "Science G (Grade 9)"
 
+    async def test_parent_two_children_different_classes_only_enrolls_eligible_child(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
+        from app.core.config import TEACHER_INVITE_CODE
+        # 1. Setup staff & 2 classes: Class A and Class B
+        t_payload = {
+            "email": "teacher_two_kids@school.com",
+            "password": "pass",
+            "role": "teacher",
+            "tenant_id": "tenant_a",
+            "invite_code": TEACHER_INVITE_CODE
+        }
+        t_reg = await test_client.post("/api/v1/auth/register", json=t_payload)
+        t_headers = {"Authorization": f"Bearer {t_reg.json()['access_token']}"}
+
+        lvl_resp = await test_client.post("/api/v1/students/levels", json={"name": "Grade 5"}, headers=t_headers)
+        lvl_id = lvl_resp.json()["level_id"]
+
+        teachers_list = await test_client.get("/api/v1/students/teachers", headers=t_headers)
+        t_id = teachers_list.json()[0]["id"]
+
+        cls1_resp = await test_client.post("/api/v1/students/classes", json={"name": "Class 5A", "level_id": lvl_id, "head_teacher_id": t_id}, headers=t_headers)
+        class_a_id = cls1_resp.json()["id"]
+
+        cls2_resp = await test_client.post("/api/v1/students/classes", json={"name": "Class 5B", "level_id": lvl_id, "head_teacher_id": t_id}, headers=t_headers)
+        class_b_id = cls2_resp.json()["id"]
+
+        # 2. Setup 2 Students (Child 1 in Class A, Child 2 in Class B)
+        s1_reg = await test_client.post("/api/v1/auth/register", json={"email": "child1@school.com", "password": "pass", "role": "student", "tenant_id": "tenant_a"})
+        s1_headers = {"Authorization": f"Bearer {s1_reg.json()['access_token']}"}
+        s1_me = await test_client.get("/api/v1/auth/me", headers=s1_headers)
+        child1_id = int(s1_me.json()["user_id"])
+
+        s2_reg = await test_client.post("/api/v1/auth/register", json={"email": "child2@school.com", "password": "pass", "role": "student", "tenant_id": "tenant_a"})
+        s2_headers = {"Authorization": f"Bearer {s2_reg.json()['access_token']}"}
+        s2_me = await test_client.get("/api/v1/auth/me", headers=s2_headers)
+        child2_id = int(s2_me.json()["user_id"])
+
+        repo = TenantRepository(db_pool)
+        await repo.create_student(child1_id, "Ahmad (Class A)", class_a_id)
+        await repo.create_student(child2_id, "Sami (Class B)", class_b_id)
+
+        # 3. Setup Parent linked to BOTH Child 1 and Child 2
+        p_reg = await test_client.post("/api/v1/auth/register", json={"email": "parent_two_kids@school.com", "password": "pass", "role": "parent", "tenant_id": "tenant_a"})
+        p_headers = {"Authorization": f"Bearer {p_reg.json()['access_token']}"}
+        p_me = await test_client.get("/api/v1/auth/me", headers=p_headers)
+        parent_id = int(p_me.json()["user_id"])
+        await repo.create_parent(parent_id, "Parent User", "1234567")
+
+        await repo.add_student_parent_link(child1_id, parent_id)
+        await repo.add_student_parent_link(child2_id, parent_id)
+
+        # 4. Create and publish Event targeted ONLY at Class A
+        event_payload = {
+            "title": "Class 5A Science Trip",
+            "description": "Exclusive to Class 5A",
+            "address": "Science Museum",
+            "school_subsidy": 0.0,
+            "date": datetime.now(UTC).isoformat(),
+            "class_mappings": [{"class_id": class_a_id, "ticket_price": 15.0}]
+        }
+        ev_resp = await test_client.post("/api/v1/events", json=event_payload, headers=t_headers)
+        assert ev_resp.status_code == 200
+        event_id = ev_resp.json()["id"]
+        class_a_map_id = ev_resp.json()["class_mappings"][0]["id"]
+
+        # Publish event directly in test DB
+        await db_pool.execute("UPDATE event SET status = 'published' WHERE id = $1", event_id)
+
+        # 5. Parent queries published events
+        pub_events_resp = await test_client.get("/api/v1/events/published", headers=p_headers)
+        assert pub_events_resp.status_code == 200
+        pub_events = pub_events_resp.json()
+        
+        matched_ev = next((e for e in pub_events if e["id"] == event_id), None)
+        assert matched_ev is not None
+        assert len(matched_ev["class_mappings"]) == 1
+        assert matched_ev["class_mappings"][0]["class_id"] == class_a_id
+
+        # 6. Parent enrolls Child 1 (Class A) -> SUCCEEDS (200 OK, approved_by_parent)
+        enroll_c1 = await test_client.post(
+            "/api/v1/students/enrollments",
+            json={"student_id": child1_id, "event_class_map_id": class_a_map_id},
+            headers=p_headers
+        )
+        assert enroll_c1.status_code == 200
+        assert enroll_c1.json()["state"] == "approved_by_parent"
+
+        # 7. Parent attempts to enroll Child 2 (Class B) into Class A event -> FAILS with 400
+        enroll_c2 = await test_client.post(
+            "/api/v1/students/enrollments",
+            json={"student_id": child2_id, "event_class_map_id": class_a_map_id},
+            headers=p_headers
+        )
+        assert enroll_c2.status_code == 400
+        assert "not in the class" in enroll_c2.json()["detail"].lower()
+
 
 
 

@@ -447,13 +447,12 @@ class TenantRepository:
         return results
 
     async def get_events_for_student(self, student_id) -> list[dict]:
-        # Fetch classes student is enrolled in, then fetch all events mapped to those classes
         s_id = parse_id(student_id)
         student = await self.get_student_by_id(s_id)
-        if not student:
+        if not student or not student.get("class_id"):
             return []
-        
         class_id = student["class_id"]
+        
         rows = await self.pool.fetch(
             """
             SELECT DISTINCT e.id, e.title, e.description, e.address, e.event_map_id, e.school_subsidy, e.date, e.created_by, e.created_at,
@@ -461,7 +460,7 @@ class TenantRepository:
                             e.submitted_at, e.manager_approved_at, e.finance_priced_at, e.published_at
             FROM event e
             JOIN event_class_map ecm ON e.id = ecm.event_id
-            WHERE ecm.class_id = $1
+            WHERE e.status = 'published' AND ecm.class_id = $1
             ORDER BY e.date ASC
             """,
             class_id,
@@ -477,10 +476,9 @@ class TenantRepository:
                 FROM event_class_map ecm
                 JOIN class c ON ecm.class_id = c.id
                 JOIN levels l ON c.level_id = l.level_id
-                WHERE ecm.event_id = $1 AND ecm.class_id = $2
+                WHERE ecm.event_id = $1
                 """,
                 ev["id"],
-                class_id,
             )
             processed_maps = []
             for m in maps:

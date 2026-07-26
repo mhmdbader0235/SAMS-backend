@@ -153,7 +153,7 @@ async def _initialize_tenant_tables(pool: asyncpg.Pool) -> None:
             CREATE TABLE IF NOT EXISTS users (
                 id            BIGSERIAL   PRIMARY KEY,
                 email         CITEXT      UNIQUE NOT NULL,
-                role          TEXT        NOT NULL CHECK (role IN ('school_admin', 'teacher', 'parent', 'student', 'manager', 'finance', 'event_scheduler')),
+                role          TEXT        NOT NULL CHECK (role IN ('school_admin', 'teacher', 'parent', 'student', 'manager', 'finance', 'event_teacher')),
                 password_hash TEXT        NOT NULL,
                 phone         VARCHAR(50) DEFAULT NULL,
                 address       TEXT        DEFAULT NULL,
@@ -162,7 +162,7 @@ async def _initialize_tenant_tables(pool: asyncpg.Pool) -> None:
             """
         )
         await conn.execute("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;")
-        await conn.execute("ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('school_admin', 'teacher', 'parent', 'student', 'manager', 'finance', 'event_scheduler'));")
+        await conn.execute("ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('school_admin', 'teacher', 'parent', 'student', 'manager', 'finance', 'event_teacher'));")
 
         # 2. levels
         await conn.execute(
@@ -387,12 +387,13 @@ async def _initialize_tenant_tables(pool: asyncpg.Pool) -> None:
         await conn.execute(
             """
             DO $$ BEGIN
-                CREATE TYPE event_status AS ENUM ('draft', 'proposed', 'finance_approval', 'final_review', 'published');
+                CREATE TYPE event_status AS ENUM ('draft', 'resource_planning', 'proposed', 'finance_approval', 'final_review', 'published');
             EXCEPTION
                 WHEN duplicate_object THEN null;
             END $$;
             """
         )
+        await conn.execute("ALTER TYPE event_status ADD VALUE IF NOT EXISTS 'resource_planning' AFTER 'draft';")
 
         await conn.execute(
             """

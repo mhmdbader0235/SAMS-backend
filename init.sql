@@ -75,7 +75,7 @@ CREATE TABLE IF NOT EXISTS parent_tenant_links (
 CREATE TABLE IF NOT EXISTS users (
     id            BIGSERIAL   PRIMARY KEY,
     email         CITEXT      UNIQUE NOT NULL,
-    role          TEXT        NOT NULL CHECK (role IN ('school_admin', 'teacher', 'parent', 'student', 'manager', 'finance')),
+    role          TEXT        NOT NULL CHECK (role IN ('school_admin', 'teacher', 'parent', 'student', 'manager', 'finance', 'event_teacher')),
     password_hash TEXT        NOT NULL,
     phone         VARCHAR(50) DEFAULT NULL,
     address       TEXT        DEFAULT NULL,
@@ -144,7 +144,7 @@ CREATE TABLE IF NOT EXISTS cost_budget (
 
 -- Enum Type event_status
 DO $$ BEGIN
-    CREATE TYPE event_status AS ENUM ('draft', 'proposed', 'finance_approval', 'final_review', 'published');
+    CREATE TYPE event_status AS ENUM ('draft', 'resource_planning', 'proposed', 'finance_approval', 'final_review', 'published');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;

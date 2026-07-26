@@ -37,7 +37,7 @@ JWT_PUBLIC_KEY_PATH: str = os.getenv(
 )
 
 # ─── App secrets ─────────────────────────────────────────────────────────────
-TEACHER_INVITE_CODE: str = os.getenv("TEACHER_INVITE_CODE", "SCHOOL-STAFF-2026")
+TEACHER_INVITE_CODE: str = os.getenv("TEACHER_INVITE_CODE", "regester123")
 CONTROL_PLANE_DB_NAME: str = os.getenv("CONTROL_PLANE_DB_NAME", "control_plane_db")
 ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", "7_L_y2C9W-g63_FmH2o9fXkPvxnK74yC5k9zRzR0yM4=")
 

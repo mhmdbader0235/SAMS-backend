@@ -38,6 +38,10 @@ async def test_state_machine_workflow(db_pool: asyncpg.Pool, monkeypatch):
     f_uid = await user_repo.create_user("finance@school.com", "hash", "finance")
     finance = MockUser(f_uid, "finance", "finance@school.com")
     
+    # Create Event Teacher
+    et_uid = await user_repo.create_user("event_teacher@school.com", "hash", "event_teacher")
+    event_teacher = MockUser(et_uid, "event_teacher", "event_teacher@school.com")
+    
     # 4. Create Parent
     p_uid = await user_repo.create_user("parent@school.com", "hash", "parent")
     await repo.create_parent(p_uid, "Parent Sarah")
@@ -75,7 +79,11 @@ async def test_state_machine_workflow(db_pool: asyncpg.Pool, monkeypatch):
     assert TenantService.check_event_permission(manager, event, "read") is False
     assert TenantService.check_event_permission(parent, event, "read") is False
     
-    # 5. Add resource to the event
+    # 5. Submit to Event Teacher
+    event = await TenantService.transition_event("tenant_a", event_id, "submit_to_event_teacher", teacher)
+    assert event["status"] == "resource_planning"
+    
+    # 6. Add resource to the event (by event_teacher)
     # Fetch resource types and select a default bus type
     r_types = await repo.get_all_resource_types()
     bus_type = [r for r in r_types if "Bus" in r["name"]][0]
@@ -84,7 +92,7 @@ async def test_state_machine_workflow(db_pool: asyncpg.Pool, monkeypatch):
         tenant_id="tenant_a",
         event_id=event_id,
         resources_list=[{"resource_type_id": bus_type["id"], "description": "Transport", "quantity": 2}],
-        added_by_user_id=t_uid,
+        added_by_user_id=et_uid,
     )
     
     # Verify resources added
@@ -92,7 +100,7 @@ async def test_state_machine_workflow(db_pool: asyncpg.Pool, monkeypatch):
     assert len(res_summary["resources"]) == 1
     assert res_summary["resources"][0]["quantity"] == 2
     
-    # 6. Submit event for approval (illegal transitions checks)
+    # 7. Submit event for approval (illegal transitions checks)
     with pytest.raises(PermissionError):
         # Manager cannot submit for approval
         await TenantService.transition_event("tenant_a", event_id, "submit_for_approval", manager)
@@ -100,8 +108,8 @@ async def test_state_machine_workflow(db_pool: asyncpg.Pool, monkeypatch):
     students_in_db = await db_pool.fetch("SELECT id, name, class_id FROM students")
     print("\nDEBUG STUDENTS IN DB:", [dict(s) for s in students_in_db])
 
-    # Legal transition: Teacher submits
-    event = await TenantService.transition_event("tenant_a", event_id, "submit_for_approval", teacher)
+    # Legal transition: Event Teacher submits
+    event = await TenantService.transition_event("tenant_a", event_id, "submit_for_approval", event_teacher)
     assert event["status"] == "proposed"
     assert event["submitted_at"] is not None
     assert event["predicted_attendance"] == 1 # 80% of 1 student is 1
@@ -128,8 +136,10 @@ async def test_state_machine_workflow(db_pool: asyncpg.Pool, monkeypatch):
     assert len(notifs) >= 1
     assert "rejected by manager" in notifs[0]["title"]
     
-    # Transition back to proposed
-    event = await TenantService.transition_event("tenant_a", event_id, "submit_for_approval", teacher)
+    # Transition back to resource_planning then proposed
+    event = await TenantService.transition_event("tenant_a", event_id, "submit_to_event_teacher", teacher)
+    assert event["status"] == "resource_planning"
+    event = await TenantService.transition_event("tenant_a", event_id, "submit_for_approval", event_teacher)
     assert event["status"] == "proposed"
     
     # 8. Manager approves proposed event

@@ -26,7 +26,7 @@ import asyncpg
 import httpx
 
 # ─── Config ──────────────────────────────────────────────────────────────────
-BASE_URL       = os.getenv("BASE_URL", "http://127.0.0.1:8001")
+BASE_URL       = os.getenv("BASE_URL", "http://127.0.0.1:8000")
 TENANT_ID      = os.getenv("TENANT_ID", "tenant_a")
 PASSWORD       = os.getenv("PASSWORD", "123321")
 TEACHER_INVITE = os.getenv("TEACHER_INVITE", "SCHOOL-STAFF-2026")
@@ -206,6 +206,24 @@ async def seed():
             pass
         print("    finance@test.com   [OK] (pass: 123321)")
 
+        # Seeding event_teacher
+        await api_post(client, "/api/v1/auth/register", {
+            "email": "event_teacher@school.com", "password": PASSWORD,
+            "tenant_id": TENANT_ID, "role": "event_teacher",
+            "invite_code": TEACHER_INVITE,
+        })
+        print("    event_teacher@school.com [OK] (pass: 123321)")
+
+        try:
+            await api_post(client, "/api/v1/auth/register", {
+                "email": "event_teacher@test.com", "password": "123321",
+                "tenant_id": TENANT_ID, "role": "event_teacher",
+                "invite_code": TEACHER_INVITE,
+            })
+        except RuntimeError:
+            pass
+        print("    event_teacher@test.com   [OK] (pass: 123321)")
+
         # ── Levels ─────────────────────────────────────────────────────────
         print("\n  > Levels")
         level_ids = []
@@ -347,6 +365,28 @@ async def seed():
             })
             print(f"    {pm['name']} ({pm['email']}) -> id={pid}, children: {', '.join(child_names)}")
 
+        # ── Multi-Class Parent ───────────────────────────────────────────────
+        try:
+            await api_post(client, "/api/v1/auth/register", {
+                "email": "parent_two_kids@school.com", "password": PASSWORD,
+                "tenant_id": TENANT_ID, "role": "parent",
+            })
+        except RuntimeError:
+            pass
+
+        parents_list = await api_get(client, "/api/v1/students/parents", tok)
+        email_to_pid = {p["email"]: p["id"] for p in parents_list}
+        multi_pid = email_to_pid.get("parent_two_kids@school.com")
+        if multi_pid:
+            await api_post(client, "/api/v1/students/link-parent", {"student_id": student_ids[0], "parent_id": multi_pid}, tok)  # Ahmed (Class 7A)
+            await api_post(client, "/api/v1/students/link-parent", {"student_id": student_ids[3], "parent_id": multi_pid}, tok)  # Fatima (Class 7B)
+            report["parents"].append({
+                "id": multi_pid, "name": "Parent Multi-Class", "email": "parent_two_kids@school.com",
+                "password": PASSWORD, "role": "parent",
+                "linked_students": ["Ahmed (7A)", "Fatima (7B)"],
+            })
+            print(f"    Parent Multi-Class (parent_two_kids@school.com) -> id={multi_pid}, children: Ahmed (7A), Fatima (7B)")
+
         # ── Events ─────────────────────────────────────────────────────────
         print("\n  > Events (one per class)")
         
@@ -357,24 +397,48 @@ async def seed():
         teacher_tok = t_login["access_token"]
 
         events_def = [
-            {"title": "Science Fair 2026",      "class_idx": 0, "subsidy": 20.0, "ticket": 15.0, "days": -10,
+            {"title": "Science Fair 2026",            "class_idx": 0, "subsidy": 20.0, "ticket": 15.0, "days": 10,
              "desc": "Annual science fair for Grade 7 class 7A.", "address": "Main Hall, 1st Floor",
              "budget_desc": "Lab materials", "budget_price": 200.0},
-            {"title": "Math Olympiad",           "class_idx": 1, "subsidy": 10.0, "ticket":  5.0, "days": 45,
+            {"title": "Math Olympiad",                 "class_idx": 1, "subsidy": 10.0, "ticket":  5.0, "days": 45,
              "desc": "Math competition for class 7B students.",   "address": "Room 101",
              "budget_desc": "Stationery & prizes", "budget_price": 150.0},
-            {"title": "History Trip - Museum",   "class_idx": 2, "subsidy": 30.0, "ticket": 25.0, "days": -20,
+            {"title": "History Trip - Museum",         "class_idx": 2, "subsidy": 30.0, "ticket": 25.0, "days": 15,
              "desc": "Educational visit to National Museum for 8A.", "address": "National Museum, City Centre",
              "budget_desc": "Transport & entry fees", "budget_price": 400.0},
-            {"title": "Art Exhibition",          "class_idx": 3, "subsidy": 15.0, "ticket": 10.0, "days": 60,
+            {"title": "Art Exhibition",                "class_idx": 3, "subsidy": 15.0, "ticket": 10.0, "days": 60,
              "desc": "Student artworks showcase for class 8B.", "address": "Gallery Room, 2nd Floor",
              "budget_desc": "Art supplies & frames", "budget_price": 300.0},
-            {"title": "Sports Day",              "class_idx": 4, "subsidy": 50.0, "ticket":  0.0, "days": -5,
+            {"title": "Sports Day",                    "class_idx": 4, "subsidy": 50.0, "ticket":  0.0, "days": 5,
              "desc": "Annual sports day competition for 9A.", "address": "School Football Field",
              "budget_desc": "Equipment & refreshments", "budget_price": 600.0},
-            {"title": "Tech Workshop",           "class_idx": 5, "subsidy": 40.0, "ticket": 20.0, "days": 25,
-             "desc": "Coding & robotics workshop for 9B.", "address": "Computer Lab",
+            {"title": "Coding & Robotics Hackathon",   "class_idx": 5, "subsidy": 40.0, "ticket": 20.0, "days": 25,
+             "desc": "Coding & robotics workshop for 9B.", "address": "Computer Lab 3",
              "budget_desc": "Hardware components", "budget_price": 500.0},
+            {"title": "Robotics Competition",          "class_idx": 0, "subsidy": 25.0, "ticket": 12.0, "days": 30,
+             "desc": "Inter-school robotics tournament for Grade 7.", "address": "Innovation Hub",
+             "budget_desc": "Robot kits", "budget_price": 350.0},
+            {"title": "Music & Drama Gala",            "class_idx": 1, "subsidy": 35.0, "ticket": 15.0, "days": 20,
+             "desc": "Stage performance and musical concert.", "address": "School Auditorium",
+             "budget_desc": "Audio equipment & costumes", "budget_price": 450.0},
+            {"title": "Chemistry Lab Tour",            "class_idx": 2, "subsidy": 20.0, "ticket": 18.0, "days": 40,
+             "desc": "University chemistry department visit.", "address": "State University Lab",
+             "budget_desc": "Lab safety gear & bus", "budget_price": 380.0},
+            {"title": "Environmental Clean-Up Trip",   "class_idx": 3, "subsidy": 60.0, "ticket":  0.0, "days": 8,
+             "desc": "Community eco-service field activity.", "address": "National Park Bay",
+             "budget_desc": "Buses & safety supplies", "budget_price": 250.0},
+            {"title": "Astronomy Stargazing Night",    "class_idx": 4, "subsidy": 45.0, "ticket": 10.0, "days": 12,
+             "desc": "Night observatory telescope experience.", "address": "Desert Observatory Outpost",
+             "budget_desc": "Telescopes & night meal", "budget_price": 520.0},
+            {"title": "Literary Book Club Fair",       "class_idx": 5, "subsidy": 15.0, "ticket":  5.0, "days": 18,
+             "desc": "Book reading and author meet & greet.", "address": "Central Library",
+             "budget_desc": "Books & bookmarks", "budget_price": 180.0},
+            {"title": "Annual Debate Championship",    "class_idx": 0, "subsidy": 30.0, "ticket":  8.0, "days": 35,
+             "desc": "Public speaking and debate contest.", "address": "Conference Room B",
+             "budget_desc": "Trophies & certificates", "budget_price": 220.0},
+            {"title": "Geography Field Trip",          "class_idx": 1, "subsidy": 50.0, "ticket": 22.0, "days": 28,
+             "desc": "Geological landscape survey trip.", "address": "Red Canyon Valley",
+             "budget_desc": "Buses & guide fees", "budget_price": 480.0},
         ]
         for ev in events_def:
             dt = (datetime.utcnow() + timedelta(days=ev["days"])).strftime("%Y-%m-%dT%H:%M:%S")
@@ -411,97 +475,96 @@ async def seed():
         })
         fin_tok = fin_r["access_token"]
 
+        et_r = await api_post(client, "/api/v1/auth/login", {
+            "email": "event_teacher@school.com", "password": PASSWORD, "tenant_id": TENANT_ID
+        })
+        et_tok = et_r["access_token"]
+
         # Get system resource types
         rt_list = await api_get(client, "/api/v1/events/resource-types", tok)
         name_to_rtid = {rt["name"]: rt["id"] for rt in rt_list}
 
-        print("\n  > Transitioning events and seeding resource costs ...")
-        # Find created event IDs in the report
-        event_objs = report["events"]
+        print("\n  > Transitioning events to practice workflows ...")
         
         # Helper to find eid by title prefix
         def get_eid(prefix):
-            for e in event_objs:
+            for e in report["events"]:
                 if e["title"].startswith(prefix):
                     return e["id"]
             return None
 
-        # 1. Math Olympiad -> proposed
-        math_id = get_eid("Math Olympiad")
-        if math_id:
-            # Add resources
-            await api_post(client, f"/api/v1/events/{math_id}/resources", [
-                {"resource_type_id": name_to_rtid["Male Supervisor"], "description": "Supervisor check", "quantity": 1},
-                {"resource_type_id": name_to_rtid["Kids Meal"], "description": "Student snacks", "quantity": 20}
-            ], teacher_tok)
-            # Submit
-            await api_post(client, f"/api/v1/events/{math_id}/submit", {}, teacher_tok)
-            print(f"    Event 'Math Olympiad' (id={math_id}) transitioned to PROPOSED")
+        # 1. Resource Planning stage (for Event Teacher practice)
+        for prefix in ["Coding & Robotics", "Annual Debate"]:
+            eid = get_eid(prefix)
+            if eid:
+                await api_post(client, f"/api/v1/events/{eid}/submit", {}, teacher_tok)
+                print(f"    Event '{prefix}' (id={eid}) -> RESOURCE_PLANNING (Event Teacher queue)")
 
-        # 2. History Trip - Museum -> finance_approval
-        hist_id = get_eid("History Trip")
-        if hist_id:
-            # Add resources
-            await api_post(client, f"/api/v1/events/{hist_id}/resources", [
-                {"resource_type_id": name_to_rtid["40-Seat Bus"], "description": "Main transport", "quantity": 1},
-                {"resource_type_id": name_to_rtid["Male Supervisor"], "description": "Lead supervisor", "quantity": 1},
-                {"resource_type_id": name_to_rtid["Female Supervisor"], "description": "Assistant supervisor", "quantity": 1},
-                {"resource_type_id": name_to_rtid["Kids Meal"], "description": "Lunch boxes", "quantity": 30}
-            ], teacher_tok)
-            # Submit
-            await api_post(client, f"/api/v1/events/{hist_id}/submit", {}, teacher_tok)
-            # Manager approves
-            await api_post(client, f"/api/v1/events/{hist_id}/manager-decision", {"decision": "approve"}, mgr_tok)
-            print(f"    Event 'History Trip - Museum' (id={hist_id}) transitioned to FINANCE_APPROVAL")
+        # 2. Proposed stage (for Manager practice)
+        for prefix in ["Math Olympiad", "Music & Drama"]:
+            eid = get_eid(prefix)
+            if eid:
+                await api_post(client, f"/api/v1/events/{eid}/submit", {}, teacher_tok)
+                await api_post(client, f"/api/v1/events/{eid}/resources", [
+                    {"resource_type_id": name_to_rtid["Male Supervisor"], "description": "Staff supervisor", "quantity": 1},
+                    {"resource_type_id": name_to_rtid["Kids Meal"], "description": "Snacks", "quantity": 25}
+                ], et_tok)
+                await api_post(client, f"/api/v1/events/{eid}/submit", {}, et_tok)
+                print(f"    Event '{prefix}' (id={eid}) -> PROPOSED (Manager approval queue)")
 
-        # 3. Art Exhibition -> final_review
-        art_id = get_eid("Art Exhibition")
-        if art_id:
-            # Add resources
-            await api_post(client, f"/api/v1/events/{art_id}/resources", [
-                {"resource_type_id": name_to_rtid["Female Supervisor"], "description": "Gallery guard", "quantity": 2},
-                {"resource_type_id": name_to_rtid["Adult Meal"], "description": "Refreshments", "quantity": 40}
-            ], teacher_tok)
-            # Submit
-            await api_post(client, f"/api/v1/events/{art_id}/submit", {}, teacher_tok)
-            # Manager approves
-            await api_post(client, f"/api/v1/events/{art_id}/manager-decision", {"decision": "approve"}, mgr_tok)
-            # Price resources
-            summary = await api_get(client, f"/api/v1/events/{art_id}/resources", fin_tok)
-            for res in summary["resources"]:
-                price = 10.0 if "Meal" in res["resource_type_name"] else 40.0
-                await client.put(f"{BASE_URL}/api/v1/events/resources/{res['id']}/cost", json={
-                    "unit_price": price, "currency": "JOD"
-                }, headers={**HEADERS, "Authorization": f"Bearer {fin_tok}"})
-            # Submit pricing
-            await api_post(client, f"/api/v1/events/{art_id}/finance-submit", {}, fin_tok)
-            print(f"    Event 'Art Exhibition' (id={art_id}) transitioned to FINAL_REVIEW")
+        # 3. Finance Approval stage (for Finance pricing practice)
+        for prefix in ["History Trip", "Chemistry Lab"]:
+            eid = get_eid(prefix)
+            if eid:
+                await api_post(client, f"/api/v1/events/{eid}/submit", {}, teacher_tok)
+                await api_post(client, f"/api/v1/events/{eid}/resources", [
+                    {"resource_type_id": name_to_rtid["40-Seat Bus"], "description": "Bus transport", "quantity": 1},
+                    {"resource_type_id": name_to_rtid["Female Supervisor"], "description": "Supervisor", "quantity": 2},
+                    {"resource_type_id": name_to_rtid["Kids Meal"], "description": "Meals", "quantity": 30}
+                ], et_tok)
+                await api_post(client, f"/api/v1/events/{eid}/submit", {}, et_tok)
+                await api_post(client, f"/api/v1/events/{eid}/manager-decision", {"decision": "approve"}, mgr_tok)
+                print(f"    Event '{prefix}' (id={eid}) -> FINANCE_APPROVAL (Finance pricing queue)")
 
-        # 4. Sports Day -> published
-        sports_id = get_eid("Sports Day")
-        if sports_id:
-            # Add resources
-            await api_post(client, f"/api/v1/events/{sports_id}/resources", [
-                {"resource_type_id": name_to_rtid["20-Seat Bus"], "description": "Team transport", "quantity": 2},
-                {"resource_type_id": name_to_rtid["Male Supervisor"], "description": "Field coach", "quantity": 2},
-                {"resource_type_id": name_to_rtid["Kids Meal"], "description": "Snack packs", "quantity": 50}
-            ], teacher_tok)
-            # Submit
-            await api_post(client, f"/api/v1/events/{sports_id}/submit", {}, teacher_tok)
-            # Manager approves
-            await api_post(client, f"/api/v1/events/{sports_id}/manager-decision", {"decision": "approve"}, mgr_tok)
-            # Price resources
-            summary = await api_get(client, f"/api/v1/events/{sports_id}/resources", fin_tok)
-            for res in summary["resources"]:
-                price = 3.0 if "Meal" in res["resource_type_name"] else (30.0 if "Supervisor" in res["resource_type_name"] else 80.0)
-                await client.put(f"{BASE_URL}/api/v1/events/resources/{res['id']}/cost", json={
-                    "unit_price": price, "currency": "JOD"
-                }, headers={**HEADERS, "Authorization": f"Bearer {fin_tok}"})
-            # Submit pricing
-            await api_post(client, f"/api/v1/events/{sports_id}/finance-submit", {}, fin_tok)
-            # Manager publishes
-            await api_post(client, f"/api/v1/events/{sports_id}/final-decision", {"decision": "publish"}, mgr_tok)
-            print(f"    Event 'Sports Day' (id={sports_id}) transitioned to PUBLISHED")
+        # 4. Final Review stage (for Manager final review practice)
+        for prefix in ["Art Exhibition", "Geography Field"]:
+            eid = get_eid(prefix)
+            if eid:
+                await api_post(client, f"/api/v1/events/{eid}/submit", {}, teacher_tok)
+                await api_post(client, f"/api/v1/events/{eid}/resources", [
+                    {"resource_type_id": name_to_rtid["Female Supervisor"], "description": "Guide", "quantity": 2},
+                    {"resource_type_id": name_to_rtid["Adult Meal"], "description": "Food", "quantity": 20}
+                ], et_tok)
+                await api_post(client, f"/api/v1/events/{eid}/submit", {}, et_tok)
+                await api_post(client, f"/api/v1/events/{eid}/manager-decision", {"decision": "approve"}, mgr_tok)
+                summary = await api_get(client, f"/api/v1/events/{eid}/resources", fin_tok)
+                for res in summary["resources"]:
+                    await client.put(f"{BASE_URL}/api/v1/events/resources/{res['id']}/cost", json={
+                        "unit_price": 25.0, "currency": "JOD"
+                    }, headers={**HEADERS, "Authorization": f"Bearer {fin_tok}"})
+                await api_post(client, f"/api/v1/events/{eid}/finance-submit", {}, fin_tok)
+                print(f"    Event '{prefix}' (id={eid}) -> FINAL_REVIEW (Manager final review queue)")
+
+        # 5. Published stage (for Student & Parent enrollment practice across Grade 7, 8, and 9)
+        for prefix in ["Science Fair 2026", "Environmental Clean-Up", "Sports Day"]:
+            eid = get_eid(prefix)
+            if eid:
+                await api_post(client, f"/api/v1/events/{eid}/submit", {}, teacher_tok)
+                await api_post(client, f"/api/v1/events/{eid}/resources", [
+                    {"resource_type_id": name_to_rtid["20-Seat Bus"], "description": "Bus", "quantity": 2},
+                    {"resource_type_id": name_to_rtid["Male Supervisor"], "description": "Coach", "quantity": 2},
+                    {"resource_type_id": name_to_rtid["Kids Meal"], "description": "Snacks", "quantity": 40}
+                ], et_tok)
+                await api_post(client, f"/api/v1/events/{eid}/submit", {}, et_tok)
+                await api_post(client, f"/api/v1/events/{eid}/manager-decision", {"decision": "approve"}, mgr_tok)
+                summary = await api_get(client, f"/api/v1/events/{eid}/resources", fin_tok)
+                for res in summary["resources"]:
+                    await client.put(f"{BASE_URL}/api/v1/events/resources/{res['id']}/cost", json={
+                        "unit_price": 15.0, "currency": "JOD"
+                    }, headers={**HEADERS, "Authorization": f"Bearer {fin_tok}"})
+                await api_post(client, f"/api/v1/events/{eid}/finance-submit", {}, fin_tok)
+                await api_post(client, f"/api/v1/events/{eid}/final-decision", {"decision": "publish"}, mgr_tok)
+                print(f"    Event '{prefix}' (id={eid}) -> PUBLISHED (Enrollments open for all grades)")
 
     return report
 

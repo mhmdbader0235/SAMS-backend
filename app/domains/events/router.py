@@ -686,8 +686,8 @@ async def set_event_resources(
                 self.id = id
                 self.role = role
         actor = Actor(current_user.id, current_user.role)
-        if not TenantService.check_event_permission(actor, event, "edit_draft"):
-            raise HTTPException(status_code=403, detail="Access denied. Event can only be modified in draft status by its owner.")
+        if not TenantService.check_event_permission(actor, event, "edit_draft") and not TenantService.check_event_permission(actor, event, "edit_resources"):
+            raise HTTPException(status_code=403, detail="Access denied. Event can only be modified in draft status by its owner, or in resource planning by event teacher.")
             
         resources_list = [r.dict() for r in payload]
         await TenantService.add_resources_to_event(
@@ -744,11 +744,17 @@ async def submit_event(
                 self.id = id
                 self.role = role
         actor = Actor(current_user.id, current_user.role)
+        if actor.role == "teacher":
+            action = "submit_to_event_teacher"
+        elif actor.role == "event_teacher":
+            action = "submit_for_approval"
+        else:
+            raise PermissionError("Only teachers or event teachers can submit events")
         
         updated_event = await TenantService.transition_event(
             tenant_id=current_user.tenant_id,
             event_id=event_id,
-            action="submit_for_approval",
+            action=action,
             actor=actor,
         )
         return EventResponse(**updated_event)
@@ -795,6 +801,41 @@ async def manager_decision(
 
 
 
+
+
+@router.post("/{event_id}/event-teacher-decision", summary="Submit event teacher decision (return to draft)")
+async def event_teacher_decision(
+    event_id: int,
+    payload: ManagerDecision,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    if not current_user.tenant_id:
+        raise HTTPException(status_code=400, detail="Tenant context required")
+        
+    try:
+        class Actor:
+            def __init__(self, id, role):
+                self.id = id
+                self.role = role
+        actor = Actor(current_user.id, current_user.role)
+        
+        if payload.decision != "reject":
+            raise ValueError("Event teacher can only reject/return to draft here. Use /submit to approve.")
+            
+        updated_event = await TenantService.transition_event(
+            tenant_id=current_user.tenant_id,
+            event_id=event_id,
+            action="event_teacher_reject",
+            actor=actor,
+            reason=payload.reason,
+        )
+        return EventResponse(**updated_event)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.post("/{event_id}/finance-submit", summary="Submit priced event plan to final review")

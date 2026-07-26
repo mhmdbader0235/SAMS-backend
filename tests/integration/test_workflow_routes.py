@@ -41,10 +41,21 @@ async def test_workflow_routes(test_client: AsyncClient, db_pool: asyncpg.Pool):
     assert r.status_code == 200
     f_token = r.json()["access_token"]
 
+    r = await test_client.post("/api/v1/auth/register", json={
+        "email": "et_wf@school.com",
+        "password": "password",
+        "tenant_id": "tenant_a",
+        "role": "event_teacher",
+        "invite_code": "SCHOOL-STAFF-2026"
+    })
+    assert r.status_code == 200
+    et_token = r.json()["access_token"]
+
     # Retrieve headers
     t_headers = {"Authorization": f"Bearer {t_token}"}
     m_headers = {"Authorization": f"Bearer {m_token}"}
     f_headers = {"Authorization": f"Bearer {f_token}"}
+    et_headers = {"Authorization": f"Bearer {et_token}"}
 
     # Fetch resource types
     r = await test_client.get("/api/v1/events/resource-types", headers=t_headers)
@@ -121,8 +132,13 @@ async def test_workflow_routes(test_client: AsyncClient, db_pool: asyncpg.Pool):
     assert summary["total_cost"] == 0.0
     resource_id = summary["resources"][0]["id"]
 
-    # Submit event
+    # Submit event (Teacher submits to event_teacher)
     r = await test_client.post(f"/api/v1/events/{event_id}/submit", headers=t_headers)
+    assert r.status_code == 200
+    assert r.json()["status"] == "resource_planning"
+
+    # Event Teacher submits to manager
+    r = await test_client.post(f"/api/v1/events/{event_id}/submit", headers=et_headers)
     assert r.status_code == 200
     assert r.json()["status"] == "proposed"
 

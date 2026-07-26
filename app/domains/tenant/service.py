@@ -442,7 +442,7 @@ class TenantService:
                 self.role = role
         actor = Actor(user_id, user_role)
 
-        if user_role in ("school_admin", "manager", "finance"):
+        if user_role in ("school_admin", "manager", "finance", "event_teacher"):
             events = await repo.get_all_events()
             return [ev for ev in events if TenantService.check_event_permission(actor, ev, "read")]
         elif user_role == "teacher":
@@ -766,10 +766,10 @@ class TenantService:
         
         async with repo.pool.acquire() as conn:
             async with conn.transaction():
-                # Re-check status is draft
+                # Re-check status is draft or resource_planning
                 event = await repo.get_event_by_id(event_id)
-                if not event or event.get("status", "draft") != "draft":
-                    raise ValueError("Resources can only be modified on draft events")
+                if not event or event.get("status", "draft") not in ("draft", "resource_planning"):
+                    raise ValueError("Resources can only be modified on draft or resource planning events")
                 
                 # Delete existing resources for event
                 await repo.delete_resources_for_event(event_id)
@@ -877,6 +877,8 @@ class TenantService:
                 return status == "published"
             if role == "teacher":
                 return is_owner or status == "published"  # Teachers can read their own drafts and published events
+            if role == "event_teacher":
+                return status in ("resource_planning", "proposed", "finance_approval", "final_review", "published")
             if role == "manager":
                 return status in ("proposed", "finance_approval", "final_review", "published")
             if role == "finance":
@@ -885,8 +887,11 @@ class TenantService:
                 return True
             return False
 
-        elif action == "edit_draft" or action == "submit":
+        elif action == "edit_draft":
             return role == "teacher" and is_owner and status == "draft"
+
+        elif action == "edit_resources":
+            return role == "event_teacher" and status == "resource_planning"
 
         elif action == "manager_decision":
             return role in ("manager", "school_admin") and status == "proposed"
@@ -918,7 +923,9 @@ class TenantService:
         
         TRANSITIONS = {
             # (current_status, action) -> (next_status, required_role)
-            ("draft", "submit_for_approval"): ("proposed", "teacher"),
+            ("draft", "submit_to_event_teacher"): ("resource_planning", "teacher"),
+            ("resource_planning", "submit_for_approval"): ("proposed", "event_teacher"),
+            ("resource_planning", "event_teacher_reject"): ("draft", "event_teacher"),
             ("proposed", "manager_approve"): ("finance_approval", "manager"),
             ("proposed", "manager_reject"): ("draft", "manager"),
             ("finance_approval", "finance_submit"): ("final_review", "finance"),
@@ -937,7 +944,7 @@ class TenantService:
             raise PermissionError(f"Role '{actor.role}' is not authorized to perform action '{action}'")
             
         # Verify preconditions
-        if action == "submit_for_approval":
+        if action == "submit_to_event_teacher":
             if int(parse_id(event["created_by"])) != int(parse_id(actor.id)):
                 raise PermissionError("Only the event creator can submit it for approval")
                 
@@ -948,11 +955,12 @@ class TenantService:
             if not mappings:
                 raise ValueError("At least one class must be selected before submitting")
                 
+        elif action == "submit_for_approval":
             resources = await repo.get_resources_for_event(event_id)
             if not resources:
                 raise ValueError("At least one resource line exists before submitting")
                 
-        elif action in ("manager_reject", "manager_return_to_finance"):
+        elif action in ("manager_reject", "manager_return_to_finance", "event_teacher_reject"):
             if not reason or not reason.strip():
                 raise ValueError(f"A non-empty reason is required for action '{action}'")
                 
