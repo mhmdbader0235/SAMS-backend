@@ -18,8 +18,12 @@ Repository Layer (SQL/asyncpg): The ONLY layer permitted to interact with the da
 The system uses PostgreSQL 16 deployed via Docker.
 Strict Database-per-Tenant: Tenant data (school data) is strictly isolated at the database level. NEVER write queries, joins, or logic that attempt to cross-query between tenant databases.
 Query Optimization: When writing or modifying repository methods, ensure SQL queries, indexing strategies, and execution plans remain highly optimized. These queries will be replicated and run across multiple individual tenant databases, so performance is critical.
-Core Schema Constraints:
-as i the user ask to do
+21: Core Schema Constraints & Workflow Rules:
+- **Audience Scope**: Published events MUST be strictly scoped to their target classes (`WHERE e.status = 'published' AND ecm.class_id = $1`).
+- **Parent Multi-Child Enrollment**: Parents linked to children in different classes must be able to enroll each eligible child into events targeting their specific class.
+- **Workflow State Machine**: `draft` ➔ `resource_planning` (Event Teacher) ➔ `proposed` (Manager) ➔ `finance_approval` (Finance) ➔ `final_review` (Manager) ➔ `published`.
+- **Passphrase Challenge**: Registration form hidden by default until secret passphrase (`regester123`) is entered.
+- **Dark Mode Aesthetics**: Heading text color `--color-text-heading: #F1F5F9`. Fallback badges/cards use `bg-slate-800 text-slate-400 border-gray-700`.
 ---
 👥 3. ROLE-BASED ACCESS CONTROL (RBAC)
 Security and access control via JWT token claims are paramount. Never expose endpoints without verifying the required role guardrails.

@@ -73,6 +73,7 @@ async def me(
         "user_id": str(current_user.id),
         "tenant_id": current_user.tenant_id,
         "role": current_user.role,
+        "roles": current_user.roles,
         "email": current_user.email,
     }
 
@@ -106,48 +107,56 @@ async def get_profile(current_user: CurrentUser = Depends(get_current_user)) -> 
         parent_name = None
         parent_email = None
         students = None
+        profile = None
 
         if current_user.role == "parent":
             cp_pool = await get_control_plane_pool()
             cp_repo = ControlPlaneRepository(cp_pool)
-            profile = await cp_repo.get_parent_by_email(current_user.email)
-            if profile:
+            if current_user.email:
+                profile = await cp_repo.get_parent_by_email(current_user.email)
+            if profile and current_user.tenant_id:
                 pool = await get_db_pool(current_user.tenant_id)
                 tenant_repo = TenantRepository(pool)
-                linked_students = await tenant_repo.get_linked_students_for_parent(current_user.id)
+                linked_students = await tenant_repo.get_linked_students_for_parent(profile["id"])
                 students = [
                     ProfileStudentInfo(name=s["name"], email=s["email"])
                     for s in linked_students
                 ]
         else:
-            pool = await get_db_pool(current_user.tenant_id)
-            user_repo = UserRepository(pool)
-            profile = await user_repo.get_user_profile(current_user.id)
-            if current_user.role == "student":
-                tenant_repo = TenantRepository(pool)
-                student_info = await tenant_repo.get_student_by_id(current_user.id)
-                if student_info:
-                    class_id = student_info.get("class_id")
-                    class_name = student_info.get("class_name")
-                # Fetch linked parent
-                parent_info = await tenant_repo.get_parent_for_student(current_user.id)
-                if parent_info:
-                    parent_name = parent_info.get("name")
-                    parent_email = parent_info.get("email")
-            elif current_user.role == "teacher":
-                from app.domains.tenant.service import TenantService
-                class_info = await TenantService.get_class_by_head_teacher(current_user.tenant_id, current_user.id)
-                if class_info:
-                    class_id = class_info.get("id")
-                    class_name = f"{class_info.get('name')} ({class_info.get('level_name')})"
-            
-        if not profile:
-            raise HTTPException(status_code=404, detail="Profile not found")
-            
+            if current_user.tenant_id:
+                pool = await get_db_pool(current_user.tenant_id)
+                user_repo = UserRepository(pool)
+                profile = await user_repo.get_user_profile(current_user.id)
+                if not profile and current_user.email:
+                    profile = await user_repo.get_user_by_email(current_user.email)
+
+                if profile:
+                    db_user_id = profile["id"]
+                    if current_user.role == "student":
+                        tenant_repo = TenantRepository(pool)
+                        student_info = await tenant_repo.get_student_by_id(db_user_id)
+                        if student_info:
+                            class_id = student_info.get("class_id")
+                            class_name = student_info.get("class_name")
+                        parent_info = await tenant_repo.get_parent_for_student(db_user_id)
+                        if parent_info:
+                            parent_name = parent_info.get("name")
+                            parent_email = parent_info.get("email")
+                    elif current_user.role == "teacher":
+                        from app.domains.tenant.service import TenantService
+                        class_info = await TenantService.get_class_by_head_teacher(current_user.tenant_id, db_user_id)
+                        if class_info:
+                            class_id = class_info.get("id")
+                            class_name = f"{class_info.get('name')} ({class_info.get('level_name')})"
+
+        email = profile["email"] if (profile and "email" in profile) else (current_user.email or "user@school.com")
+        phone = profile.get("phone") if profile else None
+        address = profile.get("address") if profile else None
+
         return ProfileResponse(
-            email=profile["email"],
-            phone=profile.get("phone"),
-            address=profile.get("address"),
+            email=email,
+            phone=phone,
+            address=address,
             class_id=class_id,
             class_name=class_name,
             parent_name=parent_name,

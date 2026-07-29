@@ -358,7 +358,7 @@ class TenantService:
         date_val: datetime,
         user_role: str,
     ) -> dict:
-        if user_role not in ("school_admin", "teacher"):
+        if user_role not in ("school_admin", "teacher", "event_teacher", "manager"):
             raise PermissionError("Only staff can update events")
 
         pool = await get_db_pool(tenant_id)
@@ -415,7 +415,7 @@ class TenantService:
             
             class_mappings = filtered_mappings
             
-        elif user_role != "school_admin":
+        elif user_role not in ("school_admin", "event_teacher", "manager"):
             raise PermissionError("Only staff can update events")
 
         event = await repo.update_event_full(

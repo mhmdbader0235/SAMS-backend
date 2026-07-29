@@ -53,17 +53,10 @@ def main():
     )
     processes.append(p_backend)
 
-    print("Step 4: Starting API Gateway (port 8000)...")
-    p_gateway = subprocess.Popen(
-        [python_bin, "-m", "uvicorn", "api_gateway:app", "--host", "0.0.0.0", "--port", "8000", "--reload"],
-        cwd="gateway"
-    )
-    processes.append(p_gateway)
-
     print("\n" + "="*50)
-    print("All backend services started successfully!")
-    print(" - API Gateway:   http://localhost:8000")
-    print(" - Backend API:   http://localhost:8001")
+    print("Backend service started successfully!")
+    print(" - APISIX Gateway: http://localhost:9080")
+    print(" - FastAPI Backend: http://localhost:8001")
     print("="*50)
     print("Press Ctrl+C to stop all services and containers.")
 

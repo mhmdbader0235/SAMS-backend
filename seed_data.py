@@ -26,7 +26,7 @@ import asyncpg
 import httpx
 
 # ─── Config ──────────────────────────────────────────────────────────────────
-BASE_URL       = os.getenv("BASE_URL", "http://127.0.0.1:8000")
+BASE_URL       = os.getenv("BASE_URL", "http://127.0.0.1:9080")
 TENANT_ID      = os.getenv("TENANT_ID", "tenant_a")
 PASSWORD       = os.getenv("PASSWORD", "123321")
 TEACHER_INVITE = os.getenv("TEACHER_INVITE", "SCHOOL-STAFF-2026")

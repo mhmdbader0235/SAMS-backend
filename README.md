@@ -37,9 +37,9 @@ docker compose up -d
 ```
 
 This starts:
-- **Postgres** on port `5432`
+- **Postgres** on port `5433` (or `5432` local)
 - **Backend API** on port `8001`
-- **API Gateway** on port `8000` (this is what the frontend talks to)
+- **APISIX API Gateway** on port `9080` (this is what the frontend talks to)
 
 ### 5. Run without Docker (development)
 ```bash

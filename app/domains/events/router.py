@@ -437,7 +437,7 @@ async def update_event(
     payload: EventCreateRequest,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> EventResponse:
-    if current_user.role not in ("school_admin", "teacher"):
+    if current_user.role not in ("school_admin", "teacher", "event_teacher", "manager"):
         raise HTTPException(status_code=403, detail="Only staff can update events")
 
     try:
@@ -452,8 +452,8 @@ async def update_event(
                 self.id = id
                 self.role = role
         actor = Actor(current_user.id, current_user.role)
-        if not TenantService.check_event_permission(actor, existing_event, "edit_draft"):
-            raise PermissionError("Access denied. Event can only be modified in draft status by its owner.")
+        if not TenantService.check_event_permission(actor, existing_event, "edit_draft") and not TenantService.check_event_permission(actor, existing_event, "edit_resources") and actor.role not in ("school_admin", "manager"):
+            raise PermissionError("Access denied. Event can only be modified in draft status by its owner, or in resource planning by event teacher.")
 
         mappings = [m.dict() for m in payload.class_mappings]
         event = await TenantService.update_event_full(
@@ -522,8 +522,8 @@ async def patch_event(
                 self.id = id
                 self.role = role
         actor = Actor(current_user.id, current_user.role)
-        if not TenantService.check_event_permission(actor, event, "edit_draft"):
-            raise HTTPException(status_code=403, detail="Access denied. Event can only be modified in draft status by its owner.")
+        if not TenantService.check_event_permission(actor, event, "edit_draft") and not TenantService.check_event_permission(actor, event, "edit_resources") and actor.role not in ("school_admin", "manager"):
+            raise HTTPException(status_code=403, detail="Access denied. Event can only be modified in draft status by its owner, or in resource planning by event teacher.")
             
         # Update basics
         title = payload.title if payload.title is not None else event["title"]
@@ -566,8 +566,8 @@ async def select_audience(
                 self.id = id
                 self.role = role
         actor = Actor(current_user.id, current_user.role)
-        if not TenantService.check_event_permission(actor, event, "edit_draft"):
-            raise HTTPException(status_code=403, detail="Access denied. Event can only be modified in draft status by its owner.")
+        if not TenantService.check_event_permission(actor, event, "edit_draft") and not TenantService.check_event_permission(actor, event, "edit_resources") and actor.role not in ("school_admin", "manager"):
+            raise HTTPException(status_code=403, detail="Access denied. Event can only be modified in draft status by its owner, or in resource planning by event teacher.")
             
         # Re-save class mappings: format as dict with class_id and budget_id/ticket_price
         class_mappings = []
@@ -686,7 +686,7 @@ async def set_event_resources(
                 self.id = id
                 self.role = role
         actor = Actor(current_user.id, current_user.role)
-        if not TenantService.check_event_permission(actor, event, "edit_draft") and not TenantService.check_event_permission(actor, event, "edit_resources"):
+        if not TenantService.check_event_permission(actor, event, "edit_draft") and not TenantService.check_event_permission(actor, event, "edit_resources") and actor.role not in ("school_admin", "manager"):
             raise HTTPException(status_code=403, detail="Access denied. Event can only be modified in draft status by its owner, or in resource planning by event teacher.")
             
         resources_list = [r.dict() for r in payload]

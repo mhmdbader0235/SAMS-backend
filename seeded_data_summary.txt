@@ -58,19 +58,19 @@
   [id=39]  Parent Multi-Class    parent_two_kids@school.com    pw: 123321   children: Ahmed (7A), Fatima (7B)
 
 == EVENTS ==
-  [id=1]  Science Fair 2026             class: 7A (Grade 7)  ticket: $15.0  subsidy: $20.0  date: 2026-08-05T07:42:09
-  [id=2]  Math Olympiad                 class: 7B (Grade 7)  ticket: $5.0  subsidy: $10.0  date: 2026-09-09T07:42:09
-  [id=3]  History Trip - Museum         class: 8A (Grade 8)  ticket: $25.0  subsidy: $30.0  date: 2026-08-10T07:42:10
-  [id=4]  Art Exhibition                class: 8B (Grade 8)  ticket: $10.0  subsidy: $15.0  date: 2026-09-24T07:42:10
-  [id=5]  Sports Day                    class: 9A (Grade 9)  ticket: $0.0  subsidy: $50.0  date: 2026-07-31T07:42:10
-  [id=6]  Coding & Robotics Hackathon   class: 9B (Grade 9)  ticket: $20.0  subsidy: $40.0  date: 2026-08-20T07:42:11
-  [id=7]  Robotics Competition          class: 7A (Grade 7)  ticket: $12.0  subsidy: $25.0  date: 2026-08-25T07:42:11
-  [id=8]  Music & Drama Gala            class: 7B (Grade 7)  ticket: $15.0  subsidy: $35.0  date: 2026-08-15T07:42:11
-  [id=9]  Chemistry Lab Tour            class: 8A (Grade 8)  ticket: $18.0  subsidy: $20.0  date: 2026-09-04T07:42:12
-  [id=10]  Environmental Clean-Up Trip   class: 8B (Grade 8)  ticket: $0.0  subsidy: $60.0  date: 2026-08-03T07:42:12
-  [id=11]  Astronomy Stargazing Night    class: 9A (Grade 9)  ticket: $10.0  subsidy: $45.0  date: 2026-08-07T07:42:12
-  [id=12]  Literary Book Club Fair       class: 9B (Grade 9)  ticket: $5.0  subsidy: $15.0  date: 2026-08-13T07:42:12
-  [id=13]  Annual Debate Championship    class: 7A (Grade 7)  ticket: $8.0  subsidy: $30.0  date: 2026-08-30T07:42:13
-  [id=14]  Geography Field Trip          class: 7B (Grade 7)  ticket: $22.0  subsidy: $50.0  date: 2026-08-23T07:42:13
+  [id=1]  Science Fair 2026             class: 7A (Grade 7)  ticket: $15.0  subsidy: $20.0  date: 2026-08-07T10:11:58
+  [id=2]  Math Olympiad                 class: 7B (Grade 7)  ticket: $5.0  subsidy: $10.0  date: 2026-09-11T10:11:59
+  [id=3]  History Trip - Museum         class: 8A (Grade 8)  ticket: $25.0  subsidy: $30.0  date: 2026-08-12T10:11:59
+  [id=4]  Art Exhibition                class: 8B (Grade 8)  ticket: $10.0  subsidy: $15.0  date: 2026-09-26T10:11:59
+  [id=5]  Sports Day                    class: 9A (Grade 9)  ticket: $0.0  subsidy: $50.0  date: 2026-08-02T10:11:59
+  [id=6]  Coding & Robotics Hackathon   class: 9B (Grade 9)  ticket: $20.0  subsidy: $40.0  date: 2026-08-22T10:11:59
+  [id=7]  Robotics Competition          class: 7A (Grade 7)  ticket: $12.0  subsidy: $25.0  date: 2026-08-27T10:11:59
+  [id=8]  Music & Drama Gala            class: 7B (Grade 7)  ticket: $15.0  subsidy: $35.0  date: 2026-08-17T10:11:59
+  [id=9]  Chemistry Lab Tour            class: 8A (Grade 8)  ticket: $18.0  subsidy: $20.0  date: 2026-09-06T10:11:59
+  [id=10]  Environmental Clean-Up Trip   class: 8B (Grade 8)  ticket: $0.0  subsidy: $60.0  date: 2026-08-05T10:11:59
+  [id=11]  Astronomy Stargazing Night    class: 9A (Grade 9)  ticket: $10.0  subsidy: $45.0  date: 2026-08-09T10:11:59
+  [id=12]  Literary Book Club Fair       class: 9B (Grade 9)  ticket: $5.0  subsidy: $15.0  date: 2026-08-15T10:11:59
+  [id=13]  Annual Debate Championship    class: 7A (Grade 7)  ticket: $8.0  subsidy: $30.0  date: 2026-09-01T10:11:59
+  [id=14]  Geography Field Trip          class: 7B (Grade 7)  ticket: $22.0  subsidy: $50.0  date: 2026-08-25T10:11:59
 
 ========================================================================
