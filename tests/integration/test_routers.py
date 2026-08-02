@@ -817,6 +817,17 @@ class TestEventUpdateRouter:
         cls_resp = await test_client.post("/api/v1/students/classes", json=cls_payload, headers=t_headers)
         class_id = cls_resp.json()["id"]
 
+        # Setup school_admin
+        a_payload = {
+            "email": "admin@updateevent.com",
+            "password": "pass",
+            "role": "school_admin",
+            "tenant_id": "tenant_a",
+            "invite_code": TEACHER_INVITE_CODE
+        }
+        a_reg = await test_client.post("/api/v1/auth/register", json=a_payload)
+        a_headers = {"Authorization": f"Bearer {a_reg.json()['access_token']}"}
+
         # Create Event
         event_payload = {
             "title": "Old Expedition",
@@ -829,7 +840,7 @@ class TestEventUpdateRouter:
                 "ticket_price": 5.0,
             }]
         }
-        create_resp = await test_client.post("/api/v1/events", json=event_payload, headers=t_headers)
+        create_resp = await test_client.post("/api/v1/events", json=event_payload, headers=a_headers)
         assert create_resp.status_code == 200
         event_id = create_resp.json()["id"]
 
@@ -845,7 +856,7 @@ class TestEventUpdateRouter:
                 "ticket_price": 15.0,
             }]
         }
-        update_resp = await test_client.put(f"/api/v1/events/{event_id}", json=update_payload, headers=t_headers)
+        update_resp = await test_client.put(f"/api/v1/events/{event_id}", json=update_payload, headers=a_headers)
         assert update_resp.status_code == 200
 
         updated_event = update_resp.json()
@@ -859,7 +870,7 @@ class TestEventUpdateRouter:
         assert float(mapping["ticket_price"]) == 15.0
 
         # GET detail check
-        get_resp = await test_client.get(f"/api/v1/events/{event_id}", headers=t_headers)
+        get_resp = await test_client.get(f"/api/v1/events/{event_id}", headers=a_headers)
         assert get_resp.status_code == 200
         assert get_resp.json()["title"] == "New Expedition"
 

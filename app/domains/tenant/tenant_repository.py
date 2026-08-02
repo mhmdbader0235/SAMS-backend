@@ -1018,3 +1018,7 @@ class TenantRepository:
         rows = await self.pool.fetch("SELECT id, email, role FROM users WHERE role = 'finance'")
         return [dict(row) for row in rows]
 
+    async def get_all_event_teachers(self) -> list[dict]:
+        rows = await self.pool.fetch("SELECT id, email, role FROM users WHERE role = 'event_teacher'")
+        return [dict(row) for row in rows]
+

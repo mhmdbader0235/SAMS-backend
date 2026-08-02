@@ -1,0 +1,16 @@
+$kind: http-request
+name: http://localhost:8000/realms/schooldesk/protocol/openid-connect/token
+description: 'Generated from cURL: curl -X POST "http://localhost:8000/realms/schooldesk/protocol/openid-connect/token" -H "Content-Type: application/x-www-form-urlencoded" -d "grant_type=password" -d "client_id=apisix-client" -d "client_secret=o5PrGiLTQkIogEREnwfGsPuTtQqwcN9RUe3Xp1fG0fnOr861nmY8gTktrDCANFwvfXTy6BSLbeaMQSBS7pPOla" -d "username=parent@test.com" -d "password=Password123!"'
+url: http://localhost:8000/realms/schooldesk/protocol/openid-connect/token
+method: POST
+headers:
+  Content-Type: application/x-www-form-urlencoded
+body:
+  type: urlencoded
+  content:
+    grant_type: password
+    client_id: apisix-client
+    client_secret: o5PrGiLTQkIogEREnwfGsPuTtQqwcN9RUe3Xp1fG0fnOr861nmY8gTktrDCANFwvfXTy6BSLbeaMQSBS7pPOla
+    username: parent@test.com
+    password: Password123!
+order: 107668262920733

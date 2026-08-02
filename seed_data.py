@@ -36,7 +36,7 @@ DB_PORT     = int(os.getenv("DB_PORT", "5433"))
 DB_USER     = os.getenv("DB_USER", "admin")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "secure_local_password")
 TENANT_DB   = os.getenv("TENANT_DB", "tenant_a_db")
-CONTROL_DB  = os.getenv("CONTROL_DB", "control_plane_db")
+CONTROL_DB  = os.getenv("CONTROL_DB", "user_service_db")
 
 HEADERS = {"Content-Type": "application/json"}
 
@@ -66,8 +66,9 @@ async def clear_tenant_db():
     print("\n[1/3] Clearing tenant DB ...")
     conn = await asyncpg.connect(
         host=DB_HOST, port=DB_PORT, user=DB_USER,
-        password=DB_PASSWORD, database=TENANT_DB,
+        password=DB_PASSWORD, database=CONTROL_DB,
     )
+    await conn.execute(f'SET search_path TO "{TENANT_ID}", public;')
     try:
         try:
             await conn.execute("""
@@ -634,8 +635,9 @@ async def set_parent_phones():
     print("\nSetting fake phone numbers for parents ...")
     conn_t = await asyncpg.connect(
         host=DB_HOST, port=DB_PORT, user=DB_USER,
-        password=DB_PASSWORD, database=TENANT_DB,
+        password=DB_PASSWORD, database=CONTROL_DB,
     )
+    await conn_t.execute(f'SET search_path TO "{TENANT_ID}", public;')
     conn_cp = await asyncpg.connect(
         host=DB_HOST, port=DB_PORT, user=DB_USER,
         password=DB_PASSWORD, database=CONTROL_DB,

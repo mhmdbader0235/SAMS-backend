@@ -18,6 +18,7 @@ from app.core.config import (
     JWT_SECRET,
 )
 from app.core.database import get_control_plane_pool, get_db_pool
+from app.core.keycloak_admin import sync_user_to_keycloak
 from app.domains.tenant.control_plane_repository import ControlPlaneRepository
 from app.domains.tenant.tenant_repository import TenantRepository
 from app.domains.tenant.user_repository import UserRepository
@@ -107,6 +108,7 @@ class AuthService:
             if await cp_repo.get_super_admin_by_email(email):
                 raise ValueError("Email already registered")
             user_id = await cp_repo.create_super_admin(email, password_hash)
+            sync_user_to_keycloak(email, password, "super_admin")
             return AuthService.create_access_token(user_id, tenant_id="", role="super_admin", email=email)
 
         elif role == "parent":
@@ -137,6 +139,7 @@ class AuthService:
             else:
                 local_user_id = local_user["id"]
 
+            sync_user_to_keycloak(email, password, "parent")
             return AuthService.create_access_token(local_user_id, tenant_id=tenant_id, role="parent", email=email)
 
         elif role in ("school_admin", "teacher", "student", "manager", "finance", "event_teacher"):
@@ -189,6 +192,9 @@ class AuthService:
                     name=email.split("@")[0].title(),
                     class_id=cls_id,
                 )
+
+            # Sync user to Keycloak realm
+            sync_user_to_keycloak(email, password, role)
 
             return AuthService.create_access_token(local_user_id, tenant_id, role, email=email)
         else:

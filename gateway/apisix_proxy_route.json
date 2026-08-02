@@ -1,0 +1,10 @@
+{
+  "uri": "/api/v1/*",
+  "priority": 1,
+  "upstream": {
+    "type": "roundrobin",
+    "nodes": {
+      "host.docker.internal:8001": 1
+    }
+  }
+}

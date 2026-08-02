@@ -58,7 +58,7 @@ class UserRepository:
     async def get_user_profile(self, user_id) -> dict | None:
         """Fetch tenant user profile fields."""
         row = await self.pool.fetchrow(
-            "SELECT email, phone, address FROM users WHERE id = $1",
+            "SELECT id, email, role, phone, address FROM users WHERE id = $1",
             parse_id(user_id),
         )
         return dict(row) if row else None

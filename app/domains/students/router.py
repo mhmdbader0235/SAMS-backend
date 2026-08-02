@@ -23,6 +23,7 @@ from app.core.schemas import (
 )
 from app.domains.tenant.service import TenantService
 from app.domains.tenant.tenant_repository import TenantRepository, parse_id
+from app.domains.tenant.user_repository import UserRepository
 
 router = APIRouter(prefix="/api/v1/students", tags=["students"])
 
@@ -39,7 +40,7 @@ async def create_level(
         level_id = await TenantService.create_level(
             tenant_id=current_user.tenant_id,
             name=payload.name,
-            user_role=current_user.role,
+            user_role=current_user.roles,
         )
         return LevelResponse(level_id=level_id, name=payload.name)
     except PermissionError as exc:
@@ -73,7 +74,7 @@ async def create_teacher(
             email=payload.email,
             password=payload.password,
             name=payload.name,
-            user_role=current_user.role,
+            user_role=current_user.roles,
         )
         return TeacherResponse(
             id=teacher_id,
@@ -112,7 +113,7 @@ async def create_manager(
             email=payload.email,
             password=payload.password,
             role="manager",
-            user_role=current_user.role,
+            user_role=current_user.roles,
         )
         return StaffUserResponse(id=user_id, email=payload.email, role="manager")
     except PermissionError as exc:
@@ -134,7 +135,7 @@ async def create_finance(
             email=payload.email,
             password=payload.password,
             role="finance",
-            user_role=current_user.role,
+            user_role=current_user.roles,
         )
         return StaffUserResponse(id=user_id, email=payload.email, role="finance")
     except PermissionError as exc:
@@ -184,7 +185,7 @@ async def create_student(
             class_id=payload.class_id,
             gender=payload.gender,
             birth_data=payload.birth_data,
-            user_role=current_user.role,
+            user_role=current_user.roles,
         )
         # Fetch student details
         s_info = await TenantService.get_student_by_id(current_user.tenant_id, student_id)
@@ -216,7 +217,7 @@ async def link_parent_student(
             tenant_id=current_user.tenant_id,
             student_id=payload.student_id,
             parent_id=payload.parent_id,
-            user_role=current_user.role,
+            user_role=current_user.roles,
             user_id=current_user.id,
         )
         return {"status": "ok", "message": "Student linked to parent"}
@@ -230,10 +231,16 @@ async def link_parent_student(
 async def list_linked_students(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[StudentResponse]:
-    if current_user.role != "parent":
+    if not current_user.has_role("parent"):
         raise HTTPException(status_code=403, detail="Only parents can view their linked children")
     try:
-        results = await TenantService.get_linked_students_for_parent(current_user.tenant_id, current_user.id)
+        pool = await get_db_pool(current_user.tenant_id)
+        user_repo = UserRepository(pool)
+        local_user = await user_repo.get_user_by_email(current_user.email)
+        if local_user:
+            results = await TenantService.get_linked_students_for_parent(current_user.tenant_id, local_user["id"])
+        else:
+            results = []
         return [StudentResponse(**r) for r in results]
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
@@ -253,7 +260,7 @@ async def create_class(
             name=payload.name,
             level_id=payload.level_id,
             head_teacher_id=payload.head_teacher_id,
-            user_role=current_user.role,
+            user_role=current_user.roles,
         )
         pool = await get_db_pool(current_user.tenant_id)
         repo = TenantRepository(pool)
@@ -288,15 +295,21 @@ async def enroll_student(
     parent_id = None
     teacher_id = None
 
-    if current_user.role == "parent":
-        state = "approved_by_parent"
+    if current_user.has_role("parent"):
+        # Check if student is linked to the parent
         parent_id = parse_id(current_user.id)
         pool = await get_db_pool(current_user.tenant_id)
         repo = TenantRepository(pool)
         linked = await repo.is_student_linked_to_parent(payload.student_id, parent_id)
-        if not linked:
+        if linked:
+            state = "approved_by_parent"
+        elif current_user.has_role("teacher"):
+            state = "approved_by_teacher"
+            teacher_id = parse_id(current_user.id)
+            parent_id = None
+        else:
             raise HTTPException(status_code=403, detail="Parent is not linked to this student")
-    elif current_user.role == "teacher":
+    elif current_user.has_role("teacher"):
         state = "approved_by_teacher"
         teacher_id = parse_id(current_user.id)
 
@@ -325,7 +338,7 @@ async def get_enrollments(
 ) -> list[EnrollmentResponse]:
     try:
         results = await TenantService.get_enrollments_for_user(
-            current_user.tenant_id, current_user.id, current_user.role
+            current_user.tenant_id, current_user.id, current_user.roles
         )
         return [EnrollmentResponse(**r) for r in results]
     except Exception as exc:
@@ -349,11 +362,15 @@ async def update_enrollment_approval(
 
     current_state = details["state"]
 
-    if current_user.role == "parent":
+    is_parent_decision = False
+    if current_user.has_role("parent"):
         parent_id = parse_id(current_user.id)
         linked = await repo.is_student_linked_to_parent(details["student_id"], parent_id)
-        if not linked:
-            raise HTTPException(status_code=403, detail="Parent is not linked to this student")
+        if linked:
+            is_parent_decision = True
+
+    if is_parent_decision:
+        parent_id = parse_id(current_user.id)
         if current_state != "requested_by_student":
             raise HTTPException(
                 status_code=400,
@@ -364,7 +381,7 @@ async def update_enrollment_approval(
                 status_code=400,
                 detail="Parent can only transition enrollment to approved_by_parent or rejected_by_parent"
             )
-    elif current_user.role == "teacher":
+    elif current_user.has_role("teacher"):
         teacher_id = parse_id(current_user.id)
         if current_state == "requested_by_student":
             raise HTTPException(
@@ -405,7 +422,7 @@ async def cancel_enrollment(
     enrollment_id: int,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
-    if not current_user.tenant_id and current_user.role != "super_admin":
+    if not current_user.tenant_id and not current_user.has_role("super_admin"):
         raise HTTPException(status_code=400, detail="Tenant context required")
         
     try:
@@ -413,7 +430,7 @@ async def cancel_enrollment(
             tenant_id=current_user.tenant_id or "tenant_a",
             enrollment_id=enrollment_id,
             user_id=current_user.id,
-            user_role=current_user.role,
+            user_role=current_user.roles,
         )
         return {"status": "ok", "message": "Enrollment successfully cancelled"}
     except PermissionError as exc:
@@ -441,7 +458,7 @@ async def create_or_update_health(
             medical_conditions=payload.medical_conditions,
             emergency_contact=payload.emergency_contact,
             requesting_user_id=current_user.id,
-            requesting_user_role=current_user.role,
+            requesting_user_role=current_user.roles,
         )
         return {"status": "success", "health_record_id": str(rec_id)}
     except PermissionError as exc:
@@ -461,7 +478,7 @@ async def get_health(
             tenant_id=current_user.tenant_id,
             student_id=student_id,
             requesting_user_id=current_user.id,
-            requesting_user_role=current_user.role,
+            requesting_user_role=current_user.roles,
             elevated_clearance=elevated_clearance,
         )
         if not record:

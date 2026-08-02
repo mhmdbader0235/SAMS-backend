@@ -118,9 +118,12 @@ async def _initialize_control_plane_tables(pool: asyncpg.Pool) -> None:
 # =============================================================================
 # Tenant Table Initialization
 # =============================================================================
-async def _initialize_tenant_tables(pool: asyncpg.Pool) -> None:
-    """Create all 14 tables in a newly provisioned tenant database."""
+async def _initialize_tenant_tables(pool: asyncpg.Pool, tenant_id: str = "tenant_a") -> None:
+    """Create all tables in a newly provisioned tenant schema."""
     async with pool.acquire() as conn:
+        # Ensure schema exists and isolate search_path to tenant schema during DDL execution
+        await conn.execute(f'CREATE SCHEMA IF NOT EXISTS "{tenant_id}";')
+        await conn.execute(f'SET search_path TO "{tenant_id}", public;')
         # Check if legacy tables exist. If so, drop them to avoid conflicts with new schema
         has_legacy = await conn.fetchval(
             """
@@ -462,30 +465,50 @@ async def _ensure_database_exists(config: dict) -> None:
         print(f"[database] Warning: could not ensure database '{db_name}' exists: {exc}")
 
 
+async def _ensure_schema_exists(config: dict, schema_name: str) -> None:
+    """Create the schema inside the database if it does not already exist."""
+    try:
+        conn = await asyncpg.connect(
+            host=config["host"],
+            port=config["port"],
+            user=config["user"],
+            password=config["password"],
+            database=config["database"],
+        )
+        try:
+            await conn.execute(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}"')
+        finally:
+            await conn.close()
+    except Exception as exc:
+        print(f"[database] Warning: could not ensure schema '{schema_name}' exists: {exc}")
+
+
 # =============================================================================
 # Static/Seed Tenant Registry Configuration
 # =============================================================================
+shared_db_name = CONTROL_PLANE_DB_NAME
+
 TENANT_DB_CONFIG: dict[str, dict] = {
     "tenant_a": {
         "host": os.getenv("TENANT_A_DB_HOST") or DB_HOST,
         "port": int(os.getenv("TENANT_A_DB_PORT") or DB_PORT),
         "user": os.getenv("TENANT_A_DB_USER") or DB_USER,
         "password": os.getenv("TENANT_A_DB_PASSWORD") or DB_PASSWORD,
-        "database": os.getenv("TENANT_A_DB_NAME", "tenant_a_db"),
+        "database": shared_db_name,
     },
     "tenant_b": {
         "host": os.getenv("TENANT_B_DB_HOST") or DB_HOST,
         "port": int(os.getenv("TENANT_B_DB_PORT") or DB_PORT),
         "user": os.getenv("TENANT_B_DB_USER") or DB_USER,
         "password": os.getenv("TENANT_B_DB_PASSWORD") or DB_PASSWORD,
-        "database": os.getenv("TENANT_B_DB_NAME", "tenant_b_db"),
+        "database": shared_db_name,
     },
     "tenant_c": {
         "host": os.getenv("TENANT_C_DB_HOST") or DB_HOST,
         "port": int(os.getenv("TENANT_C_DB_PORT") or DB_PORT),
         "user": os.getenv("TENANT_C_DB_USER") or DB_USER,
         "password": os.getenv("TENANT_C_DB_PASSWORD") or DB_PASSWORD,
-        "database": os.getenv("TENANT_C_DB_NAME", "tenant_c_db"),
+        "database": shared_db_name,
     },
 }
 
@@ -502,16 +525,21 @@ CONTROL_PLANE_DB_CONFIG: dict = {
 # Single-Tenant/Control-Plane Database Wrapper
 # =============================================================================
 class Database:
-    def __init__(self, host: str, port: int, user: str, password: str, database: str) -> None:
+    def __init__(self, host: str, port: int, user: str, password: str, database: str, schema_name: str | None = None) -> None:
         self._host = host
         self._port = port
         self._user = user
         self._password = password
         self._database = database
+        self._schema_name = schema_name
         self.pool: asyncpg.Pool | None = None
 
-    async def connect(self, init_fn) -> asyncpg.Pool:
+    async def connect(self, init_fn, setup_conn_fn=None) -> asyncpg.Pool:
         if self.pool is None:
+            server_settings = {}
+            if self._schema_name:
+                server_settings['search_path'] = f'"{self._schema_name}", public'
+
             self.pool = await asyncpg.create_pool(
                 host=self._host,
                 port=self._port,
@@ -520,6 +548,8 @@ class Database:
                 database=self._database,
                 min_size=1,
                 max_size=5,  # Enforces connection pooling limit of 5 max
+                server_settings=server_settings if server_settings else None,
+                init=setup_conn_fn,
             )
             await init_fn(self.pool)
         return self.pool
@@ -575,11 +605,11 @@ class DatabaseManager:
                 )
                 if row:
                     config = {
-                        "host": row["db_host"],
-                        "port": row["db_port"],
+                        "host": DB_HOST,
+                        "port": DB_PORT,
                         "user": row["db_user"],
                         "password": row["db_password"],
-                        "database": row["db_name"],
+                        "database": CONTROL_PLANE_DB_CONFIG["database"],
                     }
                 else:
                     if tenant_id not in TENANT_DB_CONFIG:
@@ -589,10 +619,25 @@ class DatabaseManager:
                         )
                     config = TENANT_DB_CONFIG[tenant_id]
 
-                await _ensure_database_exists(config)
-                self._databases[tenant_id] = Database(**config)
+                # Force database name to use control plane database
+                config["host"] = DB_HOST
+                config["port"] = DB_PORT
+                config["database"] = CONTROL_PLANE_DB_CONFIG["database"]
 
-            return await self._databases[tenant_id].connect(_initialize_tenant_tables)
+                await _ensure_database_exists(config)
+                await _ensure_schema_exists(config, tenant_id)
+                self._databases[tenant_id] = Database(**config, schema_name=tenant_id)
+
+            async def setup_conn_fn(conn):
+                await conn.execute(f'SET search_path TO "{tenant_id}", public;')
+
+            async def init_tenant_tables(pool):
+                await _initialize_tenant_tables(pool, tenant_id)
+
+            return await self._databases[tenant_id].connect(
+                init_tenant_tables,
+                setup_conn_fn=setup_conn_fn
+            )
 
     async def disconnect_all(self) -> None:
         """Close all tenant and control plane connection pools."""

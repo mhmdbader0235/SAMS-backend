@@ -1,0 +1,6 @@
+name: New Environment
+values:
+  - key: x-access-token
+    value: ''
+  - key: token
+    value: ''

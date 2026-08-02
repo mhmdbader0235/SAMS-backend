@@ -1,0 +1,1441 @@
+{
+  "id": "schooldesk",
+  "realm": "schooldesk",
+  "displayName": "SchoolDesk",
+  "enabled": true,
+  "registrationAllowed": true,
+  "resetPasswordAllowed": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "verifyEmail": false,
+  "accessTokenLifespan": 86400,
+  "ssoSessionMaxLifespan": 86400,
+  "roles": {
+    "realm": [
+      {
+        "name": "system:write",
+        "description": "Role: system:write",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "system:read",
+        "description": "Role: system:read",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "tenant:manage",
+        "description": "Role: tenant:manage",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "tenant:view",
+        "description": "Role: tenant:view",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "school:write",
+        "description": "Role: school:write",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "school:read",
+        "description": "Role: school:read",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "academic:direct",
+        "description": "Role: academic:direct",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "academic:view",
+        "description": "Role: academic:view",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "user:create",
+        "description": "Role: user:create",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "user:delete",
+        "description": "Role: user:delete",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "user:link",
+        "description": "Role: user:link",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "user:view",
+        "description": "Role: user:view",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "event:create",
+        "description": "Role: event:create",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "event:edit",
+        "description": "Role: event:edit",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "event:delete",
+        "description": "Role: event:delete",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "event:propose",
+        "description": "Role: event:propose",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "event:review",
+        "description": "Role: event:review",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "event:publish",
+        "description": "Role: event:publish",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "event:clone",
+        "description": "Role: event:clone",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "event:view_draft",
+        "description": "Role: event:view_draft",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "resource:create",
+        "description": "Role: resource:create",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "resource:price",
+        "description": "Role: resource:price",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "resource:view",
+        "description": "Role: resource:view",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "teacher:write",
+        "description": "Role: teacher:write",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "teacher:read",
+        "description": "Role: teacher:read",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "enrollment:request",
+        "description": "Role: enrollment:request",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "enrollment:parent_approve",
+        "description": "Role: enrollment:parent_approve",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "enrollment:teacher_approve",
+        "description": "Role: enrollment:teacher_approve",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "enrollment:cancel",
+        "description": "Role: enrollment:cancel",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "enrollment:view_roster",
+        "description": "Role: enrollment:view_roster",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "billing:invoice",
+        "description": "Role: billing:invoice",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "billing:pay",
+        "description": "Role: billing:pay",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "billing:refund",
+        "description": "Role: billing:refund",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "billing:audit",
+        "description": "Role: billing:audit",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "content:create",
+        "description": "Role: content:create",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "content:publish",
+        "description": "Role: content:publish",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "announcement:manage",
+        "description": "Role: announcement:manage",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "school_admin",
+        "description": "Role: school_admin",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "teacher",
+        "description": "Role: teacher",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "event_teacher",
+        "description": "Role: event_teacher",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "manager",
+        "description": "Role: manager",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "finance",
+        "description": "Role: finance",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "parent",
+        "description": "Role: parent",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "student",
+        "description": "Role: student",
+        "composite": false,
+        "clientRole": false
+      },
+      {
+        "name": "super_admin",
+        "description": "Role: super_admin",
+        "composite": false,
+        "clientRole": false
+      }
+    ]
+  },
+  "groups": [
+    {
+      "name": "super_admins",
+      "path": "/super_admins",
+      "realmRoles": [
+        "system:write",
+        "system:read",
+        "tenant:manage",
+        "tenant:view",
+        "school:write",
+        "school:read",
+        "academic:direct",
+        "academic:view",
+        "user:create",
+        "user:delete",
+        "user:link",
+        "user:view",
+        "event:create",
+        "event:edit",
+        "event:delete",
+        "event:propose",
+        "event:review",
+        "event:publish",
+        "event:clone",
+        "event:view_draft",
+        "resource:create",
+        "resource:price",
+        "resource:view",
+        "teacher:write",
+        "teacher:read",
+        "enrollment:request",
+        "enrollment:parent_approve",
+        "enrollment:teacher_approve",
+        "enrollment:cancel",
+        "enrollment:view_roster",
+        "billing:invoice",
+        "billing:pay",
+        "billing:refund",
+        "billing:audit",
+        "content:create",
+        "content:publish",
+        "announcement:manage",
+        "school_admin",
+        "teacher",
+        "event_teacher",
+        "manager",
+        "finance",
+        "parent",
+        "student",
+        "super_admin"
+      ],
+      "subGroups": []
+    },
+    {
+      "name": "school_admins",
+      "path": "/school_admins",
+      "realmRoles": [
+        "school_admin",
+        "school:write",
+        "school:read",
+        "user:create",
+        "user:delete",
+        "user:link",
+        "user:view",
+        "event:review",
+        "event:publish",
+        "teacher:read",
+        "enrollment:cancel",
+        "enrollment:view_roster",
+        "billing:audit",
+        "announcement:manage"
+      ],
+      "subGroups": []
+    },
+    {
+      "name": "managers",
+      "path": "/managers",
+      "realmRoles": [
+        "manager",
+        "school:read",
+        "event:review",
+        "event:publish",
+        "event:view_draft",
+        "resource:view",
+        "enrollment:view_roster"
+      ],
+      "subGroups": []
+    },
+    {
+      "name": "teachers",
+      "path": "/teachers",
+      "realmRoles": [
+        "teacher",
+        "school:read",
+        "user:view",
+        "event:create",
+        "event:edit",
+        "event:delete",
+        "event:propose",
+        "event:clone",
+        "teacher:write",
+        "teacher:read",
+        "enrollment:teacher_approve",
+        "enrollment:view_roster"
+      ],
+      "subGroups": []
+    },
+    {
+      "name": "event_organizers",
+      "path": "/event_organizers",
+      "realmRoles": [
+        "event_teacher",
+        "school:read",
+        "event:create",
+        "event:edit",
+        "event:delete",
+        "event:propose",
+        "event:clone",
+        "event:view_draft",
+        "resource:create",
+        "resource:view",
+        "enrollment:view_roster"
+      ],
+      "subGroups": []
+    },
+    {
+      "name": "finance_officers",
+      "path": "/finance_officers",
+      "realmRoles": [
+        "finance",
+        "school:read",
+        "resource:price",
+        "resource:view",
+        "billing:invoice",
+        "billing:pay",
+        "billing:refund",
+        "billing:audit"
+      ],
+      "subGroups": []
+    },
+    {
+      "name": "parents",
+      "path": "/parents",
+      "realmRoles": [
+        "parent",
+        "school:read",
+        "enrollment:parent_approve",
+        "enrollment:cancel",
+        "billing:pay"
+      ],
+      "subGroups": []
+    },
+    {
+      "name": "students",
+      "path": "/students",
+      "realmRoles": [
+        "student",
+        "school:read",
+        "enrollment:request"
+      ],
+      "subGroups": []
+    }
+  ],
+  "users": [
+    {
+      "username": "superadmin",
+      "email": "superadmin@schooldesk.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Super",
+      "lastName": "Admin",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"VwYOx8lhQx3N4m1YyQdmvmopIe1etiAXBF3pjPODbto=\", \"salt\": \"4jeSbz6RY7LAjYkW/RVx4Q==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/super_admins"
+      ],
+      "attributes": {
+        "role": [
+          "super_admin"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "admin",
+      "email": "admin@school.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "School",
+      "lastName": "Admin",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"pUwbAZisDLsw2g1c3iSkAwKNrfwPebtjqpprSo0gbPE=\", \"salt\": \"4VTxILg66cCaIDTvVtbQeg==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/school_admins"
+      ],
+      "attributes": {
+        "role": [
+          "school_admin"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "manager",
+      "email": "manager@school.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Manager",
+      "lastName": "User",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"TBHGMk3W2/0iQpE5pdcgF3jzL/ARxpk5+zlmKL0OlEs=\", \"salt\": \"vEGYZ+LK6mChQauoom5cWQ==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/managers"
+      ],
+      "attributes": {
+        "role": [
+          "manager"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "finance",
+      "email": "finance@school.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Finance",
+      "lastName": "User",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"Ieps/iTZRGfVRODsK/0MjcjVmg1hCUCGJLrYFIXPcaU=\", \"salt\": \"xgR8LIK6ynMDB7ztI45qbg==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/finance_officers"
+      ],
+      "attributes": {
+        "role": [
+          "finance"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "teacher1",
+      "email": "teacher1@teacher.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Teacher",
+      "lastName": "1",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"EPbCbn3d/vdeH/Z4vt0y8HaXu+I+MibPR6Wpe8lU39g=\", \"salt\": \"OMn31gGVS4zfoOMRu9NTfg==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/teachers"
+      ],
+      "attributes": {
+        "role": [
+          "teacher"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "teacher2",
+      "email": "teacher2@teacher.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Teacher",
+      "lastName": "2",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"9ktJPVGZTqdff6YCXyUt5hEDHbuDmrW9i2UWdP9DhU4=\", \"salt\": \"rJFxv0uvJEIMEsHnIiivQg==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/teachers"
+      ],
+      "attributes": {
+        "role": [
+          "teacher"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "teacher3",
+      "email": "teacher3@teacher.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Teacher",
+      "lastName": "3",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"MpAFUWjvM4ZgdP6ch4VajpEHJAZXTvRyZbhftFV5lLU=\", \"salt\": \"3jba+algPhMl2L4ZgIEQsw==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/teachers"
+      ],
+      "attributes": {
+        "role": [
+          "teacher"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "teacher4",
+      "email": "teacher4@teacher.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Teacher",
+      "lastName": "4",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"VdGApqTQ78s+C/uPzDgW7NlasEXr6Ca+7xG54ymPJPo=\", \"salt\": \"GG/lARXWX2CMyCLAhzBVLg==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/teachers"
+      ],
+      "attributes": {
+        "role": [
+          "teacher"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "teacher5",
+      "email": "teacher5@teacher.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Teacher",
+      "lastName": "5",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"Vc8nMM1NLvuC7mmKtjD3eBAh6H5i0cc2EP9pB+fU+pc=\", \"salt\": \"45t4lhJ70CCcadoqw2HnxQ==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/teachers"
+      ],
+      "attributes": {
+        "role": [
+          "teacher"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "teacher6",
+      "email": "teacher6@teacher.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Teacher",
+      "lastName": "6",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"uGPbX+ets8i2B67ktj/bRyI9lDS4qha5CQIMf9ksLDw=\", \"salt\": \"8+D72Pasjd559yTq0rtCSA==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/teachers"
+      ],
+      "attributes": {
+        "role": [
+          "teacher"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "parent_al1",
+      "email": "parent.al1@parent.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Parent",
+      "lastName": "AL1",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"VU5sPhLIiuTaExMNtoHt4aQbIOD589AOQKzl0128eKs=\", \"salt\": \"4e32dYL1SYwMaHGAFJBbsw==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/parents"
+      ],
+      "attributes": {
+        "role": [
+          "parent"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "parent_bn2",
+      "email": "parent.bn2@parent.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Parent",
+      "lastName": "BN2",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"F9XGcQskyX9XxntpfNfx5/PTOXmcZsACQx/GGBTuIc0=\", \"salt\": \"GfqVBrOGNa2u/5sVuyYtwg==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/parents"
+      ],
+      "attributes": {
+        "role": [
+          "parent"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "parent_cm3",
+      "email": "parent.cm3@parent.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Parent",
+      "lastName": "CM3",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"rsY2OQKQiGa+7zNVT5lj8WdfcgRRw7K0B7j38VT+O7E=\", \"salt\": \"qRgrxqZE/tBGyKKqD8Ts7A==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/parents"
+      ],
+      "attributes": {
+        "role": [
+          "parent"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "parent_da4",
+      "email": "parent.da4@parent.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Parent",
+      "lastName": "DA4",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"56xE8Q7Ngz53ZJ7ATgLwnKbKU42GL0YwhWLsErP9KpQ=\", \"salt\": \"lsdjhRlN0DEXiLqhyPVEfA==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/parents"
+      ],
+      "attributes": {
+        "role": [
+          "parent"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "parent_el5",
+      "email": "parent.el5@parent.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Parent",
+      "lastName": "EL5",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"wZltdElDQBzQWbgOBz+RKG1ja7QZNs2lC8/Ir2T1Vb0=\", \"salt\": \"DaCHgQ6PL1dq6Uf0KSwpyQ==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/parents"
+      ],
+      "attributes": {
+        "role": [
+          "parent"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "parent_fa6",
+      "email": "parent.fa6@parent.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Parent",
+      "lastName": "FA6",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"m+WiWTahI2lBy6i359OSCBbS+pW5w5muFzNVeUS40aE=\", \"salt\": \"BJ03uO4OBvwkjkGNOzMPpQ==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/parents"
+      ],
+      "attributes": {
+        "role": [
+          "parent"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "ahmed",
+      "email": "ahmed.s1@student.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Ahmed",
+      "lastName": "Student1",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"42vAi1nV+lEzLw5/HeTQxWPgsPu7d4Cqt1/i2u/4WzI=\", \"salt\": \"rGx8/Add+IXF21SX4j+qRA==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/students"
+      ],
+      "attributes": {
+        "role": [
+          "student"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "mariam",
+      "email": "mariam.s2@student.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Mariam",
+      "lastName": "Student2",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"kHv7TuLekUmPn9bXf2IAyMX7cWT9LSE4SZVkFE+dDCs=\", \"salt\": \"vF/KCdJrD18kaCGtO+iQxw==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/students"
+      ],
+      "attributes": {
+        "role": [
+          "student"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "khalid",
+      "email": "khalid.s3@student.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Khalid",
+      "lastName": "Student3",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"aedQtW5JGrgiO8DlmiIA7AjGqMKo/E0riHpCGE4NHUw=\", \"salt\": \"iHkGCSCxuh66uPWFZ2enaw==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/students"
+      ],
+      "attributes": {
+        "role": [
+          "student"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "fatima",
+      "email": "fatima.s4@student.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Fatima",
+      "lastName": "Student4",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"dciNXNJWmNJo276ioUToIK/42CugjhAdPslknZoHxd8=\", \"salt\": \"FxWiRmwHLwxYkjPDmQEMYw==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/students"
+      ],
+      "attributes": {
+        "role": [
+          "student"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "youssef",
+      "email": "youssef.s5@student.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Youssef",
+      "lastName": "Student5",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"dQJfL8QfvkWOf+6oTpvwFGudLiLFRePIZf1atEbsF18=\", \"salt\": \"QD9CCIbMUr03855D7CHORQ==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/students"
+      ],
+      "attributes": {
+        "role": [
+          "student"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "nour",
+      "email": "nour.s6@student.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Nour",
+      "lastName": "Student6",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"aWPV1hKktInot9XcCbA+AuinA2kz/qkALYHRcRRd1xY=\", \"salt\": \"zKAagH5UTqbSktm90vicaQ==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/students"
+      ],
+      "attributes": {
+        "role": [
+          "student"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "ziad",
+      "email": "ziad.s7@student.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Ziad",
+      "lastName": "Student7",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"ux9lisgjnzhK0YgzjYaCG0HQZpQc+3QtpMNK4AUbHCQ=\", \"salt\": \"AhylHvR2QHKYeDRJ1LrixQ==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/students"
+      ],
+      "attributes": {
+        "role": [
+          "student"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "layla",
+      "email": "layla.s8@student.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Layla",
+      "lastName": "Student8",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"gD/1gqoV/YBfR1lQ+iHcldfqpXsGEeKeFSYkmRxwapY=\", \"salt\": \"h5QEThNR9zOUCm2tf5Yrkw==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/students"
+      ],
+      "attributes": {
+        "role": [
+          "student"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "tariq",
+      "email": "tariq.s9@student.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Tariq",
+      "lastName": "Student9",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"/0+pOyQsBlzRvcm5oPnI5WagbURSnDfww2vmszfCO+E=\", \"salt\": \"sid3Wjii5j/G3Xa6MjGSew==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/students"
+      ],
+      "attributes": {
+        "role": [
+          "student"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "hana",
+      "email": "hana.s10@student.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Hana",
+      "lastName": "Student10",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"zxo3Q690yin1LOvcQf3zZkd/eudKHwVgQiYlw8PvAwo=\", \"salt\": \"rKqlG62uVIo+gUGbpEM3EQ==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/students"
+      ],
+      "attributes": {
+        "role": [
+          "student"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "sami",
+      "email": "sami.s11@student.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Sami",
+      "lastName": "Student11",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"PFvBEtvNkAZNQhyi6D5kUNNlWb3Oev40ey/XuCM5oCk=\", \"salt\": \"Gob9bSa5JRzsPjrrP+Polg==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/students"
+      ],
+      "attributes": {
+        "role": [
+          "student"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "rana",
+      "email": "rana.s12@student.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Rana",
+      "lastName": "Student12",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"ZqNhbBN8MVoCtT2nm5ooS44w7/+vja1SKvFni164njU=\", \"salt\": \"mHHS7GBg3yU7gmK7jGKtHg==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/students"
+      ],
+      "attributes": {
+        "role": [
+          "student"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "karim",
+      "email": "karim.s13@student.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Karim",
+      "lastName": "Student13",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"aXyFCb711UsfX8vDctpGOMrsaa2ELzCQzPMIkFlGP10=\", \"salt\": \"WE12EzoZW0q1wzEt8bTqmQ==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/students"
+      ],
+      "attributes": {
+        "role": [
+          "student"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "dalia",
+      "email": "dalia.s14@student.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Dalia",
+      "lastName": "Student14",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"yVWsbIBFpNkos83FosHBNXW0cGIJNrWVz7ix9ymzT1I=\", \"salt\": \"Bt5GC1ZNbOmGRq+n2pwqoQ==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/students"
+      ],
+      "attributes": {
+        "role": [
+          "student"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "rami",
+      "email": "rami.s15@student.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Rami",
+      "lastName": "Student15",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"g3izl/rEYQG2xqRdkyjJTd0wmg1oyOvQ5+Ug/nukefU=\", \"salt\": \"krx75WrAEJv5ix58VP8kOg==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/students"
+      ],
+      "attributes": {
+        "role": [
+          "student"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "heba",
+      "email": "heba.s16@student.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Heba",
+      "lastName": "Student16",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"fwv90bq26JXZC0pbD1emU1pJV34wa5ZtJCRCy1Gkpsc=\", \"salt\": \"WSGm6C7EHSmXCOzKy4eZqA==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/students"
+      ],
+      "attributes": {
+        "role": [
+          "student"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "adel",
+      "email": "adel.s17@student.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Adel",
+      "lastName": "Student17",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"yVnSDjFp5srtDpqOij6e6fH72BS4SrADhjiwlG2jOrY=\", \"salt\": \"eS7wChDJMHtLmnpPmP/KtQ==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/students"
+      ],
+      "attributes": {
+        "role": [
+          "student"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    },
+    {
+      "username": "salma",
+      "email": "salma.s18@student.com",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Salma",
+      "lastName": "Student18",
+      "credentials": [
+        {
+          "type": "password",
+          "temporary": false,
+          "secretData": "{\"value\": \"UViK11uwvLFfRFlk7YjIvoj3IeBbAcxrnfz5+QxjEvg=\", \"salt\": \"zEC6Pr2Xr52HJBfqRuuT/Q==\", \"additionalParameters\": {}}",
+          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
+        }
+      ],
+      "realmRoles": [],
+      "groups": [
+        "/students"
+      ],
+      "attributes": {
+        "role": [
+          "student"
+        ],
+        "tenant_id": [
+          "tenant_a"
+        ]
+      }
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "frontend",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "redirectUris": [
+        "http://localhost:3000/*",
+        "http://127.0.0.1:3000/*",
+        "*"
+      ],
+      "webOrigins": [
+        "*"
+      ],
+      "attributes": {
+        "post.logout.redirect.uris": "+"
+      }
+    },
+    {
+      "clientId": "apisix",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": true,
+      "secret": "apisix_client_secret_placeholder",
+      "redirectUris": [
+        "*"
+      ],
+      "webOrigins": [
+        "*"
+      ]
+    }
+  ]
+}

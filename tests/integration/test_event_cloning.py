@@ -38,6 +38,18 @@ async def test_event_cloning_flow(test_client: AsyncClient, db_pool: asyncpg.Poo
     assert r_cls.status_code == 200
     class_id = r_cls.json()["id"]
 
+    # 2.5. Register school_admin
+    r_admin = await test_client.post("/api/v1/auth/register", json={
+        "email": "cloner_admin@school.com",
+        "password": "password123",
+        "tenant_id": "tenant_a",
+        "role": "school_admin",
+        "invite_code": "SCHOOL-STAFF-2026"
+    })
+    assert r_admin.status_code == 200
+    a_token = r_admin.json()["access_token"]
+    a_headers = {"Authorization": f"Bearer {a_token}"}
+
     # 3. Create initial event
     dt_str = (datetime.utcnow() + timedelta(days=10)).strftime("%Y-%m-%dT%H:%M:%S")
     r = await test_client.post("/api/v1/events", json={
@@ -47,13 +59,13 @@ async def test_event_cloning_flow(test_client: AsyncClient, db_pool: asyncpg.Poo
         "school_subsidy": 50.0,
         "date": dt_str,
         "class_mappings": [{"class_id": class_id, "ticket_price": 10.0, "budgets": []}]
-    }, headers=headers)
+    }, headers=a_headers)
     assert r.status_code == 200
     orig_event = r.json()
     orig_id = orig_event["id"]
 
     # 4. Get resource types & add a resource request to original event
-    r_rt = await test_client.get("/api/v1/events/resource-types", headers=headers)
+    r_rt = await test_client.get("/api/v1/events/resource-types", headers=a_headers)
     assert r_rt.status_code == 200
     r_types = r_rt.json()
     assert len(r_types) > 0
@@ -63,11 +75,11 @@ async def test_event_cloning_flow(test_client: AsyncClient, db_pool: asyncpg.Poo
         "resource_type_id": rt_id,
         "description": "Bus for trip",
         "quantity": 2
-    }], headers=headers)
+    }], headers=a_headers)
     assert r.status_code == 200
 
     # 5. Clone the event
-    r = await test_client.post(f"/api/v1/events/{orig_id}/clone", headers=headers)
+    r = await test_client.post(f"/api/v1/events/{orig_id}/clone", headers=a_headers)
     assert r.status_code == 200
     cloned_event = r.json()
 
@@ -80,7 +92,7 @@ async def test_event_cloning_flow(test_client: AsyncClient, db_pool: asyncpg.Poo
     assert cloned_event["class_mappings"][0]["class_id"] == class_id
 
     # 7. Check cloned event resources
-    r_res = await test_client.get(f"/api/v1/events/{cloned_event['id']}/resources", headers=headers)
+    r_res = await test_client.get(f"/api/v1/events/{cloned_event['id']}/resources", headers=a_headers)
     assert r_res.status_code == 200
     resources = r_res.json()["resources"]
     assert len(resources) == 1

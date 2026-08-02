@@ -57,7 +57,10 @@ async def db_pool():
     finally:
         await sys_conn.close()
 
-    pool = await asyncpg.create_pool(**TEST_DB, min_size=1, max_size=5)
+    async def setup_conn(conn):
+        await conn.execute('SET search_path TO "tenant_a", public;')
+
+    pool = await asyncpg.create_pool(**TEST_DB, min_size=1, max_size=5, setup=setup_conn)
     async with pool.acquire() as conn:
         await conn.execute(
             """

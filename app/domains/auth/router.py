@@ -116,12 +116,17 @@ async def get_profile(current_user: CurrentUser = Depends(get_current_user)) -> 
                 profile = await cp_repo.get_parent_by_email(current_user.email)
             if profile and current_user.tenant_id:
                 pool = await get_db_pool(current_user.tenant_id)
-                tenant_repo = TenantRepository(pool)
-                linked_students = await tenant_repo.get_linked_students_for_parent(profile["id"])
-                students = [
-                    ProfileStudentInfo(name=s["name"], email=s["email"])
-                    for s in linked_students
-                ]
+                user_repo = UserRepository(pool)
+                local_user = await user_repo.get_user_by_email(current_user.email)
+                if local_user:
+                    tenant_repo = TenantRepository(pool)
+                    linked_students = await tenant_repo.get_linked_students_for_parent(local_user["id"])
+                    students = [
+                        ProfileStudentInfo(name=s["name"], email=s["email"])
+                        for s in linked_students
+                    ]
+                else:
+                    students = []
         else:
             if current_user.tenant_id:
                 pool = await get_db_pool(current_user.tenant_id)
