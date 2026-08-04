@@ -159,6 +159,8 @@ class EventResponse(BaseModel):
     manager_approved_at: datetime | None = None
     finance_priced_at: datetime | None = None
     published_at: datetime | None = None
+    rejection_reason: str | None = None
+
 
 
 class EventsListResponse(BaseModel):

@@ -7,6 +7,8 @@ Control-Plane vs. Tenant DB boundaries.
 
 import os
 from datetime import UTC, datetime, timedelta
+from uuid import UUID
+
 
 import jwt
 from passlib.context import CryptContext
@@ -100,24 +102,47 @@ class AuthService:
         invite_code: str | None = None,
     ) -> str:
         """Business logic for user registration."""
+        cp_pool = await get_control_plane_pool()
+        cp_repo = ControlPlaneRepository(cp_pool)
+
+        invitation = None
+        if invite_code:
+            inv_record = await cp_repo.get_invitation_by_code(invite_code.strip())
+            if inv_record:
+                if not inv_record["is_active"]:
+                    raise ValueError("Invitation code is inactive")
+                exp = inv_record["expires_at"]
+                if exp.tzinfo is None:
+                    exp = exp.replace(tzinfo=UTC)
+                if exp < datetime.now(UTC):
+                    raise ValueError("Invitation code has expired")
+                if inv_record["uses_count"] >= inv_record["max_uses"]:
+                    raise ValueError("Invitation code max uses reached")
+                if inv_record["target_email"] and inv_record["target_email"].lower() != email.strip().lower():
+                    raise ValueError(f"Invitation code is strictly for {inv_record['target_email']}")
+                
+                # Lock tenant_id and role to invitation bounds
+                tenant_id = inv_record["tenant_id"]
+                role = inv_record["role"]
+                invitation = inv_record
+
         password_hash = AuthService.hash_password(password)
 
         if role == "super_admin":
-            cp_pool = await get_control_plane_pool()
-            cp_repo = ControlPlaneRepository(cp_pool)
             if await cp_repo.get_super_admin_by_email(email):
                 raise ValueError("Email already registered")
             user_id = await cp_repo.create_super_admin(email, password_hash)
             sync_user_to_keycloak(email, password, "super_admin")
+            if invitation:
+                await cp_repo.increment_invitation_uses(invitation["code"])
             return AuthService.create_access_token(user_id, tenant_id="", role="super_admin", email=email)
+
 
         elif role == "parent":
             if not tenant_id:
                 raise ValueError("Tenant ID is required for parent registration")
             
             # 1. Register parent globally in control plane
-            cp_pool = await get_control_plane_pool()
-            cp_repo = ControlPlaneRepository(cp_pool)
             global_parent = await cp_repo.get_parent_by_email(email)
             if global_parent:
                 if not AuthService.verify_password(password, global_parent["password_hash"]):
@@ -139,14 +164,18 @@ class AuthService:
             else:
                 local_user_id = local_user["id"]
 
-            sync_user_to_keycloak(email, password, "parent")
+            sync_user_to_keycloak(email, password, "parent", tenant_id)
+            # Save email→tenant mapping for Keycloak token resolution
+            await cp_repo.upsert_user_tenant_map(email, tenant_id, "parent")
+            if invitation:
+                await cp_repo.increment_invitation_uses(invitation["code"])
             return AuthService.create_access_token(local_user_id, tenant_id=tenant_id, role="parent", email=email)
 
-        elif role in ("school_admin", "teacher", "student", "manager", "finance", "event_teacher"):
+        elif role in ("school_admin", "teacher", "student", "manager"):
             if not tenant_id:
                 raise ValueError("Tenant ID is required for school users")
 
-            if role in ("teacher", "manager", "finance", "event_teacher"):
+            if not invitation and role in ("teacher", "manager"):
                 from app.core.config import TEACHER_INVITE_CODE
                 valid_codes = {TEACHER_INVITE_CODE, "regester123", "register123", "SCHOOL-STAFF-2026"}
                 if not invite_code or invite_code.strip() not in valid_codes:
@@ -194,9 +223,15 @@ class AuthService:
                 )
 
             # Sync user to Keycloak realm
-            sync_user_to_keycloak(email, password, role)
+            sync_user_to_keycloak(email, password, role, tenant_id)
+            # Save email→tenant mapping for Keycloak token resolution
+            await cp_repo.upsert_user_tenant_map(email, tenant_id, role)
+
+            if invitation:
+                await cp_repo.increment_invitation_uses(invitation["code"])
 
             return AuthService.create_access_token(local_user_id, tenant_id, role, email=email)
+
         else:
             raise ValueError(f"Invalid registration role: {role}")
 
@@ -235,7 +270,8 @@ class AuthService:
                 await tenant_repo.create_parent(local_user_id, email.split("@")[0].title(), parent.get("phone"))
             else:
                 local_user_id = local_user["id"]
-                
+            # Save email→tenant mapping so Keycloak logins resolve correctly
+            await cp_repo.upsert_user_tenant_map(email, tenant_id, "parent")
             return AuthService.create_access_token(local_user_id, tenant_id=tenant_id, role="parent", email=email)
 
         # Check Tenant users (school_admin, teacher, student, parent)
@@ -248,6 +284,8 @@ class AuthService:
         if not user or not AuthService.verify_password(password, user["password_hash"]):
             raise ValueError("Invalid email or password")
 
+        # Save email→tenant mapping so Keycloak logins resolve correctly
+        await cp_repo.upsert_user_tenant_map(email, tenant_id, user["role"])
         return AuthService.create_access_token(user["id"], tenant_id, user["role"], email=email)
 
     @staticmethod
@@ -256,3 +294,69 @@ class AuthService:
         cp_pool = await get_control_plane_pool()
         cp_repo = ControlPlaneRepository(cp_pool)
         return await cp_repo.get_all_tenants()
+
+    @staticmethod
+    async def create_tenant(tenant_id: str, name: str) -> dict:
+        """Create a new tenant record and generate its PostgreSQL schema and tables."""
+        cp_pool = await get_control_plane_pool()
+        cp_repo = ControlPlaneRepository(cp_pool)
+        
+        # 1. Insert tenant in control plane
+        await cp_repo.create_tenant(tenant_id=tenant_id, name=name)
+        
+        # 2. Trigger schema creation and table initialization in PostgreSQL
+        await get_db_pool(tenant_id)
+        
+        return {
+            "tenant_id": tenant_id,
+            "name": name,
+            "status": "schema_generated",
+        }
+
+    @staticmethod
+    async def create_invitation(
+        tenant_id: str,
+        role: str,
+        target_email: str | None = None,
+        max_uses: int = 1,
+        valid_days: int = 7,
+        created_by: UUID | None = None,
+    ) -> dict:
+        """Generate a secure, role- & tenant-scoped invitation token."""
+        import secrets
+        code = f"INV-{tenant_id.upper()}-{role.upper()}-{secrets.token_hex(4).upper()}"
+        expires_at = datetime.now(UTC) + timedelta(days=valid_days)
+        
+        cp_pool = await get_control_plane_pool()
+        cp_repo = ControlPlaneRepository(cp_pool)
+        return await cp_repo.create_invitation(
+            code=code,
+            tenant_id=tenant_id,
+            role=role,
+            target_email=target_email.strip().lower() if target_email else None,
+            max_uses=max_uses,
+            expires_at=expires_at,
+            created_by=created_by,
+        )
+
+    @staticmethod
+    async def get_invitation(code: str) -> dict:
+        """Validate and fetch metadata for an invitation code."""
+        cp_pool = await get_control_plane_pool()
+        cp_repo = ControlPlaneRepository(cp_pool)
+        inv = await cp_repo.get_invitation_by_code(code)
+        if not inv or not inv["is_active"]:
+            raise ValueError("Invalid or inactive invitation code")
+        
+        exp = inv["expires_at"]
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=UTC)
+        if exp < datetime.now(UTC):
+            raise ValueError("Invitation code has expired")
+
+        if inv["uses_count"] >= inv["max_uses"]:
+            raise ValueError("Invitation code maximum usage limit reached")
+
+        return inv
+
+

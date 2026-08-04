@@ -1,8 +1,10 @@
 """ControlPlaneRepository — database queries for the control plane DB."""
 
+from datetime import datetime
 from uuid import UUID
 
 import asyncpg
+
 
 
 class ControlPlaneRepository:
@@ -72,6 +74,35 @@ class ControlPlaneRepository:
             "SELECT tenant_id, name, db_host, db_port, db_user, db_name, created_at FROM tenants"
         )
         return [dict(row) for row in rows]
+
+    async def create_tenant(
+        self,
+        tenant_id: str,
+        name: str,
+        db_host: str = "127.0.0.1",
+        db_port: int = 5433,
+        db_user: str = "admin",
+        db_password: str = "secure_local_password",
+        db_name: str = "user_service_db",
+    ) -> str:
+        """Insert a new tenant record into control plane."""
+        await self.pool.execute(
+            """
+            INSERT INTO tenants (tenant_id, name, db_host, db_port, db_user, db_password, db_name)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            ON CONFLICT (tenant_id) DO UPDATE SET name = EXCLUDED.name
+            """,
+            tenant_id,
+            name,
+            db_host,
+            db_port,
+            db_user,
+            db_password,
+            db_name,
+        )
+        return tenant_id
+
+
 
     # =========================================================================
     # Parent-Child Links
@@ -175,3 +206,85 @@ class ControlPlaneRepository:
             parent_id,
         )
 
+    # =========================================================================
+    # Invitations
+    # =========================================================================
+    async def create_invitation(
+        self,
+        code: str,
+        tenant_id: str,
+        role: str,
+        target_email: str | None,
+        max_uses: int,
+        expires_at: datetime,
+        created_by: UUID | None = None,
+    ) -> dict:
+        """Create a new invitation record."""
+        row = await self.pool.fetchrow(
+            """
+            INSERT INTO invitations (code, tenant_id, role, target_email, max_uses, expires_at, created_by)
+            VALUES ($1, $2, $3, $4, $5, $6, $7)
+            RETURNING id, code, tenant_id, role, target_email, max_uses, uses_count, expires_at, is_active, created_at
+            """,
+            code,
+            tenant_id,
+            role,
+            target_email,
+            max_uses,
+            expires_at,
+            created_by,
+        )
+        return dict(row)
+
+    async def get_invitation_by_code(self, code: str) -> dict | None:
+        """Fetch invitation metadata by invite code."""
+        row = await self.pool.fetchrow(
+            """
+            SELECT id, code, tenant_id, role, target_email, max_uses, uses_count, expires_at, is_active, created_at
+            FROM invitations
+            WHERE code = $1
+            """,
+            code,
+        )
+        return dict(row) if row else None
+
+    async def increment_invitation_uses(self, code: str) -> None:
+        """Increment uses_count and deactivate if max_uses reached."""
+        await self.pool.execute(
+            """
+            UPDATE invitations
+            SET uses_count = uses_count + 1,
+                is_active = CASE WHEN uses_count + 1 >= max_uses THEN FALSE ELSE is_active END
+            WHERE code = $1
+            """,
+            code,
+        )
+
+    # =========================================================================
+    # User-Tenant Mapping (Cross-realm tenant resolution for Keycloak users)
+    # =========================================================================
+    async def get_tenant_for_email(self, email: str) -> dict | None:
+        """Look up which tenant and role a user belongs to by email.
+        Used when Keycloak token does not carry a tenant_id claim."""
+        row = await self.pool.fetchrow(
+            "SELECT tenant_id, role FROM user_tenant_map WHERE email = $1",
+            email.strip().lower(),
+        )
+        return dict(row) if row else None
+
+    async def upsert_user_tenant_map(self, email: str, tenant_id: str, role: str) -> None:
+        """Register or update a user's email → tenant_id + role mapping.
+        Called at registration and login so Keycloak users can be resolved later."""
+        await self.pool.execute(
+            """
+            INSERT INTO user_tenant_map (email, tenant_id, role, updated_at)
+            VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+            ON CONFLICT (email) DO UPDATE
+                SET tenant_id  = EXCLUDED.tenant_id,
+                    role       = EXCLUDED.role,
+                    updated_at = CURRENT_TIMESTAMP
+            """,
+            email.strip().lower(),
+            tenant_id,
+            role,
+        )

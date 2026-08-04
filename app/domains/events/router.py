@@ -769,20 +769,17 @@ async def submit_event(
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
         
-        status = event.get("status") or "draft"
-        if status == "draft" and current_user.has_role("teacher"):
-            action = "submit_to_event_teacher"
-        elif status == "resource_planning" and current_user.has_role("event_teacher"):
+        ev_status = event.get("status") or "draft"
+
+        # Only the draft → proposed submission is needed in the simplified workflow:
+        # draft ──(teacher)──► proposed ──(manager)──► approved ──(teacher)──► published
+        if ev_status == "draft" and current_user.has_any_role("teacher", "school_admin"):
             action = "submit_for_approval"
-        elif current_user.has_role("school_admin"):
-            if status == "draft":
-                action = "submit_to_event_teacher"
-            elif status == "resource_planning":
-                action = "submit_for_approval"
-            else:
-                raise PermissionError("Action not allowed in current event status")
         else:
-            raise PermissionError("Only teachers or event teachers can submit events in this status")
+            raise PermissionError(
+                f"Cannot submit event in '{ev_status}' status. "
+                "Only draft events can be submitted for manager approval."
+            )
         
         updated_event = await TenantService.transition_event(
             tenant_id=current_user.tenant_id,
@@ -797,6 +794,7 @@ async def submit_event(
         raise HTTPException(status_code=403, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
 
 
 @router.post("/{event_id}/manager-decision", summary="Submit manager decision (approve/reject)")
@@ -835,9 +833,44 @@ async def manager_decision(
 
 
 
+@router.post("/{event_id}/publish", summary="Teacher publishes an approved event to students & parents")
+async def teacher_publish_event(
+    event_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    """Step 3 of the event lifecycle: after Manager approves, the event creator
+    (Teacher) clicks Publish. This moves the event from 'approved' → 'published'
+    and sends notifications to all students and parents in the targeted classes."""
+    if not current_user.tenant_id:
+        raise HTTPException(status_code=400, detail="Tenant context required")
+    if not current_user.has_any_role("teacher", "school_admin", "super_admin"):
+        raise HTTPException(status_code=403, detail="Only teachers or admins can publish approved events")
+
+    try:
+        class Actor:
+            def __init__(self, id, role, roles=None):
+                self.id = id
+                self.role = role
+                self.roles = roles or [role]
+        actor = Actor(current_user.id, current_user.role, current_user.roles)
+
+        updated_event = await TenantService.transition_event(
+            tenant_id=current_user.tenant_id,
+            event_id=event_id,
+            action="teacher_publish",
+            actor=actor,
+        )
+        return EventResponse(**updated_event)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.post("/{event_id}/event-teacher-decision", summary="Submit event teacher decision (return to draft)")
+
 async def event_teacher_decision(
     event_id: int,
     payload: ManagerDecision,
@@ -966,7 +999,7 @@ async def update_ticket_prices(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.put("/{event_id}/subsidy", summary="Update school subsidy for event (finance/manager/admin)")
+@router.put("/{event_id}/subsidy", summary="Update school subsidy for event (manager/admin/teacher)")
 async def update_event_subsidy(
     event_id: int,
     payload: dict,
@@ -974,20 +1007,21 @@ async def update_event_subsidy(
 ):
     if not current_user.tenant_id:
         raise HTTPException(status_code=400, detail="Tenant context required")
-    if not current_user.has_any_role("finance", "school_admin", "manager"):
-        raise HTTPException(status_code=403, detail="Access denied. Only finance, manager or admin can modify school subsidy.")
+    if not current_user.has_any_role("school_admin", "manager", "super_admin", "teacher"):
+        raise HTTPException(status_code=403, detail="Access denied. Only manager, admin or teacher can modify school subsidy.")
         
     try:
         pool = await get_db_pool(current_user.tenant_id)
         subsidy = float(payload.get("school_subsidy", 0.0))
         await pool.execute(
-            "UPDATE events SET school_subsidy = $1 WHERE id = $2",
+            "UPDATE event SET school_subsidy = $1 WHERE id = $2",
             subsidy,
             event_id,
         )
         return {"status": "success", "school_subsidy": subsidy}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
 
 
 

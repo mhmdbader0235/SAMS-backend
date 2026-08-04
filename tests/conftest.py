@@ -24,7 +24,6 @@ load_dotenv()
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-from app.core.database import _initialize_control_plane_tables, _initialize_tenant_tables
 from app.main import app
 
 # ─── Test database settings ──────────────────────────────────────────────────
@@ -73,8 +72,12 @@ async def db_pool():
             CASCADE;
             """
         )
-    await _initialize_control_plane_tables(pool)
-    await _initialize_tenant_tables(pool)
+    # Recreate tables from init.sql
+    init_sql_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "init.sql")
+    with open(init_sql_path, "r", encoding="utf-8") as f:
+        schema_sql = f.read()
+    async with pool.acquire() as conn:
+        await conn.execute(schema_sql)
     yield pool
     await pool.close()
 

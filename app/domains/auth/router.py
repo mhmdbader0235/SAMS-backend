@@ -16,6 +16,19 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 _security = HTTPBearer(auto_error=False)
 
 
+class CreateTenantRequest(BaseModel):
+    tenant_id: str
+    name: str
+
+
+class CreateInvitationRequest(BaseModel):
+    tenant_id: str
+    role: str
+    target_email: str | None = None
+    max_uses: int = 1
+    valid_days: int = 7
+
+
 @router.get("/tenants", summary="List available tenant IDs")
 async def list_tenants() -> dict:
     """Return the list of registered tenant (school) identifiers."""
@@ -24,6 +37,74 @@ async def list_tenants() -> dict:
         return {"tenants": [t["tenant_id"] for t in tenants]}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/tenants", summary="Create a new tenant and generate schema (Super Admin)")
+async def create_tenant(
+    payload: CreateTenantRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Register a new tenant in control plane and generate its PostgreSQL schema & tables."""
+    if current_user.role != "super_admin":
+        raise HTTPException(status_code=403, detail="Only super_admin can create new tenants")
+    try:
+        res = await AuthService.create_tenant(payload.tenant_id, payload.name)
+        return res
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/invitations", summary="Create a role- & tenant-scoped invitation token")
+async def create_invitation(
+    payload: CreateInvitationRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Generate a locked invitation code for a specific tenant and role."""
+    allowed_roles = {"school_admin", "super_admin"}
+    if current_user.role not in allowed_roles and "school_admin" not in current_user.roles and "super_admin" not in current_user.roles:
+        raise HTTPException(status_code=403, detail="Only school_admin or super_admin can create invitations")
+
+    try:
+        inv = await AuthService.create_invitation(
+            tenant_id=payload.tenant_id,
+            role=payload.role,
+            target_email=payload.target_email,
+            max_uses=payload.max_uses,
+            valid_days=payload.valid_days,
+            created_by=current_user.id,
+        )
+        return {
+            "code": inv["code"],
+            "tenant_id": inv["tenant_id"],
+            "role": inv["role"],
+            "target_email": inv["target_email"],
+            "max_uses": inv["max_uses"],
+            "expires_at": inv["expires_at"].isoformat() if inv["expires_at"] else None,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.get("/invitations/{code}", summary="Verify invitation token for frontend pre-check")
+async def get_invitation(code: str) -> dict:
+    """Pre-check invitation token validity and return locked tenant_id and role."""
+    try:
+        inv = await AuthService.get_invitation(code)
+        return {
+            "valid": True,
+            "code": inv["code"],
+            "tenant_id": inv["tenant_id"],
+            "role": inv["role"],
+            "target_email": inv["target_email"],
+            "max_uses": inv["max_uses"],
+            "uses_count": inv["uses_count"],
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 
 
 @router.post("/register", response_model=TokenResponse, summary="Register a new user")

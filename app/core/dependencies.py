@@ -49,6 +49,39 @@ class CurrentUser:
         return any(self.has_role(r) for r in role_names)
 
 
+COMPOSITE_ROLE_PERMISSIONS: dict[str, set[str]] = {
+    "super_admin": {
+        "school:write", "school:read", "user:create", "user:delete", "user:link", "user:view",
+        "event:create", "event:edit", "event:delete", "event:propose", "event:review", "event:publish",
+        "event:clone", "event:view_draft", "resource:create", "resource:price", "resource:view",
+        "teacher:write", "teacher:read", "enrollment:request", "enrollment:parent_approve",
+        "enrollment:teacher_approve", "enrollment:cancel", "enrollment:view_roster",
+        "billing:invoice", "billing:pay", "billing:refund", "billing:audit", "announcement:manage"
+    },
+    "school_admin": {
+        "school:write", "school:read", "user:create", "user:delete", "user:link", "user:view",
+        "event:review", "event:publish", "teacher:read", "enrollment:cancel", "enrollment:view_roster",
+        "billing:audit", "announcement:manage"
+    },
+    "manager": {
+        "school:read", "event:review", "event:publish", "event:view_draft", "resource:view",
+        "resource:price", "billing:invoice", "billing:pay", "billing:refund", "billing:audit",
+        "enrollment:view_roster"
+    },
+    "teacher": {
+        "school:read", "user:view", "event:create", "event:edit", "event:delete", "event:propose",
+        "event:clone", "teacher:write", "teacher:read", "resource:create", "resource:view",
+        "enrollment:teacher_approve", "enrollment:view_roster"
+    },
+    "parent": {
+        "school:read", "enrollment:parent_approve", "enrollment:cancel", "billing:pay"
+    },
+    "student": {
+        "school:read", "enrollment:request"
+    }
+}
+
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(_security),
 ) -> CurrentUser:
@@ -84,13 +117,9 @@ async def get_current_user(
     
     VALID_ROLES = {
         # High-level Roles
-        "super_admin", "school_admin", "tenant_manager", "manager",
-        "academic_director", "department_head", "teacher", "event_scheduler",
-        "event_teacher", "resource_manager", "finance", "finance_auditor",
-        "content_creator", "content_editor", "announcement_manager",
-        "parent", "student", "student_rep", "guest_viewer", "auditor",
+        "super_admin", "school_admin", "manager", "teacher", "parent", "student",
         
-        # New 40 Granular Roles
+        # Granular Roles / Permissions
         "system:write", "system:read", "tenant:manage", "tenant:view",
         "school:write", "school:read", "academic:direct", "academic:view",
         "user:create", "user:delete", "user:link", "user:view",
@@ -105,11 +134,43 @@ async def get_current_user(
     }
     
     PRIMARY_ROLE_ORDER = [
-        "super_admin", "school_admin", "manager", "finance",
-        "event_teacher", "teacher", "parent", "student"
+        "super_admin", "school_admin", "manager", "teacher", "parent", "student"
     ]
     
-    keycloak_roles = payload.get("realm_access", {}).get("roles", [])
+    keycloak_roles = list(payload.get("realm_access", {}).get("roles", []))
+    
+    # Extract client roles from resource_access
+    res_access = payload.get("resource_access", {})
+    if isinstance(res_access, dict):
+        for client_cfg in res_access.values():
+            if isinstance(client_cfg, dict) and "roles" in client_cfg:
+                keycloak_roles.extend(client_cfg["roles"])
+
+    GROUP_TO_ROLE_MAP = {
+        "super_admins": "super_admin",
+        "super_admin": "super_admin",
+        "school_admins": "school_admin",
+        "school_admin": "school_admin",
+        "managers": "manager",
+        "manager": "manager",
+        "teachers": "teacher",
+        "teacher": "teacher",
+        "parents": "parent",
+        "parent": "parent",
+        "students": "student",
+        "student": "student",
+    }
+
+    # Extract groups from groups claim
+    groups = payload.get("groups", [])
+    if isinstance(groups, list):
+        for g in groups:
+            clean_g = g.lstrip("/").lower().replace(" ", "_")
+            mapped_role = GROUP_TO_ROLE_MAP.get(clean_g, clean_g)
+            if mapped_role in VALID_ROLES:
+                keycloak_roles.append(mapped_role)
+
+
     single_role = payload.get("role")
     
     role = None
@@ -125,11 +186,91 @@ async def get_current_user(
         extracted = [r for r in keycloak_roles if r in VALID_ROLES]
         role = extracted[0] if extracted else "student"
 
-    extracted_roles = [r for r in keycloak_roles if r in VALID_ROLES]
-    if role not in extracted_roles:
-        extracted_roles.append(role)
+    extracted_roles = set(r for r in keycloak_roles if r in VALID_ROLES)
+    extracted_roles.add(role)
 
-    tenant_id = payload.get("tenant_id") or "tenant_a"
+    # Expand composite role permissions
+    for r in list(extracted_roles):
+        if r in COMPOSITE_ROLE_PERMISSIONS:
+            extracted_roles.update(COMPOSITE_ROLE_PERMISSIONS[r])
+
+    final_roles_list = list(extracted_roles)
+
+
+    tenant_id = payload.get("tenant_id")
+    
+    # Try Keycloak Organization / Org claims
+    if not tenant_id:
+        org = payload.get("organization") or payload.get("org") or payload.get("organizations")
+        if isinstance(org, dict):
+            tenant_id = list(org.keys())[0] if org else None
+        elif isinstance(org, list) and org:
+            first = org[0]
+            if isinstance(first, dict):
+                tenant_id = first.get("name") or first.get("id")
+            elif isinstance(first, str):
+                tenant_id = first
+        elif isinstance(org, str):
+            tenant_id = org
+
+    # Try User Attributes claim
+    if not tenant_id:
+        attrs = payload.get("attributes", {})
+        if isinstance(attrs, dict) and "tenant_id" in attrs:
+            val = attrs["tenant_id"]
+            tenant_id = val[0] if isinstance(val, list) and val else str(val)
+
+    # Try Groups path claim (e.g., /tenant_b/Teachers)
+    if not tenant_id:
+        raw_groups = payload.get("groups", [])
+        if isinstance(raw_groups, list):
+            for g in raw_groups:
+                parts = [p.strip() for p in str(g).split("/") if p.strip()]
+                for p in parts:
+                    if p.startswith("tenant_"):
+                        tenant_id = p
+                        break
+                if tenant_id:
+                    break
+
+    # Fallback for Realm-per-tenant architecture
+    if not tenant_id:
+        iss = payload.get("iss", "")
+        if "/realms/" in iss:
+            realm = iss.split("/realms/")[-1]
+            if realm.lower() not in ("schooldesk", "master", "sams"):
+                tenant_id = realm
+
+    # ── Last resort: look up email → tenant from control-plane user_tenant_map ──
+    # This is the primary resolution path for Keycloak SSO users whose token
+    # does not carry a tenant_id claim (single shared realm like 'schooldesk').
+    if (not tenant_id or tenant_id.lower() in ("sams", "schooldesk", "master")) and email:
+        try:
+            from app.core.database import get_control_plane_pool
+            from app.domains.tenant.control_plane_repository import ControlPlaneRepository
+            cp_pool = await get_control_plane_pool()
+            cp_repo = ControlPlaneRepository(cp_pool)
+            mapping = await cp_repo.get_tenant_for_email(email)
+            if mapping:
+                tenant_id = mapping["tenant_id"]
+                # If role wasn't established from token, use the stored role
+                if not role or role == "student":
+                    stored_role = mapping.get("role")
+                    if stored_role and stored_role in VALID_ROLES:
+                        role = stored_role
+                        extracted_roles.add(role)
+                        # Expand composite permissions for the resolved role
+                        if role in COMPOSITE_ROLE_PERMISSIONS:
+                            extracted_roles.update(COMPOSITE_ROLE_PERMISSIONS[role])
+                        final_roles_list = list(extracted_roles)
+        except Exception as _e:
+            print(f"[get_current_user] Warning: could not resolve tenant from control plane for '{email}': {_e}")
+
+    # Default fallback if tenant_id could not be resolved from token or map
+    if not tenant_id or tenant_id.lower() in ("sams", "schooldesk", "master"):
+        tenant_id = "tenant_a"
+
+
 
     # Resolve local database user ID for school roles (teachers, managers, finance, admins, students, parents)
     if role != "super_admin" and email:
@@ -224,7 +365,7 @@ async def get_current_user(
                         email
                     )
                     await conn_t.execute(
-                        "INSERT INTO parenets (id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                        "INSERT INTO parents (id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING",
                         local_id,
                         email.split("@")[0].title()
                     )
@@ -237,5 +378,5 @@ async def get_current_user(
         tenant_id=tenant_id,
         role=role,
         email=email,
-        roles=extracted_roles if extracted_roles else [role],
+        roles=final_roles_list if final_roles_list else [role],
     )

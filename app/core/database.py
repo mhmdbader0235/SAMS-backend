@@ -96,6 +96,38 @@ async def _initialize_control_plane_tables(pool: asyncpg.Pool) -> None:
             """
         )
 
+        # Invitations table
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS invitations (
+                id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+                code          VARCHAR(100) UNIQUE NOT NULL,
+                tenant_id     VARCHAR(50) NOT NULL REFERENCES tenants(tenant_id) ON DELETE CASCADE,
+                role          TEXT        NOT NULL CHECK (role IN ('school_admin', 'teacher', 'parent', 'student', 'manager', 'super_admin')),
+                target_email  CITEXT      DEFAULT NULL,
+                max_uses      INTEGER     NOT NULL DEFAULT 1,
+                uses_count    INTEGER     NOT NULL DEFAULT 0,
+                expires_at    TIMESTAMPTZ NOT NULL,
+                created_by    UUID        DEFAULT NULL,
+                created_at    TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                is_active     BOOLEAN     NOT NULL DEFAULT TRUE
+            );
+            """
+        )
+
+        # User-to-tenant mapping table — used to resolve which tenant a Keycloak user belongs to
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_tenant_map (
+                email      CITEXT      NOT NULL,
+                tenant_id  VARCHAR(50) NOT NULL REFERENCES tenants(tenant_id) ON DELETE CASCADE,
+                role       TEXT        NOT NULL DEFAULT 'student',
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (email)
+            );
+            """
+        )
+
         # Seed default tenants if table is empty
         row_count = await conn.fetchval("SELECT COUNT(*) FROM tenants")
         if row_count == 0:
@@ -156,7 +188,7 @@ async def _initialize_tenant_tables(pool: asyncpg.Pool, tenant_id: str = "tenant
             CREATE TABLE IF NOT EXISTS users (
                 id            BIGSERIAL   PRIMARY KEY,
                 email         CITEXT      UNIQUE NOT NULL,
-                role          TEXT        NOT NULL CHECK (role IN ('school_admin', 'teacher', 'parent', 'student', 'manager', 'finance', 'event_teacher')),
+                role          TEXT        NOT NULL CHECK (role IN ('school_admin', 'teacher', 'parent', 'student', 'manager', 'super_admin')),
                 password_hash TEXT        NOT NULL,
                 phone         VARCHAR(50) DEFAULT NULL,
                 address       TEXT        DEFAULT NULL,
@@ -165,7 +197,8 @@ async def _initialize_tenant_tables(pool: asyncpg.Pool, tenant_id: str = "tenant
             """
         )
         await conn.execute("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;")
-        await conn.execute("ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('school_admin', 'teacher', 'parent', 'student', 'manager', 'finance', 'event_teacher'));")
+        await conn.execute("ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('school_admin', 'teacher', 'parent', 'student', 'manager', 'super_admin'));")
+
 
         # 2. levels
         await conn.execute(
@@ -390,13 +423,14 @@ async def _initialize_tenant_tables(pool: asyncpg.Pool, tenant_id: str = "tenant
         await conn.execute(
             """
             DO $$ BEGIN
-                CREATE TYPE event_status AS ENUM ('draft', 'resource_planning', 'proposed', 'finance_approval', 'final_review', 'published');
+                CREATE TYPE event_status AS ENUM ('draft', 'resource_planning', 'proposed', 'approved', 'finance_approval', 'final_review', 'published');
             EXCEPTION
                 WHEN duplicate_object THEN null;
             END $$;
             """
         )
-        await conn.execute("ALTER TYPE event_status ADD VALUE IF NOT EXISTS 'resource_planning' AFTER 'draft';")
+        await conn.execute("ALTER TYPE event_status ADD VALUE IF NOT EXISTS 'approved' AFTER 'proposed';")
+
 
         await conn.execute(
             """
@@ -409,6 +443,7 @@ async def _initialize_tenant_tables(pool: asyncpg.Pool, tenant_id: str = "tenant
             ALTER TABLE event ADD COLUMN IF NOT EXISTS manager_approved_at TIMESTAMPTZ NULL;
             ALTER TABLE event ADD COLUMN IF NOT EXISTS finance_priced_at TIMESTAMPTZ NULL;
             ALTER TABLE event ADD COLUMN IF NOT EXISTS published_at TIMESTAMPTZ NULL;
+            ALTER TABLE event ADD COLUMN IF NOT EXISTS rejection_reason TEXT NULL;
             """
         )
         await conn.execute("CREATE INDEX IF NOT EXISTS ix_events_status ON event(status);")
@@ -612,12 +647,32 @@ class DatabaseManager:
                         "database": CONTROL_PLANE_DB_CONFIG["database"],
                     }
                 else:
-                    if tenant_id not in TENANT_DB_CONFIG:
-                        raise ValueError(
-                            f"Unknown tenant_id '{tenant_id}'. "
-                            f"Available tenants: {list(TENANT_DB_CONFIG.keys())}"
+                    if tenant_id in TENANT_DB_CONFIG:
+                        config = TENANT_DB_CONFIG[tenant_id]
+                    else:
+                        # Auto-register dynamic tenant in control plane
+                        config = {
+                            "host": DB_HOST,
+                            "port": DB_PORT,
+                            "user": DB_USER,
+                            "password": DB_PASSWORD,
+                            "database": CONTROL_PLANE_DB_CONFIG["database"],
+                        }
+                        await cp_pool.execute(
+                            """
+                            INSERT INTO tenants (tenant_id, name, db_host, db_port, db_user, db_password, db_name)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7)
+                            ON CONFLICT (tenant_id) DO NOTHING
+                            """,
+                            tenant_id,
+                            tenant_id.replace("_", " ").title(),
+                            config["host"],
+                            config["port"],
+                            config["user"],
+                            config["password"],
+                            config["database"],
                         )
-                    config = TENANT_DB_CONFIG[tenant_id]
+
 
                 # Force database name to use control plane database
                 config["host"] = DB_HOST

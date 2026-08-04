@@ -132,14 +132,9 @@ async def test_workflow_routes(test_client: AsyncClient, db_pool: asyncpg.Pool):
     assert summary["total_cost"] == 0.0
     resource_id = summary["resources"][0]["id"]
 
-    # Submit event (Teacher submits to event_teacher)
+    # Submit event (Teacher submits to manager)
     r = await test_client.post(f"/api/v1/events/{event_id}/submit", headers=t_headers)
-    assert r.status_code == 200
-    assert r.json()["status"] == "resource_planning"
-
-    # Event Teacher submits to manager
-    r = await test_client.post(f"/api/v1/events/{event_id}/submit", headers=et_headers)
-    assert r.status_code == 200
+    assert r.status_code == 200, r.text
     assert r.json()["status"] == "proposed"
 
     # Verify manager queue
@@ -151,37 +146,12 @@ async def test_workflow_routes(test_client: AsyncClient, db_pool: asyncpg.Pool):
     r = await test_client.post(f"/api/v1/events/{event_id}/manager-decision", json={
         "decision": "approve"
     }, headers=m_headers)
-    assert r.status_code == 200
-    assert r.json()["status"] == "finance_approval"
+    assert r.status_code == 200, r.text
+    assert r.json()["status"] == "ready_to_publish"
 
-    # Verify finance queue
-    r = await test_client.get("/api/v1/events/finance-queue", headers=f_headers)
-    assert r.status_code == 200
-    assert len(r.json()["events"]) >= 1
-
-    # Finance pricing PUT /resources/{id}/cost
-    r = await test_client.put(f"/api/v1/events/resources/{resource_id}/cost", json={
-        "unit_price": 50.0,
-        "currency": "JOD"
-    }, headers=f_headers)
-    assert r.status_code == 200
-
-    # Finance submit
-    r = await test_client.post(f"/api/v1/events/{event_id}/finance-submit", headers=f_headers)
-    assert r.status_code == 200
-    assert r.json()["status"] == "final_review"
-    assert r.json()["total_cost"] == 150.0 # 50 * 3 = 150
-
-    # Verify final review is in manager queue
-    r = await test_client.get("/api/v1/events/manager-queue", headers=m_headers)
-    assert r.status_code == 200
-    assert len(r.json()["events"]) >= 1
-
-    # Manager publishes
-    r = await test_client.post(f"/api/v1/events/{event_id}/final-decision", json={
-        "decision": "publish"
-    }, headers=m_headers)
-    assert r.status_code == 200
+    # Teacher publishes
+    r = await test_client.post(f"/api/v1/events/{event_id}/submit", headers=t_headers)
+    assert r.status_code == 200, r.text
     assert r.json()["status"] == "published"
 
     # Get published events (GET /events/published)

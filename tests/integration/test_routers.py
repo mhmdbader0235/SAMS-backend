@@ -176,6 +176,48 @@ class TestStudentsAndClassesRouter:
         # They should return the exact same class ID
         assert cls_id1 == cls_id2
 
+    async def test_update_class_head_teacher(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
+        from app.core.config import TEACHER_INVITE_CODE
+        # Setup teacher 1 & teacher 2
+        t1_payload = {
+            "email": "head1@school.com",
+            "password": "pass",
+            "role": "teacher",
+            "tenant_id": "tenant_a",
+            "invite_code": TEACHER_INVITE_CODE
+        }
+        t1_reg = await test_client.post("/api/v1/auth/register", json=t1_payload)
+        t1_headers = {"Authorization": f"Bearer {t1_reg.json()['access_token']}"}
+
+        t2_payload = {
+            "email": "head2@school.com",
+            "password": "pass",
+            "role": "teacher",
+            "tenant_id": "tenant_a",
+            "invite_code": TEACHER_INVITE_CODE
+        }
+        t2_reg = await test_client.post("/api/v1/auth/register", json=t2_payload)
+
+        # Create level & class assigned to teacher 1
+        lvl_resp = await test_client.post("/api/v1/students/levels", json={"name": "Grade 10"}, headers=t1_headers)
+        lvl_id = lvl_resp.json()["level_id"]
+
+        teachers_list = await test_client.get("/api/v1/students/teachers", headers=t1_headers)
+        t_objs = teachers_list.json()
+        t1_id = next(t["id"] for t in t_objs if t["email"] == "head1@school.com")
+        t2_id = next(t["id"] for t in t_objs if t["email"] == "head2@school.com")
+
+        cls_resp = await test_client.post("/api/v1/students/classes", json={"name": "Grade 10A", "level_id": lvl_id, "head_teacher_id": t1_id}, headers=t1_headers)
+        assert cls_resp.status_code == 200
+        cls_id = cls_resp.json()["id"]
+        assert cls_resp.json()["head_teacher_id"] == t1_id
+
+        # Update class head teacher to teacher 2
+        update_resp = await test_client.put(f"/api/v1/students/classes/{cls_id}", json={"head_teacher_id": t2_id, "name": "Grade 10-A Updated"}, headers=t1_headers)
+        assert update_resp.status_code == 200
+        assert update_resp.json()["head_teacher_id"] == t2_id
+        assert update_resp.json()["name"] == "Grade 10-A Updated"
+
     async def test_student_enrollments_and_approvals(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
         from app.core.config import TEACHER_INVITE_CODE
         # 1. Setup teacher & class

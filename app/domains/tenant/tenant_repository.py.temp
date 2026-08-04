@@ -22,15 +22,17 @@ def parse_id(val) -> int | UUID:
 
 
 class TenantRepository:
-    def __init__(self, pool: asyncpg.Pool) -> None:
+    def __init__(self, pool: asyncpg.Pool, tenant_id: str) -> None:
         self.pool = pool
+        self.tenant_id = tenant_id
 
     # =========================================================================
     # Levels
     # =========================================================================
     async def create_level(self, name: str) -> int:
         return await self.pool.fetchval(
-            "INSERT INTO levels (name) VALUES ($1) RETURNING level_id",
+            "INSERT INTO levels (tenant_id, name)
+            VALUES (, $1) RETURNING level_id",
             name,
         )
 
@@ -55,7 +57,8 @@ class TenantRepository:
     async def create_teacher(self, user_id, name: str) -> int:
         u_id = parse_id(user_id)
         await self.pool.execute(
-            "INSERT INTO teachers (id, name) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name",
+            "INSERT INTO teachers (tenant_id, id, name)
+            VALUES (, $1, $2) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name",
             u_id,
             name,
         )
@@ -90,7 +93,8 @@ class TenantRepository:
     async def create_parent(self, user_id, name: str, phone: str | None = None) -> int:
         u_id = parse_id(user_id)
         await self.pool.execute(
-            "INSERT INTO parenets (id, name, phone) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, phone = EXCLUDED.phone",
+            "INSERT INTO parenets (tenant_id, id, name, phone)
+            VALUES (, $1, $2, $3) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, phone = EXCLUDED.phone",
             u_id,
             name,
             phone,
@@ -139,8 +143,8 @@ class TenantRepository:
         u_id = parse_id(user_id)
         await self.pool.execute(
             """
-            INSERT INTO students (id, name, class_id, gender, birth_data)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO students (tenant_id, id, name, class_id, gender, birth_data)
+            VALUES (, $1, $2, $3, $4, $5)
             ON CONFLICT (id) DO UPDATE SET 
                 name = EXCLUDED.name, 
                 class_id = EXCLUDED.class_id, 
@@ -207,7 +211,8 @@ class TenantRepository:
 
     async def add_student_parent_link(self, student_id, parent_id) -> None:
         await self.pool.execute(
-            "INSERT INTO student_parent_map (student_id, parent_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+            "INSERT INTO student_parent_map (tenant_id, student_id, parent_id)
+            VALUES (, $1, $2) ON CONFLICT DO NOTHING",
             parse_id(student_id),
             parse_id(parent_id),
         )
@@ -269,8 +274,8 @@ class TenantRepository:
     async def create_class(self, name: str, level_id: int, head_teacher_id) -> int:
         return await self.pool.fetchval(
             """
-            INSERT INTO class (name, level_id, head_teacher_id)
-            VALUES ($1, $2, $3)
+            INSERT INTO class (tenant_id, name, level_id, head_teacher_id)
+            VALUES (, $1, $2, $3)
             RETURNING id
             """,
             name,
@@ -290,14 +295,46 @@ class TenantRepository:
         )
         return dict(row) if row else None
 
+    async def update_class(
+        self,
+        class_id: int,
+        name: str | None = None,
+        level_id: int | None = None,
+        head_teacher_id: int | None = None,
+    ) -> dict | None:
+        updates = []
+        params = [parse_id(class_id)]
+        idx = 2
+
+        if name is not None:
+            updates.append(f"name = ${idx}")
+            params.append(name.strip())
+            idx += 1
+        if level_id is not None:
+            updates.append(f"level_id = ${idx}")
+            params.append(parse_id(level_id))
+            idx += 1
+        if head_teacher_id is not None:
+            updates.append(f"head_teacher_id = ${idx}")
+            params.append(parse_id(head_teacher_id))
+            idx += 1
+
+        if updates:
+            query = f"UPDATE class SET {', '.join(updates)} WHERE id = $1"
+            await self.pool.execute(query, *params)
+
+        return await self.get_class_by_id(class_id)
+
     async def get_class_by_id(self, class_id: int) -> dict | None:
         row = await self.pool.fetchrow(
             """
             SELECT c.id, c.name, c.level_id, c.head_teacher_id, c.created_at,
-                   t.name AS teacher_name, u.email AS teacher_email, l.name AS level_name
+                   COALESCE(t.name, 'Unassigned') AS teacher_name,
+                   COALESCE(u.email, '') AS teacher_email,
+                   l.name AS level_name
             FROM class c
-            JOIN teachers t ON c.head_teacher_id = t.id
-            JOIN users u ON t.id = u.id
+            LEFT JOIN teachers t ON c.head_teacher_id = t.id
+            LEFT JOIN users u ON t.id = u.id
             JOIN levels l ON c.level_id = l.level_id
             WHERE c.id = $1
             """,
@@ -322,15 +359,53 @@ class TenantRepository:
         rows = await self.pool.fetch(
             """
             SELECT c.id, c.name, c.level_id, c.head_teacher_id, c.created_at,
-                   t.name AS teacher_name, u.email AS teacher_email, l.name AS level_name
+                   COALESCE(t.name, 'Unassigned') AS teacher_name,
+                   COALESCE(u.email, '') AS teacher_email,
+                   l.name AS level_name
             FROM class c
-            JOIN teachers t ON c.head_teacher_id = t.id
-            JOIN users u ON t.id = u.id
+            LEFT JOIN teachers t ON c.head_teacher_id = t.id
+            LEFT JOIN users u ON t.id = u.id
             JOIN levels l ON c.level_id = l.level_id
             ORDER BY c.name ASC
             """
         )
         return [dict(row) for row in rows]
+
+    async def delete_class(self, class_id: int) -> bool:
+        result = await self.pool.execute("DELETE FROM class WHERE id = $1", class_id)
+        return result == "DELETE 1"
+
+    async def get_students_for_class(self, class_id: int) -> list[dict]:
+        rows = await self.pool.fetch(
+            """
+            SELECT s.id, s.name, s.gender, s.birth_data, s.class_id,
+                   u.email, c.name AS class_name, l.name AS level_name
+            FROM students s
+            JOIN users u ON s.id = u.id
+            JOIN class c ON s.class_id = c.id
+            JOIN levels l ON c.level_id = l.level_id
+            WHERE s.class_id = $1
+            ORDER BY s.name ASC
+            """,
+            class_id,
+        )
+        return [dict(row) for row in rows]
+
+    async def assign_student_to_class(self, student_id: int, class_id: int) -> bool:
+        result = await self.pool.execute(
+            "UPDATE students SET class_id = $1 WHERE id = $2",
+            class_id, student_id,
+        )
+        return result == "UPDATE 1"
+
+    async def remove_student_from_class(self, student_id: int) -> bool:
+        """Unassign student from their current class (sets class_id to NULL if schema allows, otherwise move to default)."""
+        # We keep class_id NOT NULL so we reassign; use class_id=0 sentinel isn't ideal,
+        # so we simply do nothing here and rely on assign_student_to_class to move them.
+        # This method is intentionally a no-op placeholder; actual removal is done via assign.
+        return True
+
+
 
     # =========================================================================
     # Events & Mappings
@@ -350,8 +425,8 @@ class TenantRepository:
             async with conn.transaction():
                 event_id = await conn.fetchval(
                     """
-                    INSERT INTO event (title, description, address, school_subsidy, date, created_by)
-                    VALUES ($1, $2, $3, $4, $5, $6)
+                    INSERT INTO event (tenant_id, title, description, address, school_subsidy, date, created_by)
+            VALUES (, $1, $2, $3, $4, $5, $6)
                     RETURNING id
                     """,
                     title,
@@ -366,8 +441,8 @@ class TenantRepository:
                 for mapping in class_mappings:
                     ecm_id = await conn.fetchval(
                         """
-                        INSERT INTO event_class_map (event_id, class_id, ticket_price)
-                        VALUES ($1, $2, $3)
+                        INSERT INTO event_class_map (tenant_id, event_id, class_id, ticket_price)
+            VALUES (, $1, $2, $3)
                         RETURNING id
                         """,
                         event_id,
@@ -382,7 +457,7 @@ class TenantRepository:
             """
             SELECT id, title, description, address, event_map_id, school_subsidy, date, created_by, created_at,
                    status, predicted_attendance, manager_reviewer_id, finance_reviewer_id, total_cost,
-                   submitted_at, manager_approved_at, finance_priced_at, published_at, rejection_reason
+                   submitted_at, manager_approved_at, finance_priced_at, published_at
             FROM event WHERE id = $1
             """,
             parse_id(event_id),
@@ -414,10 +489,9 @@ class TenantRepository:
         query = """
             SELECT id, title, description, address, event_map_id, school_subsidy, date, created_by, created_at,
                    status, predicted_attendance, manager_reviewer_id, finance_reviewer_id, total_cost,
-                   submitted_at, manager_approved_at, finance_priced_at, published_at, rejection_reason
+                   submitted_at, manager_approved_at, finance_priced_at, published_at
             FROM event
         """
-
         params = []
         if statuses:
             query += " WHERE status = ANY($1)"
@@ -557,8 +631,8 @@ class TenantRepository:
                     else:
                         ecm_id = await conn.fetchval(
                             """
-                            INSERT INTO event_class_map (event_id, class_id, ticket_price)
-                            VALUES ($1, $2, $3)
+                            INSERT INTO event_class_map (tenant_id, event_id, class_id, ticket_price)
+            VALUES (, $1, $2, $3)
                             RETURNING id
                             """,
                             parse_id(event_id),
@@ -601,8 +675,8 @@ class TenantRepository:
     async def create_enrollment(self, student_id, event_class_map_id: int, state: str, teacher_id = None, parent_id = None) -> int:
         return await self.pool.fetchval(
             """
-            INSERT INTO enrollment (student_id, event_class_map_id, state, teacher_id, parent_id)
-            VALUES ($1, $2, $3, $4, $5)
+            INSERT INTO enrollment (tenant_id, student_id, event_class_map_id, state, teacher_id, parent_id)
+            VALUES (, $1, $2, $3, $4, $5)
             ON CONFLICT (student_id, event_class_map_id) DO UPDATE SET state = EXCLUDED.state
             RETURNING id
             """,
@@ -712,8 +786,8 @@ class TenantRepository:
     async def create_payment(self, enrollment_id: int, amount: float, status: str) -> int:
         return await self.pool.fetchval(
             """
-            INSERT INTO payments (enrollment_id, amount, status)
-            VALUES ($1, $2, $3)
+            INSERT INTO payments (tenant_id, enrollment_id, amount, status)
+            VALUES (, $1, $2, $3)
             RETURNING id
             """,
             parse_id(enrollment_id),
@@ -731,8 +805,8 @@ class TenantRepository:
     async def create_event_feedback(self, event_id: int, user_id, rating: int, comments: str | None) -> int:
         return await self.pool.fetchval(
             """
-            INSERT INTO event_feedback (event_id, user_id, rating, comments)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO event_feedback (tenant_id, event_id, user_id, rating, comments)
+            VALUES (, $1, $2, $3, $4)
             RETURNING id
             """,
             parse_id(event_id),
@@ -756,8 +830,8 @@ class TenantRepository:
     ) -> UUID:
         return await self.pool.fetchval(
             """
-            INSERT INTO notifications (event_id, recipient_user_id, title_override)
-            VALUES ($1, $2, $3)
+            INSERT INTO notifications (tenant_id, event_id, recipient_user_id, title_override)
+            VALUES (, $1, $2, $3)
             RETURNING id
             """,
             parse_id(event_id),
@@ -855,8 +929,8 @@ class TenantRepository:
     ) -> int:
         return await self.pool.fetchval(
             """
-            INSERT INTO resource_types (name, category, is_custom, created_by_user_id, is_active)
-            VALUES ($1, $2, $3, $4, true)
+            INSERT INTO resource_types (tenant_id, name, category, is_custom, created_by_user_id, is_active)
+            VALUES (, $1, $2, $3, $4, true)
             RETURNING id
             """,
             name,
@@ -892,8 +966,8 @@ class TenantRepository:
     ) -> int:
         return await self.pool.fetchval(
             """
-            INSERT INTO resources (event_id, resource_type_id, description, quantity, added_by_user_id, created_at, updated_at)
-            VALUES ($1, $2, $3, $4, $5, now(), now())
+            INSERT INTO resources (tenant_id, event_id, resource_type_id, description, quantity, added_by_user_id, created_at, updated_at)
+            VALUES (, $1, $2, $3, $4, $5, now(), now())
             RETURNING id
             """,
             parse_id(event_id),
@@ -966,8 +1040,8 @@ class TenantRepository:
 
         return await self.pool.fetchval(
             """
-            INSERT INTO resource_cost (event_id, resource_id, unit_price, total_cost, currency, set_by_user_id, updated_at)
-            VALUES ($1, $2, $3, $4, $5, $6, now())
+            INSERT INTO resource_cost (tenant_id, event_id, resource_id, unit_price, total_cost, currency, set_by_user_id, updated_at)
+            VALUES (, $1, $2, $3, $4, $5, $6, now())
             ON CONFLICT (resource_id) DO UPDATE SET
                 unit_price = EXCLUDED.unit_price,
                 total_cost = EXCLUDED.total_cost,

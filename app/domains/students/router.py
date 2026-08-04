@@ -236,11 +236,12 @@ async def list_linked_students(
     try:
         pool = await get_db_pool(current_user.tenant_id)
         user_repo = UserRepository(pool)
-        local_user = await user_repo.get_user_by_email(current_user.email)
-        if local_user:
-            results = await TenantService.get_linked_students_for_parent(current_user.tenant_id, local_user["id"])
-        else:
-            results = []
+        local_user = None
+        if current_user.email:
+            local_user = await user_repo.get_user_by_email(current_user.email)
+        
+        target_id = local_user["id"] if local_user else parse_id(current_user.id)
+        results = await TenantService.get_linked_students_for_parent(current_user.tenant_id, target_id)
         return [StudentResponse(**r) for r in results]
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

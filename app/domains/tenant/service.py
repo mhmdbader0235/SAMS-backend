@@ -929,28 +929,18 @@ class TenantService:
             if action == "read":
                 if role in ("parent", "student") and status == "published":
                     return True
-                if role == "teacher" and (is_owner or status == "published"):
+                if role == "teacher" and (is_owner or status in ("published", "approved", "proposed", "draft")):
                     return True
-                if role == "event_teacher" and status in ("resource_planning", "proposed", "finance_approval", "final_review", "published"):
-                    return True
-                if role == "manager" and status in ("proposed", "finance_approval", "final_review", "published"):
-                    return True
-                if role == "finance" and status in ("finance_approval", "final_review", "published"):
+                if role in ("manager", "school_admin", "super_admin"):
                     return True
             elif action == "edit_draft":
-                if role == "teacher" and is_owner and status == "draft":
+                if role in ("teacher", "school_admin", "super_admin") and (is_owner or role != "teacher") and status == "draft":
                     return True
-            elif action == "edit_resources":
-                if role == "event_teacher" and status == "resource_planning":
+            elif action == "manager_decision" or action == "approve":
+                if role in ("manager", "school_admin", "super_admin") and status == "proposed":
                     return True
-            elif action == "manager_decision":
-                if role in ("manager", "school_admin") and status == "proposed":
-                    return True
-            elif action == "finance_pricing" or action == "finance_submit":
-                if role in ("finance", "school_admin") and status == "finance_approval":
-                    return True
-            elif action == "final_decision":
-                if role in ("manager", "school_admin") and status == "final_review":
+            elif action == "publish" or action == "teacher_publish":
+                if (role == "teacher" and is_owner and status == "approved") or role in ("school_admin", "super_admin"):
                     return True
 
         return False
@@ -974,14 +964,24 @@ class TenantService:
         
         TRANSITIONS = {
             # (current_status, action) -> (next_status, required_role)
-            ("draft", "submit_to_event_teacher"): ("resource_planning", "teacher"),
-            ("resource_planning", "submit_for_approval"): ("proposed", "event_teacher"),
-            ("resource_planning", "event_teacher_reject"): ("draft", "event_teacher"),
-            ("proposed", "manager_approve"): ("finance_approval", "manager"),
+            # Step 1: Teacher submits draft for Manager approval (draft -> proposed)
+            ("draft", "submit_for_approval"): ("proposed", "teacher"),
+            ("draft", "propose"): ("proposed", "teacher"),
+            ("draft", "submit_to_event_teacher"): ("proposed", "teacher"),
+
+            # Step 2: Manager approves event proposal (proposed -> approved)
+            ("proposed", "manager_approve"): ("approved", "manager"),
+            ("proposed", "approve"): ("approved", "manager"),
             ("proposed", "manager_reject"): ("draft", "manager"),
-            ("finance_approval", "finance_submit"): ("final_review", "finance"),
-            ("final_review", "manager_publish"): ("published", "manager"),
-            ("final_review", "manager_return_to_finance"): ("finance_approval", "manager"),
+            ("proposed", "reject"): ("draft", "manager"),
+
+            # Step 3: Teacher publishes approved event to students & parents (approved -> published)
+            ("approved", "teacher_publish"): ("published", "teacher"),
+            ("approved", "publish"): ("published", "teacher"),
+            ("approved", "manager_publish"): ("published", "manager"),
+
+            # Fallbacks
+            ("proposed", "manager_publish"): ("published", "manager"),
         }
         
         key = (current_status, action)
@@ -990,59 +990,38 @@ class TenantService:
             
         next_status, required_role = TRANSITIONS[key]
         
-        # Verify role (allow school_admin override)
+        # Verify role (allow school_admin & super_admin override)
         actor_roles = getattr(actor, "roles", None) or [getattr(actor, "role", "student")]
-        if "school_admin" not in actor_roles and required_role not in actor_roles:
+        if not any(r in actor_roles for r in ("school_admin", "super_admin", required_role)):
             raise PermissionError(f"Role '{actor.role}' is not authorized to perform action '{action}'")
             
         # Verify preconditions
-        if action == "submit_to_event_teacher":
-            if int(parse_id(event["created_by"])) != int(parse_id(actor.id)):
+        if action in ("submit_for_approval", "propose", "submit_to_event_teacher"):
+            if int(parse_id(event["created_by"])) != int(parse_id(actor.id)) and not any(r in actor_roles for r in ("school_admin", "super_admin")):
                 raise PermissionError("Only the event creator can submit it for approval")
                 
             mappings = await repo.get_event_class_mappings(event_id) if hasattr(repo, "get_event_class_mappings") else None
-            # fallback if get_event_class_mappings doesn't exist
             if not mappings:
                 mappings = event.get("class_mappings") or []
             if not mappings:
                 raise ValueError("At least one class must be selected before submitting")
                 
-        elif action == "submit_for_approval":
-            resources = await repo.get_resources_for_event(event_id)
-            if not resources:
-                raise ValueError("At least one resource line exists before submitting")
-                
-        elif action in ("manager_reject", "manager_return_to_finance", "event_teacher_reject"):
+        elif action in ("manager_reject", "reject"):
             if not reason or not reason.strip():
                 raise ValueError(f"A non-empty reason is required for action '{action}'")
                 
-        elif action == "finance_submit":
-            resources = await repo.get_resources_for_event(event_id)
-            for r in resources:
-                cost = await repo.get_resource_cost_by_resource_id(r["id"])
-                if not cost:
-                    raise ValueError("Every resource row must have a matching price row")
-                    
         # Apply updates and side effects
         update_fields = {"status": next_status}
         now_time = datetime.now(UTC)
         
-        if action == "submit_to_event_teacher":
-            # Notify all event teachers that a new draft needs resource planning
-            event_teachers = await repo.get_all_event_teachers()
-            for et in event_teachers:
-                await repo.create_notification(
-                    event_id=event_id,
-                    recipient_user_id=et["id"],
-                    title_override=f"New event for resource planning: '{event['title']}'",
-                )
-
-        elif action == "submit_for_approval":
+        if action in ("submit_for_approval", "propose", "submit_to_event_teacher"):
             update_fields["submitted_at"] = now_time
+            update_fields["rejection_reason"] = None
             # Calculate predicted attendance before submitting
             mappings = event.get("class_mappings") or []
             class_ids = [m["class_id"] for m in mappings]
-            update_fields["predicted_attendance"] = await TenantService.get_predicted_attendance(tenant_id, class_ids)
+            if class_ids:
+                update_fields["predicted_attendance"] = await TenantService.get_predicted_attendance(tenant_id, class_ids)
             
             # Notify managers
             managers = await repo.get_all_managers()
@@ -1052,38 +1031,60 @@ class TenantService:
                     recipient_user_id=m["id"],
                     title_override=f"New event proposal: '{event['title']}' submitted for approval",
                 )
-                
-        elif action == "event_teacher_reject":
-            # Notify the event creator (teacher) about the rejection
+
+        elif action in ("manager_approve", "approve"):
+            update_fields["manager_approved_at"] = now_time
+            update_fields["manager_reviewer_id"] = actor.id
+            update_fields["rejection_reason"] = None
+            # Notify teacher (event creator) that event has been approved and is ready to publish
             await repo.create_notification(
                 event_id=event_id,
                 recipient_user_id=event["created_by"],
-                title_override=f"Event '{event['title']}' returned to draft by event teacher. Reason: {reason or 'No reason provided'}",
+                title_override=f"Event proposal '{event['title']}' has been approved by Manager! You can now publish it.",
             )
 
-        elif action == "manager_approve":
-            update_fields["manager_approved_at"] = now_time
-            update_fields["manager_reviewer_id"] = actor.id
-            # Notify finance
-            finance_users = await repo.get_all_finance_users()
-            for f in finance_users:
-                await repo.create_notification(
-                    event_id=event_id,
-                    recipient_user_id=f["id"],
-                    title_override=f"Event '{event['title']}' approved by manager, needs pricing",
-                )
-                
-        elif action == "manager_reject":
+        elif action in ("manager_reject", "reject"):
+            update_fields["rejection_reason"] = reason.strip() if reason else "No reason provided"
             # Notify teacher owner with reason
             await repo.create_notification(
                 event_id=event_id,
                 recipient_user_id=event["created_by"],
                 title_override=f"Event '{event['title']}' rejected by manager. Reason: {reason}",
             )
-            
+
+        elif action in ("teacher_publish", "publish") and current_status == "approved":
+            update_fields["published_at"] = now_time
+            # Notify all students in the mapped classes + their linked parents
+            mappings = event.get("class_mappings") or []
+            class_ids = [parse_id(m["class_id"]) for m in mappings]
+            if class_ids:
+                students = await repo.pool.fetch(
+                    "SELECT s.id AS student_id FROM students s WHERE s.class_id = ANY($1)",
+                    class_ids,
+                )
+                for s in students:
+                    # Notify student
+                    await repo.create_notification(
+                        event_id=event_id,
+                        recipient_user_id=s["student_id"],
+                        title_override=f"New school trip published: '{event['title']}' – enroll now!",
+                    )
+                    # Notify linked parents (via student_parent_map)
+                    parent_rows = await repo.pool.fetch(
+                        "SELECT parent_id FROM student_parent_map WHERE student_id = $1",
+                        s["student_id"],
+                    )
+                    for p in parent_rows:
+                        await repo.create_notification(
+                            event_id=event_id,
+                            recipient_user_id=p["parent_id"],
+                            title_override=f"Your child's school trip '{event['title']}' is now open for enrollment!",
+                        )
+
         elif action == "finance_submit":
             update_fields["finance_priced_at"] = now_time
             update_fields["finance_reviewer_id"] = actor.id
+
             
             # Compute events.total_cost
             resources = await repo.get_resources_for_event(event_id)
@@ -1153,8 +1154,9 @@ class TenantService:
                 submitted_at = COALESCE($6, submitted_at),
                 manager_approved_at = COALESCE($7, manager_approved_at),
                 finance_priced_at = COALESCE($8, finance_priced_at),
-                published_at = COALESCE($9, published_at)
-            WHERE id = $10
+                published_at = COALESCE($9, published_at),
+                rejection_reason = $10
+            WHERE id = $11
             """,
             update_fields.get("status"),
             update_fields.get("predicted_attendance"),
@@ -1165,8 +1167,10 @@ class TenantService:
             update_fields.get("manager_approved_at"),
             update_fields.get("finance_priced_at"),
             update_fields.get("published_at"),
+            update_fields.get("rejection_reason"),
             parse_id(event_id),
         )
+
         
         return await repo.get_event_by_id(event_id)
 
