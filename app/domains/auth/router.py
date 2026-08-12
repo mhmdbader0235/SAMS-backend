@@ -64,15 +64,38 @@ async def create_invitation(
     if current_user.role not in allowed_roles and "school_admin" not in current_user.roles and "super_admin" not in current_user.roles:
         raise HTTPException(status_code=403, detail="Only school_admin or super_admin can create invitations")
 
+    # Strict Tenant Scoping: non-super_admin can only create invitations for their own tenant
+    is_super = current_user.role == "super_admin" or "super_admin" in (current_user.roles or [])
+    target_tenant = payload.tenant_id
+    if not is_super and current_user.tenant_id:
+        if payload.tenant_id and payload.tenant_id.strip().lower() != current_user.tenant_id.strip().lower():
+            raise HTTPException(
+                status_code=403,
+                detail=f"Admins of tenant '{current_user.tenant_id}' cannot create invitations for tenant '{payload.tenant_id}'"
+            )
+        target_tenant = current_user.tenant_id
+
+    # Safely resolve created_by — only pass a UUID; plain integer local-DB IDs are set to None
+    from uuid import UUID as _UUID
+    created_by_uuid = None
+    try:
+        if current_user.id and not str(current_user.id).isdigit():
+            created_by_uuid = _UUID(str(current_user.id))
+    except (ValueError, AttributeError):
+        created_by_uuid = None
+
     try:
         inv = await AuthService.create_invitation(
-            tenant_id=payload.tenant_id,
+            tenant_id=target_tenant,
             role=payload.role,
             target_email=payload.target_email,
             max_uses=payload.max_uses,
             valid_days=payload.valid_days,
-            created_by=current_user.id,
+            created_by=created_by_uuid,
         )
+        frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        target_em = inv.get("target_email") or ""
+        reg_link = f"{frontend_url}/auth?invite_code={inv['code']}&auto_google=true&email={target_em}"
         return {
             "code": inv["code"],
             "tenant_id": inv["tenant_id"],
@@ -80,6 +103,7 @@ async def create_invitation(
             "target_email": inv["target_email"],
             "max_uses": inv["max_uses"],
             "expires_at": inv["expires_at"].isoformat() if inv["expires_at"] else None,
+            "registration_link": reg_link,
         }
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -119,6 +143,9 @@ async def register(payload: UserRegisterRequest) -> TokenResponse:
             role=role,
             tenant_id=tenant_id if role != "super_admin" else None,
             invite_code=payload.invite_code,
+            name=payload.name,
+            first_name=payload.first_name,
+            last_name=payload.last_name,
         )
         return TokenResponse(access_token=token)
     except ValueError as exc:
@@ -126,6 +153,8 @@ async def register(payload: UserRegisterRequest) -> TokenResponse:
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except Exception as exc:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
@@ -212,9 +241,10 @@ async def get_profile(current_user: CurrentUser = Depends(get_current_user)) -> 
             if current_user.tenant_id:
                 pool = await get_db_pool(current_user.tenant_id)
                 user_repo = UserRepository(pool)
-                profile = await user_repo.get_user_profile(current_user.id)
-                if not profile and current_user.email:
+                if current_user.email:
                     profile = await user_repo.get_user_by_email(current_user.email)
+                if not profile and str(current_user.id).isdigit():
+                    profile = await user_repo.get_user_profile(int(current_user.id))
 
                 if profile:
                     db_user_id = profile["id"]
@@ -252,6 +282,7 @@ async def get_profile(current_user: CurrentUser = Depends(get_current_user)) -> 
     except HTTPException:
         raise
     except Exception as exc:
+        print(f"[get_profile ERROR] {type(exc).__name__}: {exc}")
         raise HTTPException(status_code=500, detail=str(exc))
 
 

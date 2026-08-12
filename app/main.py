@@ -17,6 +17,7 @@ from app.domains.events.router import router as events_router
 from app.domains.notes.router import router as notes_router
 from app.domains.notifications.router import router as notifications_router
 from app.domains.students.router import router as students_router
+from app.domains.invitations.router import router as invitation_router
 
 
 async def event_reminders_scheduler():
@@ -42,6 +43,8 @@ async def lifespan(application: FastAPI):  # noqa: ARG001
         # Initialize Control-Plane DB and seed default tenants
         await get_control_plane_pool()
         print("[startup] Control-Plane database connected and initialized.")
+        from app.core.keycloak_admin import ensure_keycloak_frontend_redirect_uris
+        ensure_keycloak_frontend_redirect_uris()
     except Exception as exc:
         print(f"[startup] Warning: could not initialize Control-Plane DB: {exc}")
     
@@ -92,6 +95,7 @@ app.include_router(students_router)
 app.include_router(analytics_router)
 app.include_router(notes_router)
 app.include_router(notifications_router)
+app.include_router(invitation_router)
 
 
 @app.get("/health", tags=["health"])
@@ -104,3 +108,5 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host="0.0.0.0", port=8001)
+
+# Hot reload trigger

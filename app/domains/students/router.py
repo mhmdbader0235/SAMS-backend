@@ -107,6 +107,8 @@ async def create_manager(
     payload: StaffUserCreateRequest,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> StaffUserResponse:
+    if not (current_user.has_role("school_admin") or current_user.has_role("super_admin")):
+        raise HTTPException(status_code=403, detail="Only school_admin or super_admin can create managers")
     try:
         user_id = await TenantService.create_staff_user(
             tenant_id=current_user.tenant_id,
@@ -129,6 +131,8 @@ async def create_finance(
     payload: StaffUserCreateRequest,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> StaffUserResponse:
+    if not (current_user.has_role("school_admin") or current_user.has_role("super_admin")):
+        raise HTTPException(status_code=403, detail="Only school_admin or super_admin can create finance users")
     try:
         user_id = await TenantService.create_staff_user(
             tenant_id=current_user.tenant_id,
@@ -280,6 +284,34 @@ async def list_classes(
     try:
         results = await TenantService.get_all_classes(current_user.tenant_id)
         return [ClassResponse(**r) for r in results]
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+class ClassUpdateRequest(BaseModel):
+    name: str | None = None
+    level_id: int | None = None
+    head_teacher_id: int | None = None
+
+@router.put("/classes/{class_id}", response_model=ClassResponse, summary="Update class details")
+async def update_class(
+    class_id: int,
+    payload: ClassUpdateRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ClassResponse:
+    if not current_user.has_any_role("school_admin", "super_admin", "teacher"):
+        raise HTTPException(status_code=403, detail="Only staff can update classes")
+    try:
+        updated = await TenantService.update_class(
+            tenant_id=current_user.tenant_id,
+            class_id=class_id,
+            name=payload.name,
+            level_id=payload.level_id,
+            head_teacher_id=payload.head_teacher_id,
+        )
+        return ClassResponse(**updated)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 

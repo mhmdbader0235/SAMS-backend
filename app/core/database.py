@@ -25,6 +25,7 @@ async def _initialize_control_plane_tables(pool: asyncpg.Pool) -> None:
     async with pool.acquire() as conn:
         await conn.execute("CREATE EXTENSION IF NOT EXISTS citext;")
         await conn.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
+        await conn.execute("CREATE SCHEMA IF NOT EXISTS keycloak;")
 
         # Tenants table
         await conn.execute(
@@ -128,6 +129,21 @@ async def _initialize_control_plane_tables(pool: asyncpg.Pool) -> None:
             """
         )
 
+        # Audit log for pre-provisioned user invitations
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_invitations (
+                id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+                email         CITEXT      NOT NULL,
+                tenant_id     VARCHAR(50) NOT NULL REFERENCES tenants(tenant_id) ON DELETE CASCADE,
+                role          TEXT        NOT NULL,
+                inviter_id    TEXT        DEFAULT NULL,
+                status        TEXT        NOT NULL DEFAULT 'pending',
+                created_at    TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
+
         # Seed default tenants if table is empty
         row_count = await conn.fetchval("SELECT COUNT(*) FROM tenants")
         if row_count == 0:
@@ -145,6 +161,22 @@ async def _initialize_control_plane_tables(pool: asyncpg.Pool) -> None:
                     tcfg["password"],
                     tcfg["database"],
                 )
+
+        # Seed default super admin (sa@desk.com / password123)
+        sa_exists = await conn.fetchval("SELECT id FROM super_admins WHERE email = $1", "sa@desk.com")
+        if not sa_exists:
+            from app.domains.auth.service import AuthService
+            from app.core.keycloak_admin import sync_user_to_keycloak
+            pass_hash = AuthService.hash_password("password123")
+            await conn.execute(
+                "INSERT INTO super_admins (email, password_hash) VALUES ($1, $2)",
+                "sa@desk.com",
+                pass_hash,
+            )
+            try:
+                sync_user_to_keycloak("sa@desk.com", "password123", "super_admin", "tenant_a")
+            except Exception:
+                pass
 
 
 # =============================================================================
@@ -188,7 +220,7 @@ async def _initialize_tenant_tables(pool: asyncpg.Pool, tenant_id: str = "tenant
             CREATE TABLE IF NOT EXISTS users (
                 id            BIGSERIAL   PRIMARY KEY,
                 email         CITEXT      UNIQUE NOT NULL,
-                role          TEXT        NOT NULL CHECK (role IN ('school_admin', 'teacher', 'parent', 'student', 'manager', 'super_admin')),
+                role          TEXT        NOT NULL CHECK (role IN ('school_admin', 'teacher', 'parent', 'student', 'manager', 'finance', 'event_teacher', 'pending', 'super_admin')),
                 password_hash TEXT        NOT NULL,
                 phone         VARCHAR(50) DEFAULT NULL,
                 address       TEXT        DEFAULT NULL,
@@ -197,7 +229,7 @@ async def _initialize_tenant_tables(pool: asyncpg.Pool, tenant_id: str = "tenant
             """
         )
         await conn.execute("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;")
-        await conn.execute("ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('school_admin', 'teacher', 'parent', 'student', 'manager', 'super_admin'));")
+        await conn.execute("ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('school_admin', 'teacher', 'parent', 'student', 'manager', 'finance', 'event_teacher', 'pending', 'super_admin'));")
 
 
         # 2. levels
@@ -240,9 +272,10 @@ async def _initialize_tenant_tables(pool: asyncpg.Pool, tenant_id: str = "tenant
                 id              BIGSERIAL   PRIMARY KEY,
                 name            TEXT        NOT NULL,
                 level_id        BIGINT      NOT NULL REFERENCES levels(level_id) ON DELETE RESTRICT,
-                head_teacher_id BIGINT      NOT NULL REFERENCES teachers(id) ON DELETE RESTRICT,
+                head_teacher_id BIGINT      REFERENCES teachers(id) ON DELETE RESTRICT,
                 created_at      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
+            ALTER TABLE class ALTER COLUMN head_teacher_id DROP NOT NULL;
             """
         )
 

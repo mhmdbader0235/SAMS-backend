@@ -1,0 +1,147 @@
+========================================================================
+  SchoolDesk - Seeded Multi-Tenant Demo Data
+  All User Passwords : 123321
+  Super Admin Pass   : password123
+========================================================================
+
+------------------------------------------------------------------------
+🌐 GLOBAL CONTROL PLANE (SUPER ADMIN)
+------------------------------------------------------------------------
+  Super Admin: sa@desk.com               pw: password123
+
+
+------------------------------------------------------------------------
+🏫 TENANT A — SCHOOL A (schoola.com)
+------------------------------------------------------------------------
+
+== ADMIN & MANAGEMENT ==
+  School Admin : admin@schoola.com       pw: 123321
+  School Admin : admin@school.com        pw: 123321  (Legacy alias)
+  Manager      : manager@schoola.com     pw: 123321
+
+== LEVELS ==
+  [id=1]  Grade 7
+  [id=2]  Grade 8
+  [id=3]  Grade 9
+
+== TEACHERS ==
+  [id=5]  Ali Hassan        ali.hassan@schoola.com        pw: 123321
+  [id=6]  Sara Karim        sara.karim@schoola.com        pw: 123321
+  [id=7]  Omar Nasser       omar.nasser@schoola.com       pw: 123321
+  [id=8]  Lina Farouk       lina.farouk@schoola.com       pw: 123321
+  [id=9]  Hassan Mahmoud    hassan.mahmoud@schoola.com    pw: 123321
+  [id=10] Dina Rabie        dina.rabie@schoola.com        pw: 123321
+
+== CLASSES ==
+  [id=1]  7A  (Grade 7)  head: Ali Hassan
+  [id=2]  7B  (Grade 7)  head: Sara Karim
+  [id=3]  8A  (Grade 8)  head: Omar Nasser
+  [id=4]  8B  (Grade 8)  head: Lina Farouk
+  [id=5]  9A  (Grade 9)  head: Hassan Mahmoud
+  [id=6]  9B  (Grade 9)  head: Dina Rabie
+
+== STUDENTS (3 per class) ==
+  [id=11] Ahmed    ahmed@schoola.com    pw: 123321   class: 7A (Grade 7)
+  [id=12] Mariam   mariam@schoola.com   pw: 123321   class: 7A (Grade 7)
+  [id=13] Khalid   khalid@schoola.com   pw: 123321   class: 7A (Grade 7)
+  [id=14] Fatima   fatima@schoola.com   pw: 123321   class: 7B (Grade 7)
+  [id=15] Youssef  youssef@schoola.com  pw: 123321   class: 7B (Grade 7)
+  [id=16] Nour     nour@schoola.com     pw: 123321   class: 7B (Grade 7)
+  [id=17] Ziad     ziad@schoola.com     pw: 123321   class: 8A (Grade 8)
+  [id=18] Layla    layla@schoola.com    pw: 123321   class: 8A (Grade 8)
+  [id=19] Tariq    tariq@schoola.com    pw: 123321   class: 8A (Grade 8)
+  [id=20] Hana     hana@schoola.com     pw: 123321   class: 8B (Grade 8)
+  [id=21] Sami     sami@schoola.com     pw: 123321   class: 8B (Grade 8)
+  [id=22] Rana     rana@schoola.com     pw: 123321   class: 8B (Grade 8)
+  [id=23] Karim    karim@schoola.com    pw: 123321   class: 9A (Grade 9)
+  [id=24] Dalia    dalia@schoola.com    pw: 123321   class: 9A (Grade 9)
+  [id=25] Rami     rami@schoola.com     pw: 123321   class: 9A (Grade 9)
+  [id=26] Heba     heba@schoola.com     pw: 123321   class: 9B (Grade 9)
+  [id=27] Adel     adel@schoola.com     pw: 123321   class: 9B (Grade 9)
+  [id=28] Salma    salma@schoola.com    pw: 123321   class: 9B (Grade 9)
+
+== PARENTS (each linked to 3 students) ==
+  [id=29] Parent Al-Rashid   parent.alrashid@schoola.com  pw: 123321  children: Ahmed, Mariam, Khalid
+  [id=30] Parent Ben-Nour    parent.bennour@schoola.com   pw: 123321  children: Fatima, Youssef, Nour
+  [id=31] Parent Chami       parent.chami@schoola.com     pw: 123321  children: Ziad, Layla, Tariq
+  [id=32] Parent Darwish     parent.darwish@schoola.com   pw: 123321  children: Hana, Sami, Rana
+  [id=33] Parent El-Sayed    parent.elsayed@schoola.com   pw: 123321  children: Karim, Dalia, Rami
+  [id=34] Parent Farouk      parent.farouk@schoola.com    pw: 123321  children: Heba, Adel, Salma
+
+== EVENTS (MULTI-STATUS WORKFLOW) ==
+  [id=1] Annual Tech & Science Excursion (tenant_a)     status: PUBLISHED  classes: [7A, 7B, 8A, 8B, 9A, 9B]
+  [id=2] Science & Innovation Fair (tenant_a)           status: PUBLISHED  classes: [7A, 7B]
+  [id=3] History & Heritage Museum Tour (tenant_a)      status: PUBLISHED  classes: [8A, 8B]
+  [id=4] High School & Career Orientation Expo          status: PUBLISHED  classes: [9A, 9B]
+  [id=5] Spring Robotics & AI Workshop (tenant_a)       status: PROPOSED   classes: [7A, 8A]
+  [id=6] Outdoor Leadership & Camping Trip (tenant_a)   status: APPROVED   classes: [8A, 9A]
+  [id=7] Arts & Drama Spring Showcase (Draft)           status: DRAFT      classes: [7B, 8B]
+
+
+------------------------------------------------------------------------
+🏫 TENANT B — SCHOOL B (schoolb.com)
+------------------------------------------------------------------------
+
+== ADMIN & MANAGEMENT ==
+  School Admin : admin@schoolb.com       pw: 123321
+  Manager      : manager@schoolb.com     pw: 123321
+
+== LEVELS ==
+  [id=1]  Grade 7
+  [id=2]  Grade 8
+  [id=3]  Grade 9
+
+== TEACHERS ==
+  [id=3]  Ali Hassan        ali.hassan@schoolb.com        pw: 123321
+  [id=4]  Sara Karim        sara.karim@schoolb.com        pw: 123321
+  [id=5]  Omar Nasser       omar.nasser@schoolb.com       pw: 123321
+  [id=6]  Lina Farouk       lina.farouk@schoolb.com       pw: 123321
+  [id=7]  Hassan Mahmoud    hassan.mahmoud@schoolb.com    pw: 123321
+  [id=8]  Dina Rabie        dina.rabie@schoolb.com        pw: 123321
+
+== CLASSES ==
+  [id=1]  7A  (Grade 7)  head: Ali Hassan
+  [id=2]  7B  (Grade 7)  head: Sara Karim
+  [id=3]  8A  (Grade 8)  head: Omar Nasser
+  [id=4]  8B  (Grade 8)  head: Lina Farouk
+  [id=5]  9A  (Grade 9)  head: Hassan Mahmoud
+  [id=6]  9B  (Grade 9)  head: Dina Rabie
+
+== STUDENTS (3 per class) ==
+  [id=9]  Ahmed    ahmed@schoolb.com    pw: 123321   class: 7A (Grade 7)
+  [id=10] Mariam   mariam@schoolb.com   pw: 123321   class: 7A (Grade 7)
+  [id=11] Khalid   khalid@schoolb.com   pw: 123321   class: 7A (Grade 7)
+  [id=12] Fatima   fatima@schoolb.com   pw: 123321   class: 7B (Grade 7)
+  [id=13] Youssef  youssef@schoolb.com  pw: 123321   class: 7B (Grade 7)
+  [id=14] Nour     nour@schoolb.com     pw: 123321   class: 7B (Grade 7)
+  [id=15] Ziad     ziad@schoolb.com     pw: 123321   class: 8A (Grade 8)
+  [id=16] Layla    layla@schoolb.com    pw: 123321   class: 8A (Grade 8)
+  [id=17] Tariq    tariq@schoolb.com    pw: 123321   class: 8A (Grade 8)
+  [id=18] Hana     hana@schoolb.com     pw: 123321   class: 8B (Grade 8)
+  [id=19] Sami     sami@schoolb.com     pw: 123321   class: 8B (Grade 8)
+  [id=20] Rana     rana@schoolb.com     pw: 123321   class: 8B (Grade 8)
+  [id=21] Karim    karim@schoolb.com    pw: 123321   class: 9A (Grade 9)
+  [id=22] Dalia    dalia@schoolb.com    pw: 123321   class: 9A (Grade 9)
+  [id=23] Rami     rami@schoolb.com     pw: 123321   class: 9A (Grade 9)
+  [id=24] Heba     heba@schoolb.com     pw: 123321   class: 9B (Grade 9)
+  [id=25] Adel     adel@schoolb.com     pw: 123321   class: 9B (Grade 9)
+  [id=26] Salma    salma@schoolb.com    pw: 123321   class: 9B (Grade 9)
+
+== PARENTS (each linked to 3 students) ==
+  [id=27] Parent Al-Rashid   parent.alrashid@schoolb.com  pw: 123321  children: Ahmed, Mariam, Khalid
+  [id=28] Parent Ben-Nour    parent.bennour@schoolb.com   pw: 123321  children: Fatima, Youssef, Nour
+  [id=29] Parent Chami       parent.chami@schoolb.com     pw: 123321  children: Ziad, Layla, Tariq
+  [id=30] Parent Darwish     parent.darwish@schoolb.com   pw: 123321  children: Hana, Sami, Rana
+  [id=31] Parent El-Sayed    parent.elsayed@schoolb.com   pw: 123321  children: Karim, Dalia, Rami
+  [id=32] Parent Farouk      parent.farouk@schoolb.com    pw: 123321  children: Heba, Adel, Salma
+
+== EVENTS (MULTI-STATUS WORKFLOW) ==
+  [id=1] Annual Tech & Science Excursion (tenant_b)     status: PUBLISHED  classes: [7A, 7B, 8A, 8B, 9A, 9B]
+  [id=2] Science & Innovation Fair (tenant_b)           status: PUBLISHED  classes: [7A, 7B]
+  [id=3] History & Heritage Museum Tour (tenant_b)      status: PUBLISHED  classes: [8A, 8B]
+  [id=4] High School & Career Orientation Expo          status: PUBLISHED  classes: [9A, 9B]
+  [id=5] Spring Robotics & AI Workshop (tenant_b)       status: PROPOSED   classes: [7A, 8A]
+  [id=6] Outdoor Leadership & Camping Trip (tenant_b)   status: APPROVED   classes: [8A, 9A]
+  [id=7] Arts & Drama Spring Showcase (Draft)           status: DRAFT      classes: [7B, 8B]
+
+========================================================================

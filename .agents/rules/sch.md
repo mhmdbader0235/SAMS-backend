@@ -16,8 +16,8 @@ Repository Layer (SQL/asyncpg): The ONLY layer permitted to interact with the da
 ---
 🗄️ 2. DATABASE & MULTI-TENANCY
 The system uses PostgreSQL 16 deployed via Docker.
-Strict Database-per-Tenant: Tenant data (school data) is strictly isolated at the database level. NEVER write queries, joins, or logic that attempt to cross-query between tenant databases.
-Query Optimization: When writing or modifying repository methods, ensure SQL queries, indexing strategies, and execution plans remain highly optimized. These queries will be replicated and run across multiple individual tenant databases, so performance is critical.
+Strict one database (tenant per schema): Tenant data (school data) is strictly isolated at the schema level. NEVER write queries, joins, or logic that attempt to cross-query between tenant schemas.
+Query Optimization: When writing or modifying repository methods, ensure SQL queries, indexing strategies, and execution plans remain highly optimized. These queries will be replicated and run across multiple individual tenant schemas, so performance is critical.
 Core Schema Constraints:
 as i the user ask to do
 ---

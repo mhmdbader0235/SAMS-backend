@@ -41,8 +41,9 @@ docker compose up -d
 
 This starts:
 - **Postgres** on port `5433` (or `5432` local)
-- **Backend API** on port `8001`
-- **APISIX API Gateway** on port `9080` (this is what the frontend talks to)
+- **Keycloak** on port `8000`
+- **Apache APISIX** internally as the API Gateway
+- **Nginx DMZ** on port `9080` (this is what the frontend talks to, proxying to APISIX)
 
 ### 5. Run without Docker (development)
 ```bash
@@ -99,7 +100,7 @@ black app/ tests/
 
 | High-Level Role | Granular Role Permissions | Mapped Functions |
 |----------------|---------------------------|-------------------|
-| **`school_admin`** | `school:write`, `school:read`, `user:create`, `user:delete`, `user:link`, `user:view`, `event:review`, `event:publish`, `teacher:read`, `enrollment:cancel`, `enrollment:view_roster`, `billing:audit`, `announcement:manage` | Manage school structure, register staff, manage announcements. |
+| **`school_admin`** | `school:write`, `school:read`, `user:invite`, `user:delete`, `user:link`, `user:view`, `event:review`, `event:publish`, `teacher:read`, `enrollment:cancel`, `enrollment:view_roster`, `billing:audit`, `announcement:manage` | Manage school structure, register staff, manage announcements. |
 | **`manager`** | `school:read`, `event:review`, `event:publish`, `event:view_draft`, `resource:view`, `resource:price`, `billing:invoice`, `billing:pay`, `billing:refund`, `billing:audit`, `enrollment:view_roster` | Approve event drafts, set final pricing, audit student logs. |
 | **`teacher`** | `school:read`, `user:view`, `event:create`, `event:edit`, `event:delete`, `event:propose`, `event:clone`, `teacher:write`, `teacher:read`, `resource:create`, `resource:view`, `enrollment:teacher_approve`, `enrollment:view_roster` | Create events, plan resources, approve enrollments. |
 | **`parent`** | `school:read`, `enrollment:parent_approve`, `enrollment:cancel`, `billing:pay` | Approve child requests, pay trip invoices. |

@@ -242,9 +242,9 @@ class ControlPlaneRepository:
             """
             SELECT id, code, tenant_id, role, target_email, max_uses, uses_count, expires_at, is_active, created_at
             FROM invitations
-            WHERE code = $1
+            WHERE UPPER(code) = UPPER($1) OR UPPER(target_email) = UPPER($1) OR id::text = $1
             """,
-            code,
+            code.strip(),
         )
         return dict(row) if row else None
 
@@ -255,9 +255,9 @@ class ControlPlaneRepository:
             UPDATE invitations
             SET uses_count = uses_count + 1,
                 is_active = CASE WHEN uses_count + 1 >= max_uses THEN FALSE ELSE is_active END
-            WHERE code = $1
+            WHERE UPPER(code) = UPPER($1) OR UPPER(target_email) = UPPER($1) OR id::text = $1
             """,
-            code,
+            code.strip(),
         )
 
     # =========================================================================

@@ -15,6 +15,6 @@ async def test_migrate():
         res1 = await pool.execute("UPDATE event SET status = 'proposed' WHERE status = 'resource_planning'")
         print(f"[{tenant_id}] resource_planning -> proposed: {res1}")
         
-        # Move finance_approval and final_review to ready_to_publish
-        res2 = await pool.execute("UPDATE event SET status = 'ready_to_publish' WHERE status IN ('finance_approval', 'final_review')")
-        print(f"[{tenant_id}] finance_approval/final_review -> ready_to_publish: {res2}")
+        # Move finance_approval and final_review to approved
+        res2 = await pool.execute("UPDATE event SET status = 'approved' WHERE status IN ('finance_approval', 'final_review')")
+        print(f"[{tenant_id}] finance_approval/final_review -> approved: {res2}")

@@ -39,7 +39,7 @@ def make_credential(password: str = PASSWORD_PLAIN):
 ROLES = [
     "system:write", "system:read", "tenant:manage", "tenant:view",
     "school:write", "school:read", "academic:direct", "academic:view",
-    "user:create", "user:delete", "user:link", "user:view",
+    "user:invite", "user:delete", "user:link", "user:view",
     "event:create", "event:edit", "event:delete", "event:propose",
     "event:review", "event:publish", "event:clone", "event:view_draft",
     "resource:create", "resource:price", "resource:view",
@@ -53,7 +53,7 @@ ROLES = [
 
 GROUP_MAPPINGS = {
     "super_admins":     ROLES[:],
-    "school_admins":    ["school_admin", "school:write", "school:read", "user:create", "user:delete",
+    "school_admins":    ["school_admin", "school:write", "school:read", "user:invite", "user:delete",
                          "user:link", "user:view", "event:review", "event:publish", "teacher:read",
                          "enrollment:cancel", "enrollment:view_roster", "billing:audit", "announcement:manage"],
     "managers":         ["manager", "school:read", "event:review", "event:publish", "event:view_draft",
@@ -71,31 +71,60 @@ GROUP_MAPPINGS = {
 }
 
 # Generate users for both tenant_a and tenant_b in the single SAMS realm
+# Generate users for both tenant_a and tenant_b in the single SAMS realm
 USERS = [
-    {"email": "superadmin@schooldesk.com", "username": "superadmin", "firstName": "Super", "lastName": "Admin", "group": "super_admins", "role": "super_admin", "tenant_id": "tenant_a"},
+    {"email": "sa@desk.com", "username": "sa@desk.com", "firstName": "Super", "lastName": "Admin", "group": "super_admins", "role": "super_admin", "tenant_id": "tenant_a"},
+]
+
+parents_keys = [
+    ("parent.alrashid", "Parent", "Al-Rashid"),
+    ("parent.bennour",  "Parent", "Ben-Nour"),
+    ("parent.chami",    "Parent", "Chami"),
+    ("parent.darwish",  "Parent", "Darwish"),
+    ("parent.elsayed",  "Parent", "El-Sayed"),
+    ("parent.farouk",   "Parent", "Farouk"),
+]
+
+students_list = [
+    "Ahmed", "Mariam", "Khalid", "Fatima", "Youssef", "Nour",
+    "Ziad", "Layla", "Tariq", "Hana", "Sami", "Rana",
+    "Karim", "Dalia", "Rami", "Heba", "Adel", "Salma"
+]
+
+teachers_list = [
+    ("ali.hassan", "Ali", "Hassan"),
+    ("sara.karim", "Sara", "Karim"),
+    ("omar.nasser", "Omar", "Nasser"),
+    ("lina.farouk", "Lina", "Farouk"),
+    ("hassan.mahmoud", "Hassan", "Mahmoud"),
+    ("dina.rabie", "Dina", "Rabie")
 ]
 
 for tid in ["tenant_a", "tenant_b"]:
-    USERS.extend([
-        {"email": f"admin.{tid}@school.com", "username": f"admin_{tid}", "firstName": "Admin", "lastName": tid.upper(), "group": "school_admins", "role": "school_admin", "tenant_id": tid},
-        {"email": f"manager.{tid}@school.com", "username": f"manager_{tid}", "firstName": "Manager", "lastName": tid.upper(), "group": "managers", "role": "manager", "tenant_id": tid},
-    ])
+    domain = "schoola.com" if tid == "tenant_a" else "schoolb.com"
+
+    # Admin & Manager
+    USERS.append({"email": f"admin@{domain}", "username": f"admin@{domain}", "firstName": "School", "lastName": f"Admin ({tid})", "group": "school_admins", "role": "school_admin", "tenant_id": tid})
+    USERS.append({"email": f"manager@{domain}", "username": f"manager@{domain}", "firstName": "Manager", "lastName": f"({tid})", "group": "managers", "role": "manager", "tenant_id": tid})
+
     if tid == "tenant_a":
-        USERS.append({"email": "admin@school.com", "username": "admin", "firstName": "Admin", "lastName": "A", "group": "school_admins", "role": "school_admin", "tenant_id": "tenant_a"})
-        USERS.append({"email": "manager@school.com", "username": "manager", "firstName": "Manager", "lastName": "A", "group": "managers", "role": "manager", "tenant_id": "tenant_a"})
-    else:
-        USERS.append({"email": "admin_b@school.com", "username": "admin_b", "firstName": "Admin", "lastName": "B", "group": "school_admins", "role": "school_admin", "tenant_id": "tenant_b"})
+        USERS.append({"email": "admin@school.com", "username": "admin@school.com", "firstName": "Admin", "lastName": "School", "group": "school_admins", "role": "school_admin", "tenant_id": "tenant_a"})
+        USERS.append({"email": "manager@school.com", "username": "manager@school.com", "firstName": "Manager", "lastName": "School", "group": "managers", "role": "manager", "tenant_id": "tenant_a"})
 
-    for i, tname in enumerate(["Ali Hassan", "Sara Karim", "Omar Nasser", "Lina Farouk", "Hassan Mahmoud", "Dina Rabie"]):
-        u_email = f"{tname.lower().replace(' ', '.')}.{tid}@school.com"
-        u_name = f"teacher_{tid}_{i+1}"
-        USERS.append({"email": u_email, "username": u_name, "firstName": tname.split()[0], "lastName": tname.split()[1], "group": "teachers", "role": "teacher", "tenant_id": tid})
+    # Teachers
+    for prefix, fname, lname in teachers_list:
+        u_email = f"{prefix}@{domain}"
+        USERS.append({"email": u_email, "username": u_email, "firstName": fname, "lastName": f"{lname} ({tid})", "group": "teachers", "role": "teacher", "tenant_id": tid})
 
-    for p in ["al1", "bn2", "cm3", "da4", "el5", "fa6"]:
-        USERS.append({"email": f"parent.{p}.{tid}@school.com", "username": f"parent_{p}_{tid}", "firstName": "Parent", "lastName": p.upper(), "group": "parents", "role": "parent", "tenant_id": tid})
+    # Parents
+    for prefix, fname, lname in parents_keys:
+        u_email = f"{prefix}@{domain}"
+        USERS.append({"email": u_email, "username": u_email, "firstName": fname, "lastName": f"{lname} ({tid})", "group": "parents", "role": "parent", "tenant_id": tid})
 
-    for idx, sname in enumerate(["Ahmed", "Mariam", "Khalid", "Fatima", "Youssef", "Nour", "Ziad", "Layla", "Tariq", "Hana", "Sami", "Rana", "Karim", "Dalia", "Rami", "Heba", "Adel", "Salma"]):
-        USERS.append({"email": f"{sname.lower()}.s{idx+1}.{tid}@school.com", "username": f"{sname.lower()}_{tid}", "firstName": sname, "lastName": f"Student{idx+1}", "group": "students", "role": "student", "tenant_id": tid})
+    # Students
+    for sname in students_list:
+        u_email = f"{sname.lower()}@{domain}"
+        USERS.append({"email": u_email, "username": u_email, "firstName": sname, "lastName": f"({tid})", "group": "students", "role": "student", "tenant_id": tid})
 
 
 def build_realm(realm_name="SAMS"):
@@ -104,6 +133,7 @@ def build_realm(realm_name="SAMS"):
         "realm": realm_name,
         "displayName": realm_name,
         "enabled": True,
+        "organizationsEnabled": True,
         "registrationAllowed": True,
         "resetPasswordAllowed": True,
         "loginWithEmailAllowed": True,
@@ -124,8 +154,18 @@ def build_realm(realm_name="SAMS"):
             for gname, groles in GROUP_MAPPINGS.items()
         ],
         "organizations": [
-            {"name": "tenant_a", "domains": []},
-            {"name": "tenant_b", "domains": []}
+            {
+                "name": "Organization A",
+                "alias": "tenant_a",
+                "enabled": True,
+                "domains": [{"name": "schoolA.com", "verified": True}]
+            },
+            {
+                "name": "Organization B",
+                "alias": "tenant_b",
+                "enabled": True,
+                "domains": [{"name": "schoolB.com", "verified": True}]
+            }
         ],
         "users": [
             {
@@ -154,7 +194,7 @@ def build_realm(realm_name="SAMS"):
                 "directAccessGrantsEnabled": True,
                 "standardFlowEnabled": True,
                 "implicitFlowEnabled": False,
-                "redirectUris": ["http://localhost:3000/*", "http://127.0.0.1:3000/*", "*"],
+                "redirectUris": ["http://localhost:5173", "http://localhost:5173/", "http://localhost:5173/*", "http://127.0.0.1:5173", "http://127.0.0.1:5173/", "http://127.0.0.1:5173/*", "http://localhost:5174", "http://localhost:5174/", "http://localhost:5174/*", "http://127.0.0.1:5174", "http://127.0.0.1:5174/", "http://127.0.0.1:5174/*", "http://localhost:3000", "http://localhost:3000/", "http://localhost:3000/*", "http://localhost:9080", "http://localhost:9080/", "http://localhost:9080/*", "http://localhost:8000", "http://localhost:8000/", "http://localhost:8000/*", "http://127.0.0.1:3000", "http://127.0.0.1:3000/", "http://127.0.0.1:3000/*", "http://127.0.0.1:9080", "http://127.0.0.1:9080/", "http://127.0.0.1:9080/*", "http://127.0.0.1:8000", "http://127.0.0.1:8000/", "http://127.0.0.1:8000/*", "http://localhost:*", "http://localhost:*/*", "http://127.0.0.1:*", "http://127.0.0.1:*/*", "*"],
                 "webOrigins": ["*"],
                 "attributes": {
                     "post.logout.redirect.uris": "+"
@@ -182,14 +222,7 @@ sams_path = os.path.join(base_dir, "SAMS-realm.json")
 with open(sams_path, "w", encoding="utf-8") as f:
     json.dump(sams_realm, f, indent=2, ensure_ascii=False)
 
-# Write schooldesk-realm.json for backwards compatibility
-sd_realm = build_realm("schooldesk")
-sd_path = os.path.join(base_dir, "schooldesk-realm.json")
-with open(sd_path, "w", encoding="utf-8") as f:
-    json.dump(sd_realm, f, indent=2, ensure_ascii=False)
-
-print(f"\n[OK] Generated SAMS Realm files:")
+print(f"\n[OK] Generated SAMS Realm file:")
 print(f"  - '{sams_path}'")
-print(f"  - '{sd_path}'")
 print(f"  - {len(USERS)} multi-tenant users across tenant_a & tenant_b")
 print(f"  - Keycloak Organizations: tenant_a, tenant_b")

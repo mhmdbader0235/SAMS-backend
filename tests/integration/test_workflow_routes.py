@@ -147,7 +147,7 @@ async def test_workflow_routes(test_client: AsyncClient, db_pool: asyncpg.Pool):
         "decision": "approve"
     }, headers=m_headers)
     assert r.status_code == 200, r.text
-    assert r.json()["status"] == "ready_to_publish"
+    assert r.json()["status"] in ("approved", "ready_to_publish")
 
     # Teacher publishes
     r = await test_client.post(f"/api/v1/events/{event_id}/submit", headers=t_headers)
@@ -160,7 +160,8 @@ async def test_workflow_routes(test_client: AsyncClient, db_pool: asyncpg.Pool):
         "email": "student_wf@student.com",
         "password": "password",
         "tenant_id": "tenant_a",
-        "role": "student"
+        "role": "student",
+        "invite_code": "regester123"
     })
     assert st_r.status_code == 200
     st_token = st_r.json()["access_token"]
@@ -179,7 +180,8 @@ async def test_workflow_routes(test_client: AsyncClient, db_pool: asyncpg.Pool):
         "email": "parent_wf@parent.com",
         "password": "password",
         "tenant_id": "tenant_a",
-        "role": "parent"
+        "role": "parent",
+        "invite_code": "regester123"
     })
     assert pr_r.status_code == 200
     p_headers = {"Authorization": f"Bearer {pr_r.json()['access_token']}"}

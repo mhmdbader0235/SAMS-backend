@@ -1,0 +1,563 @@
+{
+	"info": {
+		"_postman_id": "schooldesk-api-collection-v1",
+		"name": "SchoolDesk Enterprise API Collection",
+		"description": "Comprehensive Postman Collection for SchoolDesk multi-tenant FastAPI backend with Keycloak RBAC, event planning lifecycle, and enrollment workflows.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:9080",
+			"type": "string"
+		},
+		{
+			"key": "tenantId",
+			"value": "tenant_a",
+			"type": "string"
+		},
+		{
+			"key": "invitePassphrase",
+			"value": "regester123",
+			"type": "string"
+		},
+		{
+			"key": "teacherToken",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "managerToken",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "parentToken",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "studentToken",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "eventId",
+			"value": "1",
+			"type": "string"
+		},
+		{
+			"key": "enrollmentId",
+			"value": "1",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "1. Auth & Identity",
+			"item": [
+				{
+					"name": "List Active Tenants",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/tenants",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "auth", "tenants"]
+						},
+						"description": "Fetch all registered school tenants (e.g., tenant_a, tenant_b, tenant_c)."
+					}
+				},
+				{
+					"name": "Verify Invitation Code",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/invitations/SCHOOL-STAFF-2026",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "auth", "invitations", "SCHOOL-STAFF-2026"]
+						},
+						"description": "Check invitation validity and return locked tenant_id and role."
+					}
+				},
+				{
+					"name": "Register User (Teacher / Staff)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"if (jsonData.access_token) {",
+									"    pm.collectionVariables.set('teacherToken', jsonData.access_token);",
+									"    console.log('Saved teacherToken:', jsonData.access_token);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"teacher_postman@school.com\",\n  \"password\": \"teacher123\",\n  \"role\": \"teacher\",\n  \"tenant_id\": \"{{tenantId}}\",\n  \"invite_code\": \"{{invitePassphrase}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/register",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "auth", "register"]
+						},
+						"description": "Register a new user account protected by the invitation passphrase."
+					}
+				},
+				{
+					"name": "Login User (Get JWT Access Token)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"if (jsonData.access_token) {",
+									"    pm.collectionVariables.set('teacherToken', jsonData.access_token);",
+									"    console.log('Saved teacherToken on Login:', jsonData.access_token);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"teacher_postman@school.com\",\n  \"password\": \"teacher123\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/login",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "auth", "login"]
+						},
+						"description": "Authenticate user and receive a signed Bearer JWT token."
+					}
+				},
+				{
+					"name": "Get Current User Details (/me)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{teacherToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/me",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "auth", "me"]
+						},
+						"description": "Return claims and roles for the currently authenticated JWT bearer token."
+					}
+				},
+				{
+					"name": "Get User Profile & Linked Records",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{teacherToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/auth/profile",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "auth", "profile"]
+						},
+						"description": "Fetch user profile details including linked children for parents or classes for teachers."
+					}
+				}
+			]
+		},
+		{
+			"name": "2. Academic Structure & Classes",
+			"item": [
+				{
+					"name": "List Grade Levels",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{teacherToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/students/levels",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "students", "levels"]
+						}
+					}
+				},
+				{
+					"name": "Create Grade Level",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{teacherToken}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Grade 7\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/students/levels",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "students", "levels"]
+						}
+					}
+				},
+				{
+					"name": "List Classes",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{teacherToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/students/classes",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "students", "classes"]
+						}
+					}
+				},
+				{
+					"name": "Create Class (Optional Head Teacher)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{teacherToken}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Class 7A\",\n  \"level_id\": 1,\n  \"head_teacher_id\": null\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/students/classes",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "students", "classes"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "3. Event Planning Governance",
+			"item": [
+				{
+					"name": "Step 1: Create Event Draft",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"var jsonData = pm.response.json();",
+									"if (jsonData.id) {",
+									"    pm.collectionVariables.set('eventId', jsonData.id);",
+									"    console.log('Created Event ID:', jsonData.id);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{teacherToken}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Science Museum Expedition\",\n  \"description\": \"Interactive physics and chemistry workshop\",\n  \"address\": \"Science Museum Center\",\n  \"date\": \"2026-09-15T09:00:00Z\",\n  \"class_mappings\": []\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/events",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "events"]
+						},
+						"description": "Teacher creates event draft (status: draft)."
+					}
+				},
+				{
+					"name": "Step 2: Map Target Audience & Classes",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{teacherToken}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"class_ids\": [1],\n  \"class_mappings\": [\n    {\n      \"class_id\": 1,\n      \"ticket_price\": 12.50\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/events/{{eventId}}/audience",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "events", "{{eventId}}", "audience"]
+						},
+						"description": "Binds event to target classes and calculates predicted attendance."
+					}
+				},
+				{
+					"name": "Step 3: Add Requested Resources",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{teacherToken}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "[\n  {\n    \"resource_type_id\": 1,\n    \"description\": \"Transport Bus\",\n    \"quantity\": 2,\n    \"unit_price\": 150.00\n  }\n]"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/events/{{eventId}}/resources",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "events", "{{eventId}}", "resources"]
+						},
+						"description": "Add requested resource lines with quantities and estimated unit pricing."
+					}
+				},
+				{
+					"name": "Step 4: Submit Draft for Manager Review",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{teacherToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/events/{{eventId}}/submit",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "events", "{{eventId}}", "submit"]
+						},
+						"description": "Transitions event from status=draft to status=proposed."
+					}
+				},
+				{
+					"name": "Manager: View Pending Proposals Queue",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{managerToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/events/manager-queue",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "events", "manager-queue"]
+						},
+						"description": "Manager views queue of proposed event submissions."
+					}
+				},
+				{
+					"name": "Manager: Approve & Publish Event",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{managerToken}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"decision\": \"approve\",\n  \"reason\": null\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/events/{{eventId}}/manager-decision",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "events", "{{eventId}}", "manager-decision"]
+						},
+						"description": "Manager approves event proposal and publishes it (status=published)."
+					}
+				},
+				{
+					"name": "Teacher: Publish Approved Event",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{teacherToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/events/{{eventId}}/publish",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "events", "{{eventId}}", "publish"]
+						},
+						"description": "Teacher publishes approved event to target students and parents (status=published)."
+					}
+				}
+			]
+		},
+		{
+			"name": "4. Student & Parent Enrollment Flow",
+			"item": [
+				{
+					"name": "List Published Events (Public / Scoped)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{parentToken}}"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/events/published",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "events", "published"]
+						},
+						"description": "Returns published trips mapped to the student or parent's registered classes."
+					}
+				},
+				{
+					"name": "Request Enrollment for Student",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{studentToken}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"student_id\": 1,\n  \"event_class_map_id\": 1\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/students/enrollments",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "students", "enrollments"]
+						}
+					}
+				},
+				{
+					"name": "Parent Direct Child Enrollment / Approval",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{parentToken}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"state\": \"approved_by_parent\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/students/enrollments/{{enrollmentId}}/approve",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "students", "enrollments", "{{enrollmentId}}", "approve"]
+						}
+					}
+				},
+				{
+					"name": "Pay Trip Invoice",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{parentToken}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"payment_method\": \"credit_card\",\n  \"amount\": 12.50\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/v1/events/enrollments/{{enrollmentId}}/pay",
+							"host": ["{{baseUrl}}"],
+							"path": ["api", "v1", "events", "enrollments", "{{enrollmentId}}", "pay"]
+						}
+					}
+				}
+			]
+		}
+	]
+}

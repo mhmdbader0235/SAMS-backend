@@ -9,11 +9,11 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from cryptography.fernet import Fernet
-
 from app.core.config import ENCRYPTION_KEY
-from app.core.database import get_db_pool
+from app.core.database import get_control_plane_pool, get_db_pool
 from app.core.keycloak_admin import sync_user_to_keycloak
 from app.domains.auth.service import AuthService
+from app.domains.tenant.control_plane_repository import ControlPlaneRepository
 from app.domains.tenant.tenant_repository import TenantRepository, parse_id
 from app.domains.tenant.user_repository import UserRepository
 
@@ -23,6 +23,15 @@ _fernet = Fernet(ENCRYPTION_KEY.encode())
 # =============================================================================
 # Helper Utilities
 # =============================================================================
+async def _upsert_user_tenant_mapping(email: str, tenant_id: str, role: str) -> None:
+    try:
+        cp_pool = await get_control_plane_pool()
+        cp_repo = ControlPlaneRepository(cp_pool)
+        await cp_repo.upsert_user_tenant_map(email, tenant_id, role)
+    except Exception as e:
+        print(f"[WARNING] Failed to upsert user_tenant_map for {email}: {e}")
+
+
 def _encrypt(val: str) -> str:
     return _fernet.encrypt(val.encode()).decode()
 
@@ -59,7 +68,35 @@ class TenantService:
         if "super_admin" in roles:
             return True
 
-        return bool(roles.intersection(reqs))
+        from app.core.dependencies import COMPOSITE_ROLE_PERMISSIONS
+        expanded_roles = set(roles)
+        for r in list(roles):
+            if r in COMPOSITE_ROLE_PERMISSIONS:
+                expanded_roles.update(COMPOSITE_ROLE_PERMISSIONS[r])
+
+        PERMISSION_TO_HIGH_LEVEL_ROLE_MAP = {
+            "event:create": {"teacher", "school_admin"},
+            "event:edit": {"teacher", "school_admin"},
+            "event:delete": {"teacher", "school_admin", "manager", "event_teacher"},
+            "event:propose": {"teacher", "school_admin"},
+            "event:review": {"manager", "school_admin"},
+            "event:publish": {"manager", "school_admin", "teacher"},
+            "event:clone": {"teacher", "school_admin"},
+            "resource:create": {"teacher", "school_admin", "manager"},
+            "resource:price": {"finance", "manager", "school_admin"},
+            "school:write": {"school_admin"},
+            "user:invite": {"school_admin"},
+            "user:delete": {"school_admin"},
+            "user:link": {"school_admin", "teacher"},
+            "enrollment:teacher_approve": {"teacher", "school_admin"},
+            "enrollment:parent_approve": {"parent"},
+            "enrollment:request": {"student", "parent"},
+        }
+        for r in list(roles):
+            if r in PERMISSION_TO_HIGH_LEVEL_ROLE_MAP:
+                expanded_roles.update(PERMISSION_TO_HIGH_LEVEL_ROLE_MAP[r])
+
+        return bool(expanded_roles.intersection(reqs))
 
     # =========================================================================
     # Levels
@@ -101,7 +138,8 @@ class TenantService:
 
         password_hash = AuthService.hash_password(password)
         user_id = await user_repo.create_user(email, password_hash, "teacher")
-        sync_user_to_keycloak(email, password, "teacher")
+        sync_user_to_keycloak(email, password, "teacher", tenant_id, first_name=name)
+        await _upsert_user_tenant_mapping(email, tenant_id, "teacher")
 
         return await tenant_repo.create_teacher(
             user_id=user_id,
@@ -130,7 +168,8 @@ class TenantService:
 
         password_hash = AuthService.hash_password(password)
         user_id = await user_repo.create_user(email, password_hash, role)
-        sync_user_to_keycloak(email, password, role)
+        sync_user_to_keycloak(email, password, role, tenant_id)
+        await _upsert_user_tenant_mapping(email, tenant_id, role)
         return user_id
 
     @staticmethod
@@ -172,7 +211,8 @@ class TenantService:
         # Create tenant user with 'student' role
         password_hash = AuthService.hash_password(password)
         user_id = await user_repo.create_user(email, password_hash, "student")
-        sync_user_to_keycloak(email, password, "student")
+        sync_user_to_keycloak(email, password, "student", tenant_id, first_name=name)
+        await _upsert_user_tenant_mapping(email, tenant_id, "student")
 
         # Create student profile linking to user and class
         return await tenant_repo.create_student(
@@ -248,6 +288,18 @@ class TenantService:
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
         return await repo.get_class_by_head_teacher(teacher_id)
+
+    @staticmethod
+    async def update_class(
+        tenant_id: str,
+        class_id: int,
+        name: str | None = None,
+        level_id: int | None = None,
+        head_teacher_id: int | None = None,
+    ) -> dict:
+        pool = await get_db_pool(tenant_id)
+        repo = TenantRepository(pool)
+        return await repo.update_class(class_id, name=name, level_id=level_id, head_teacher_id=head_teacher_id)
 
 
 
@@ -844,10 +896,10 @@ class TenantService:
         if not resource:
             raise ValueError("Resource not found")
             
-        # Re-check status is finance_approval
+        # Allow pricing for planning/draft/proposed/approved events
         event = await repo.get_event_by_id(resource["event_id"])
-        if not event or event.get("status", "draft") != "finance_approval":
-            raise ValueError("Pricing can only be updated for events in finance approval")
+        if not event or event.get("status", "draft") in ("published", "cancelled"):
+            raise ValueError("Pricing cannot be updated for published or cancelled events")
             
         quantity = resource["quantity"]
         total_cost = float(unit_price) * int(quantity)
@@ -927,20 +979,33 @@ class TenantService:
 
         for role in user_roles:
             if action == "read":
+                if "event:read" in user_roles:
+                    return True
                 if role in ("parent", "student") and status == "published":
                     return True
-                if role == "teacher" and (is_owner or status in ("published", "approved", "proposed", "draft")):
+                if role == "teacher":
+                    if status in ("published", "approved", "proposed"):
+                        return True
+                    if status == "draft" and is_owner:
+                        return True
+                    mapped_teacher_ids = [parse_id(m.get("head_teacher_id")) for m in (event.get("class_mappings") or []) if m.get("head_teacher_id") is not None]
+                    if status == "draft" and parse_id(user.id) in mapped_teacher_ids:
+                        return True
+                    return False
+                if role == "manager" and status != "draft":
                     return True
-                if role in ("manager", "school_admin", "super_admin"):
+                if role in ("school_admin", "super_admin"):
                     return True
             elif action == "edit_draft":
+                if "event:edit" in user_roles and status == "draft":
+                    return True
                 if role in ("teacher", "school_admin", "super_admin") and (is_owner or role != "teacher") and status == "draft":
                     return True
-            elif action == "manager_decision" or action == "approve":
-                if role in ("manager", "school_admin", "super_admin") and status == "proposed":
+            elif action in ("manager_decision", "approve", "review"):
+                if ("event:review" in user_roles or role in ("manager", "school_admin", "super_admin")) and status == "proposed":
                     return True
-            elif action == "publish" or action == "teacher_publish":
-                if (role == "teacher" and is_owner and status == "approved") or role in ("school_admin", "super_admin"):
+            elif action in ("publish", "teacher_publish"):
+                if ("event:publish" in user_roles or (role == "teacher" and is_owner) or role in ("school_admin", "super_admin")) and status in ("approved", "ready_to_publish"):
                     return True
 
         return False
@@ -967,21 +1032,22 @@ class TenantService:
             # Step 1: Teacher submits draft for Manager approval (draft -> proposed)
             ("draft", "submit_for_approval"): ("proposed", "teacher"),
             ("draft", "propose"): ("proposed", "teacher"),
+            ("draft", "submit_to_manager"): ("proposed", "teacher"),
             ("draft", "submit_to_event_teacher"): ("proposed", "teacher"),
 
-            # Step 2: Manager approves event proposal (proposed -> approved)
+            # Step 2: Manager approves event proposal (proposed -> approved OR direct publish)
             ("proposed", "manager_approve"): ("approved", "manager"),
             ("proposed", "approve"): ("approved", "manager"),
+            ("proposed", "manager_publish"): ("published", "manager"),
+            ("proposed", "publish"): ("published", "manager"),
             ("proposed", "manager_reject"): ("draft", "manager"),
             ("proposed", "reject"): ("draft", "manager"),
 
             # Step 3: Teacher publishes approved event to students & parents (approved -> published)
             ("approved", "teacher_publish"): ("published", "teacher"),
             ("approved", "publish"): ("published", "teacher"),
+            ("approved", "submit"): ("published", "teacher"),
             ("approved", "manager_publish"): ("published", "manager"),
-
-            # Fallbacks
-            ("proposed", "manager_publish"): ("published", "manager"),
         }
         
         key = (current_status, action)
@@ -992,7 +1058,10 @@ class TenantService:
         
         # Verify role (allow school_admin & super_admin override)
         actor_roles = getattr(actor, "roles", None) or [getattr(actor, "role", "student")]
-        if not any(r in actor_roles for r in ("school_admin", "super_admin", required_role)):
+        allowed = {"school_admin", "super_admin", required_role}
+        if required_role == "teacher":
+            allowed.add("event_teacher")
+        if not any(r in actor_roles for r in allowed):
             raise PermissionError(f"Role '{actor.role}' is not authorized to perform action '{action}'")
             
         # Verify preconditions
@@ -1014,7 +1083,7 @@ class TenantService:
         update_fields = {"status": next_status}
         now_time = datetime.now(UTC)
         
-        if action in ("submit_for_approval", "propose", "submit_to_event_teacher"):
+        if action in ("submit_for_approval", "propose", "submit_to_manager", "submit_to_event_teacher"):
             update_fields["submitted_at"] = now_time
             update_fields["rejection_reason"] = None
             # Calculate predicted attendance before submitting

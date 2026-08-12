@@ -14,6 +14,9 @@ class UserRegisterRequest(BaseModel):
     password: str
     tenant_id: str | None = "tenant_a"
     role: str | None = "student"
+    name: str | None = None
+    first_name: str | None = None
+    last_name: str | None = None
     invite_code: str | None = None
 
 
@@ -93,17 +96,17 @@ class StudentParentLinkRequest(BaseModel):
 class ClassCreateRequest(BaseModel):
     name: str
     level_id: int
-    head_teacher_id: int
+    head_teacher_id: int | None = None
 
 
 class ClassResponse(BaseModel):
     id: int
     name: str
     level_id: int
-    head_teacher_id: int
-    teacher_name: str
-    teacher_email: str
-    level_name: str
+    head_teacher_id: int | None = None
+    teacher_name: str | None = None
+    teacher_email: str | None = None
+    level_name: str | None = None
     created_at: datetime
 
 

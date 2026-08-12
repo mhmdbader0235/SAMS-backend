@@ -296,14 +296,43 @@ class TenantRepository:
             SELECT c.id, c.name, c.level_id, c.head_teacher_id, c.created_at,
                    t.name AS teacher_name, u.email AS teacher_email, l.name AS level_name
             FROM class c
-            JOIN teachers t ON c.head_teacher_id = t.id
-            JOIN users u ON t.id = u.id
-            JOIN levels l ON c.level_id = l.level_id
+            LEFT JOIN teachers t ON c.head_teacher_id = t.id
+            LEFT JOIN users u ON t.id = u.id
+            LEFT JOIN levels l ON c.level_id = l.level_id
             WHERE c.id = $1
             """,
             parse_id(class_id),
         )
         return dict(row) if row else None
+
+    async def update_class(
+        self,
+        class_id: int,
+        name: str | None = None,
+        level_id: int | None = None,
+        head_teacher_id: int | None = None,
+    ) -> dict:
+        cid = parse_id(class_id)
+        current = await self.get_class_by_id(cid)
+        if not current:
+            raise ValueError(f"Class {cid} not found")
+
+        new_name = name.strip() if name else current["name"]
+        new_level_id = parse_id(level_id) if level_id is not None else current["level_id"]
+        new_head = parse_id(head_teacher_id) if head_teacher_id is not None else current["head_teacher_id"]
+
+        await self.pool.execute(
+            """
+            UPDATE class
+            SET name = $1, level_id = $2, head_teacher_id = $3
+            WHERE id = $4
+            """,
+            new_name,
+            new_level_id,
+            new_head,
+            cid,
+        )
+        return await self.get_class_by_id(cid)
 
     async def get_class_by_head_teacher(self, teacher_id) -> dict | None:
         row = await self.pool.fetchrow(
@@ -324,9 +353,9 @@ class TenantRepository:
             SELECT c.id, c.name, c.level_id, c.head_teacher_id, c.created_at,
                    t.name AS teacher_name, u.email AS teacher_email, l.name AS level_name
             FROM class c
-            JOIN teachers t ON c.head_teacher_id = t.id
-            JOIN users u ON t.id = u.id
-            JOIN levels l ON c.level_id = l.level_id
+            LEFT JOIN teachers t ON c.head_teacher_id = t.id
+            LEFT JOIN users u ON t.id = u.id
+            LEFT JOIN levels l ON c.level_id = l.level_id
             ORDER BY c.name ASC
             """
         )

@@ -55,7 +55,7 @@ To maintain clean code, both backend and frontend use a **Capability Mapping Dec
 
 | High-Level Role Capability | Granular Role Permissions | Mapped Functions in Code |
 |-----------------------------|---------------------------|--------------------------|
-| **`school_admin`** | `school:write`, `school:read`, `user:create`, `user:delete`, `user:link` | Manage school structure, register staff, link child. |
+| **`school_admin`** | `school:write`, `school:read`, `user:invite`, `user:delete`, `user:link` | Manage school structure, register staff, link child. |
 | **`teacher`** | `teacher:write`, `teacher:read`, `event:create`, `event:edit`, `event:delete`, `event:propose`, `event:clone`, `resource:create`, `enrollment:teacher_approve` | Log attendance, create events, plan resources, approve enrollments. |
 | **`manager`** | `event:review`, `event:publish`, `event:view_draft`, `resource:price`, `billing:invoice`, `billing:pay`, `billing:refund`, `billing:audit` | Approve event drafts, set final pricing, audit student logs. |
 | **`parent`** | `enrollment:parent_approve`, `billing:pay` | Approve child requests, pay trip invoices. |

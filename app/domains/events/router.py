@@ -58,8 +58,8 @@ async def create_event(
     payload: EventCreateRequest,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> EventResponse:
-    if not current_user.has_any_role("school_admin", "teacher"):
-        raise HTTPException(status_code=403, detail="Only staff can create events")
+    if not (current_user.has_any_role("school_admin", "teacher") or current_user.has_role("event:create")):
+        raise HTTPException(status_code=403, detail="Only staff or users with event:create permission can create events")
 
     # Only school_admin and manager can set school subsidy; everyone else always gets 0
     subsidy = payload.school_subsidy if current_user.has_any_role("school_admin", "manager") else 0.0
@@ -775,6 +775,8 @@ async def submit_event(
         # draft ──(teacher)──► proposed ──(manager)──► approved ──(teacher)──► published
         if ev_status == "draft" and current_user.has_any_role("teacher", "school_admin"):
             action = "submit_for_approval"
+        elif ev_status in ("approved", "ready_to_publish") and current_user.has_any_role("teacher", "school_admin", "manager"):
+            action = "teacher_publish"
         else:
             raise PermissionError(
                 f"Cannot submit event in '{ev_status}' status. "
@@ -843,8 +845,8 @@ async def teacher_publish_event(
     and sends notifications to all students and parents in the targeted classes."""
     if not current_user.tenant_id:
         raise HTTPException(status_code=400, detail="Tenant context required")
-    if not current_user.has_any_role("teacher", "school_admin", "super_admin"):
-        raise HTTPException(status_code=403, detail="Only teachers or admins can publish approved events")
+    if not current_user.has_any_role("teacher", "event_teacher", "manager", "school_admin", "super_admin"):
+        raise HTTPException(status_code=403, detail="Only teachers, managers, or admins can publish approved events")
 
     try:
         class Actor:
@@ -854,10 +856,12 @@ async def teacher_publish_event(
                 self.roles = roles or [role]
         actor = Actor(current_user.id, current_user.role, current_user.roles)
 
+        action = "manager_publish" if current_user.has_role("manager") else "teacher_publish"
+
         updated_event = await TenantService.transition_event(
             tenant_id=current_user.tenant_id,
             event_id=event_id,
-            action="teacher_publish",
+            action=action,
             actor=actor,
         )
         return EventResponse(**updated_event)

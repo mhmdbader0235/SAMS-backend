@@ -1,0 +1,154 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SchoolDesk Enterprise Keycloak Roles & Permissions Catalog",
+  "version": "2.0.0",
+  "description": "Comprehensive role-based access control (RBAC) and fine-grained permission catalog ready for Keycloak realm import and FastAPI authorization enforcement.",
+  "composite_roles": [
+    {
+      "name": "super_admin",
+      "description": "Global Platform Super Administrator with unrestricted access across all school tenants.",
+      "permissions": ["*"]
+    },
+    {
+      "name": "school_admin",
+      "description": "School Tenant Administrator managing school structure, staff invitations, and publishing policies.",
+      "permissions": [
+        "school:write", "school:read", "user:invite", "user:delete", "user:link", "user:view",
+        "event:create", "event:edit", "event:delete", "event:propose", "event:review", "event:publish",
+        "event:clone", "event:view_draft", "resource:create", "resource:price", "resource:view",
+        "teacher:write", "teacher:read", "enrollment:cancel", "enrollment:view_roster",
+        "billing:audit", "announcement:manage", "health:view", "audit:view"
+      ]
+    },
+    {
+      "name": "manager",
+      "description": "School Operations & Event Review Manager responsible for approving event proposals and budgets.",
+      "permissions": [
+        "school:read", "event:review", "event:publish", "event:view_draft", "resource:view",
+        "resource:price", "billing:invoice", "billing:pay", "billing:refund", "billing:audit",
+        "enrollment:view_roster", "announcement:manage"
+      ]
+    },
+    {
+      "name": "teacher",
+      "description": "Class Teacher / Trip Organizer capable of creating events, requesting resources, and managing student rosters.",
+      "permissions": [
+        "school:read", "user:view", "event:create", "event:edit", "event:delete", "event:propose",
+        "event:clone", "event:view_draft", "teacher:write", "teacher:read", "resource:create",
+        "resource:view", "enrollment:teacher_approve", "enrollment:view_roster"
+      ]
+    },
+    {
+      "name": "event_teacher",
+      "description": "Assigned Event Head Teacher with temporary elevated editing rights for a specific trip.",
+      "permissions": [
+        "school:read", "event:edit", "event:propose", "resource:create", "resource:view",
+        "enrollment:teacher_approve", "enrollment:view_roster"
+      ]
+    },
+    {
+      "name": "finance",
+      "description": "School Financial Officer in charge of unit pricing, subsidy calculations, invoicing, and refunds.",
+      "permissions": [
+        "school:read", "resource:price", "resource:view", "billing:invoice", "billing:pay",
+        "billing:refund", "billing:audit", "subsidy:manage"
+      ]
+    },
+    {
+      "name": "parent",
+      "description": "Parent / Guardian capable of viewing published trips, approving child enrollments, and paying trip fees.",
+      "permissions": [
+        "school:read", "enrollment:parent_approve", "enrollment:cancel", "billing:pay",
+        "student:view_linked", "health:manage_child"
+      ]
+    },
+    {
+      "name": "student",
+      "description": "Enrolled Student able to browse published trips, submit enrollment requests, and leave feedback.",
+      "permissions": [
+        "school:read", "enrollment:request", "feedback:create"
+      ]
+    },
+    {
+      "name": "school_nurse",
+      "description": "School Medical / Health Staff managing student medical records and trip safety plans.",
+      "permissions": [
+        "school:read", "health:view", "health:manage", "safety:manage", "enrollment:view_roster"
+      ]
+    },
+    {
+      "name": "auditor",
+      "description": "Read-Only Compliance & Financial Auditor for legal and regulatory verification.",
+      "permissions": [
+        "school:read", "billing:audit", "audit:view", "event:view_draft", "resource:view"
+      ]
+    }
+  ],
+  "granular_permissions_catalog": {
+    "1_event_management": [
+      { "name": "event:create", "description": "Create new event drafts and specify initial details." },
+      { "name": "event:edit", "description": "Update details of existing draft events." },
+      { "name": "event:delete", "description": "Delete or cancel draft/proposed events." },
+      { "name": "event:propose", "description": "Submit a completed event draft to managers for review." },
+      { "name": "event:review", "description": "Approve or reject proposed events as a manager." },
+      { "name": "event:publish", "description": "Publish approved events to targeted students and parents." },
+      { "name": "event:clone", "description": "Duplicate existing events as template drafts." },
+      { "name": "event:view_draft", "description": "View unpublished draft events in review queues." },
+      { "name": "event:archive", "description": "Archive completed historical events." }
+    ],
+    "2_resource_and_logistics": [
+      { "name": "resource:create", "description": "Define and allocate required resource lines for events." },
+      { "name": "resource:price", "description": "Set unit prices, supplier estimates, and pricing lines." },
+      { "name": "resource:view", "description": "View allocated resources and cost summaries." },
+      { "name": "resource:manage_types", "description": "Create and manage custom resource categories (transport, staffing, meals)." }
+    ],
+    "3_user_and_identity": [
+      { "name": "user:invite", "description": "Create pre-provisioned user invitations and send registration links." },
+      { "name": "user:delete", "description": "Deactivate or remove user accounts from the tenant." },
+      { "name": "user:link", "description": "Link parent accounts with eligible student profiles." },
+      { "name": "user:view", "description": "View directory of staff, students, and parents." },
+      { "name": "teacher:write", "description": "Create and update teacher profiles." },
+      { "name": "teacher:read", "description": "View teacher directories and class assignments." }
+    ],
+    "4_academic_and_school_structure": [
+      { "name": "school:write", "description": "Modify school organization settings, levels, and classes." },
+      { "name": "school:read", "description": "Read-only access to basic school organizational metadata." },
+      { "name": "class:create", "description": "Create new class sections (e.g. Class 7A)." },
+      { "name": "class:assign_teacher", "description": "Assign head teachers to specific class sections." },
+      { "name": "level:manage", "description": "Manage academic grade levels (e.g. Grade 1, Grade 7)." }
+    ],
+    "5_enrollment_and_roster": [
+      { "name": "enrollment:request", "description": "Submit a request to join a published school trip." },
+      { "name": "enrollment:parent_approve", "description": "Parent consent and approval for child participation." },
+      { "name": "enrollment:teacher_approve", "description": "Final teacher/staff approval of student roster lines." },
+      { "name": "enrollment:cancel", "description": "Cancel an active enrollment before event execution." },
+      { "name": "enrollment:view_roster", "description": "Access full attendee roster and emergency contact details." }
+    ],
+    "6_finance_billing_and_subsidies": [
+      { "name": "billing:invoice", "description": "Generate fee invoices for participating families." },
+      { "name": "billing:pay", "description": "Process electronic payments for trip fees." },
+      { "name": "billing:refund", "description": "Issue refunds for cancelled trips or overpayments." },
+      { "name": "billing:audit", "description": "Audit trip budgets, subsidies, and overall revenue logs." },
+      { "name": "subsidy:manage", "description": "Configure school subsidies reducing per-student ticket prices." }
+    ],
+    "7_communication_and_announcements": [
+      { "name": "announcement:manage", "description": "Create and publish school-wide or trip notifications." },
+      { "name": "notification:send", "description": "Send direct email/push alerts to targeted classes." },
+      { "name": "feedback:create", "description": "Submit event ratings and feedback." },
+      { "name": "feedback:view_all", "description": "View feedback metrics and survey results." }
+    ],
+    "8_student_welfare_and_health": [
+      { "name": "health:view", "description": "View confidential student health and allergy records." },
+      { "name": "health:manage", "description": "Update medical conditions and emergency action plans." },
+      { "name": "health:manage_child", "description": "Parent upload/update of child's medical info." },
+      { "name": "safety:manage", "description": "Define trip safety protocols, ratios, and risk assessments." }
+    ],
+    "9_audit_and_system_administration": [
+      { "name": "system:write", "description": "Configure platform system settings and gateway policies." },
+      { "name": "system:read", "description": "View system diagnostics and performance metrics." },
+      { "name": "tenant:manage", "description": "Provision new school tenant schemas and databases." },
+      { "name": "tenant:view", "description": "List registered school tenant organizations." },
+      { "name": "audit:view", "description": "Access immutable system audit logs." }
+    ]
+  }
+}

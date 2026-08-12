@@ -1,0 +1,8 @@
+deployment:
+  role: data_plane
+  role_data_plane:
+    config_provider: yaml
+
+apisix:
+  node_listen: 9180
+  enable_admin: false

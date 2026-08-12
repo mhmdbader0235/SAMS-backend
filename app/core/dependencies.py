@@ -6,7 +6,7 @@ Extracts current user context from JWT tokens and performs role-based authorizat
 
 
 import jwt
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.domains.auth.service import AuthService
@@ -51,7 +51,7 @@ class CurrentUser:
 
 COMPOSITE_ROLE_PERMISSIONS: dict[str, set[str]] = {
     "super_admin": {
-        "school:write", "school:read", "user:create", "user:delete", "user:link", "user:view",
+        "school:write", "school:read", "user:invite", "user:delete", "user:link", "user:view",
         "event:create", "event:edit", "event:delete", "event:propose", "event:review", "event:publish",
         "event:clone", "event:view_draft", "resource:create", "resource:price", "resource:view",
         "teacher:write", "teacher:read", "enrollment:request", "enrollment:parent_approve",
@@ -59,7 +59,7 @@ COMPOSITE_ROLE_PERMISSIONS: dict[str, set[str]] = {
         "billing:invoice", "billing:pay", "billing:refund", "billing:audit", "announcement:manage"
     },
     "school_admin": {
-        "school:write", "school:read", "user:create", "user:delete", "user:link", "user:view",
+        "school:write", "school:read", "user:invite", "user:delete", "user:link", "user:view",
         "event:review", "event:publish", "teacher:read", "enrollment:cancel", "enrollment:view_roster",
         "billing:audit", "announcement:manage"
     },
@@ -83,6 +83,7 @@ COMPOSITE_ROLE_PERMISSIONS: dict[str, set[str]] = {
 
 
 async def get_current_user(
+    request: Request = None,
     credentials: HTTPAuthorizationCredentials = Depends(_security),
 ) -> CurrentUser:
     """Decode the Bearer JWT and return a CurrentUser object.
@@ -117,12 +118,12 @@ async def get_current_user(
     
     VALID_ROLES = {
         # High-level Roles
-        "super_admin", "school_admin", "manager", "teacher", "parent", "student",
+        "super_admin", "school_admin", "manager", "teacher", "finance", "event_teacher", "parent", "student", "pending",
         
         # Granular Roles / Permissions
         "system:write", "system:read", "tenant:manage", "tenant:view",
         "school:write", "school:read", "academic:direct", "academic:view",
-        "user:create", "user:delete", "user:link", "user:view",
+        "user:invite", "user:delete", "user:link", "user:view",
         "event:create", "event:edit", "event:delete", "event:propose",
         "event:review", "event:publish", "event:clone", "event:view_draft",
         "resource:create", "resource:price", "resource:view",
@@ -134,7 +135,7 @@ async def get_current_user(
     }
     
     PRIMARY_ROLE_ORDER = [
-        "super_admin", "school_admin", "manager", "teacher", "parent", "student"
+        "super_admin", "school_admin", "manager", "teacher", "finance", "event_teacher", "parent", "student"
     ]
     
     keycloak_roles = list(payload.get("realm_access", {}).get("roles", []))
@@ -184,7 +185,7 @@ async def get_current_user(
     
     if not role:
         extracted = [r for r in keycloak_roles if r in VALID_ROLES]
-        role = extracted[0] if extracted else "student"
+        role = extracted[0] if extracted else "pending"
 
     extracted_roles = set(r for r in keycloak_roles if r in VALID_ROLES)
     extracted_roles.add(role)
@@ -243,8 +244,8 @@ async def get_current_user(
 
     # ── Last resort: look up email → tenant from control-plane user_tenant_map ──
     # This is the primary resolution path for Keycloak SSO users whose token
-    # does not carry a tenant_id claim (single shared realm like 'schooldesk').
-    if (not tenant_id or tenant_id.lower() in ("sams", "schooldesk", "master")) and email:
+    # does not carry a tenant_id claim, OR does not carry a role claim.
+    if (not tenant_id or tenant_id.lower() in ("sams", "schooldesk", "master") or role in ("student", "pending")) and email:
         try:
             from app.core.database import get_control_plane_pool
             from app.domains.tenant.control_plane_repository import ControlPlaneRepository
@@ -254,7 +255,7 @@ async def get_current_user(
             if mapping:
                 tenant_id = mapping["tenant_id"]
                 # If role wasn't established from token, use the stored role
-                if not role or role == "student":
+                if not role or role in ("student", "pending"):
                     stored_role = mapping.get("role")
                     if stored_role and stored_role in VALID_ROLES:
                         role = stored_role
@@ -263,10 +264,36 @@ async def get_current_user(
                         if role in COMPOSITE_ROLE_PERMISSIONS:
                             extracted_roles.update(COMPOSITE_ROLE_PERMISSIONS[role])
                         final_roles_list = list(extracted_roles)
+
+            if (not mapping or not role or role in ("student", "pending")) and email:
+                async with cp_pool.acquire() as cp_conn:
+                    inv_row = await cp_conn.fetchrow(
+                        "SELECT tenant_id, role FROM user_invitations WHERE UPPER(email) = UPPER($1) ORDER BY created_at DESC LIMIT 1",
+                        email
+                    )
+                    if not inv_row:
+                        inv_row = await cp_conn.fetchrow(
+                            "SELECT tenant_id, role FROM invitations WHERE UPPER(target_email) = UPPER($1) ORDER BY created_at DESC LIMIT 1",
+                            email
+                        )
+                    if inv_row and inv_row.get("tenant_id") and inv_row.get("role"):
+                        tenant_id = inv_row["tenant_id"]
+                        role = inv_row["role"]
+                        extracted_roles.add(role)
+                        if role in COMPOSITE_ROLE_PERMISSIONS:
+                            extracted_roles.update(COMPOSITE_ROLE_PERMISSIONS[role])
+                        final_roles_list = list(extracted_roles)
+                        await cp_repo.upsert_user_tenant_map(email, tenant_id, role)
         except Exception as _e:
             print(f"[get_current_user] Warning: could not resolve tenant from control plane for '{email}': {_e}")
 
-    # Default fallback if tenant_id could not be resolved from token or map
+    # Allow X-Tenant-ID header or ?tenant_id= query param override (useful for super_admin switching tenants)
+    if request:
+        req_tenant = request.headers.get("x-tenant-id") or request.query_params.get("tenant_id")
+        if req_tenant and req_tenant.strip():
+            tenant_id = req_tenant.strip().lower()
+
+    # Default fallback if tenant_id could not be resolved from token, map, or header
     if not tenant_id or tenant_id.lower() in ("sams", "schooldesk", "master"):
         tenant_id = "tenant_a"
 

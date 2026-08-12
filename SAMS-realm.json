@@ -3,6 +3,7 @@
   "realm": "SAMS",
   "displayName": "SAMS",
   "enabled": true,
+  "organizationsEnabled": true,
   "registrationAllowed": true,
   "resetPasswordAllowed": true,
   "loginWithEmailAllowed": true,
@@ -61,8 +62,8 @@
         "clientRole": false
       },
       {
-        "name": "user:create",
-        "description": "Role: user:create",
+        "name": "user:invite",
+        "description": "Role: user:invite",
         "composite": false,
         "clientRole": false
       },
@@ -297,7 +298,7 @@
         "school:read",
         "academic:direct",
         "academic:view",
-        "user:create",
+        "user:invite",
         "user:delete",
         "user:link",
         "user:view",
@@ -344,7 +345,7 @@
         "school_admin",
         "school:write",
         "school:read",
-        "user:create",
+        "user:invite",
         "user:delete",
         "user:link",
         "user:view",
@@ -449,18 +450,32 @@
   ],
   "organizations": [
     {
-      "name": "tenant_a",
-      "domains": []
+      "name": "Organization A",
+      "alias": "tenant_a",
+      "enabled": true,
+      "domains": [
+        {
+          "name": "schoolA.com",
+          "verified": true
+        }
+      ]
     },
     {
-      "name": "tenant_b",
-      "domains": []
+      "name": "Organization B",
+      "alias": "tenant_b",
+      "enabled": true,
+      "domains": [
+        {
+          "name": "schoolB.com",
+          "verified": true
+        }
+      ]
     }
   ],
   "users": [
     {
-      "username": "superadmin",
-      "email": "superadmin@schooldesk.com",
+      "username": "sa@desk.com",
+      "email": "sa@desk.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Super",
@@ -469,13 +484,13 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"WBvLnW5TCPgzG5dZ25LcMY5tGB+aKNuSW3ST2DlIe24=\", \"salt\": \"CcbKPgjo4gyWue+G1l+TbQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"KdEsUs640WPSle+QKWCer5er1vzCHjy8rmBmvX85A/w=\", \"salt\": \"4z+swNwU324qs8X6CqT6YQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"4kPf4PwZxecpkO99oIkQAfbtd0HsMrfIJtvhGaJrhEg=\", \"salt\": \"IN7yprqHAtYRI7+KRzFwLA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"dELZ0in8JonTQFsN2yTnnuviTPKozoySh0/fk4vJblU=\", \"salt\": \"d+o3KAy7SUCoV997+kpl9w==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -493,23 +508,23 @@
       }
     },
     {
-      "username": "admin_tenant_a",
-      "email": "admin.tenant_a@school.com",
+      "username": "admin@schoola.com",
+      "email": "admin@schoola.com",
       "enabled": true,
       "emailVerified": true,
-      "firstName": "Admin",
-      "lastName": "TENANT_A",
+      "firstName": "School",
+      "lastName": "Admin (tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"xRWzGNXkZ6bD08VShrGy5FAk5TZZuJaBuAwJLl7vSL4=\", \"salt\": \"17zDAa2VipD+tTo9V8vhDg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"hKrBhXOaCwPFNYAeHtuqedlsUvQWqlp1CTJ+0vwJViY=\", \"salt\": \"++GRKnJjw5yzAZQ6YH7sFA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"rMkc8QBAPimzxZBJi0ZmN97LyHKLO+qun7iBeZQV/Sw=\", \"salt\": \"KPPh01utUeD02KrNw4bBbQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"sU+Ao7IZsF44aFQCttOKIhsoLVKn/OT2sHOpsVe+H/w=\", \"salt\": \"dk2UNxPGCjVIdwDnCGlWLw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -527,23 +542,23 @@
       }
     },
     {
-      "username": "manager_tenant_a",
-      "email": "manager.tenant_a@school.com",
+      "username": "manager@schoola.com",
+      "email": "manager@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Manager",
-      "lastName": "TENANT_A",
+      "lastName": "(tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"NJjkf0KefQ1B2ugEw0uzJi60FdXSMGWzvTK3gtVkumA=\", \"salt\": \"CY3XaZHrX6XurB0KliqxYQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"DluGuS0jvZDwlT+P3lrE5luyU/7U2Lmaav5xqOwE7LI=\", \"salt\": \"n3FIPXgkc4Q/FANOnbbBSw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"dkHLlugkuao6V/aaIqxyHNQbhZY9U94D35DJfC9BxOQ=\", \"salt\": \"rRdaERpWZDH24XZ7fyIwxg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"hDkc4ZEDZ0h3/e46+jQRcgV+xMaTX3bUvVJNglqFnmI=\", \"salt\": \"CcNDzDBcS/gqnTFetyMJEQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -561,23 +576,23 @@
       }
     },
     {
-      "username": "admin",
+      "username": "admin@school.com",
       "email": "admin@school.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Admin",
-      "lastName": "A",
+      "lastName": "School",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"9uSfLFqZfEno6DO97O8bG+u2y5LtLso14axnVIGzC2c=\", \"salt\": \"SQNdroR3DEh2uRWJdzDoMw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"3MUiVZ8yvXX0f363csaRoIFbm0sID5Skh54b1lrnbrY=\", \"salt\": \"GN5nrUqXryFPrWtCTdCyMQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"Lj2ipc8vauvbEUjs90zBwtaJe7lu1CpJMqEhgmQqGQk=\", \"salt\": \"oRMqh0zzECxQVCDKteTK/Q==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"dZLUJ4GP89tO7V4iQEEb9blLJoaTfPUxL/S4HKgri2o=\", \"salt\": \"pYPO/Efu0twpv0C406rMhA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -595,23 +610,23 @@
       }
     },
     {
-      "username": "manager",
+      "username": "manager@school.com",
       "email": "manager@school.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Manager",
-      "lastName": "A",
+      "lastName": "School",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"vweXbDe1V7KEHdL+JqPOI2BBr/JUdAhGA9lrvhM2NpM=\", \"salt\": \"AMX/juh/U9lp2gO6DSqxvg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"GQafevJ0JQu3cnTYC0tHjmYtLnXnbAmFIKk3i6JbN5M=\", \"salt\": \"7fXSQPzTLlFtujymLosAyg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"swPBmlXxD0ZCQarECN8x6tavF+esOdCrWkp5NkMspVs=\", \"salt\": \"f/T+QMF0+9uZfkFUHgW5Ig==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"lb2vYIxwV9NrmFjyzec1T+7annMtn5Bq+PpmQtOz0wg=\", \"salt\": \"h91ETQ9jQAeM5YymDqAMEQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -629,23 +644,23 @@
       }
     },
     {
-      "username": "teacher_tenant_a_1",
-      "email": "ali.hassan.tenant_a@school.com",
+      "username": "ali.hassan@schoola.com",
+      "email": "ali.hassan@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Ali",
-      "lastName": "Hassan",
+      "lastName": "Hassan (tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"dB9ZScjEgbzl9Vzn0XeF64Pfyld9uw8pPISYMI4fU4o=\", \"salt\": \"RcPUhXD0hR4DCXM77MMyUA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"XZgdV2IF8t8B1QWr4h3B4MgttDfv43FcV1Tielk0F+Y=\", \"salt\": \"jvm4E3gEwQLR/3zleeVGKA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"iymf8K1R8q9pduW/XwP+XRfM4CWceSSfEDQ+TvMEDq0=\", \"salt\": \"SM9wHWRld/W6rr8xiHa2dw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"Yb5vCsgqrV6zUng1HgE+sFBNCHud16H4hP0E7zgs/to=\", \"salt\": \"kj7vh6Y5zV9KwbPHiXHPSQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -663,23 +678,23 @@
       }
     },
     {
-      "username": "teacher_tenant_a_2",
-      "email": "sara.karim.tenant_a@school.com",
+      "username": "sara.karim@schoola.com",
+      "email": "sara.karim@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Sara",
-      "lastName": "Karim",
+      "lastName": "Karim (tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"fyzZLNMNz2V6uj+iDOO08VrWFciBUENRfF7SNMLtMz0=\", \"salt\": \"FpKiaeiAsA5t+ojo9D2M8A==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"pT0dTlM3kxeOZU+r+eygv63sh4PB1xKbrYF+gm9lBlo=\", \"salt\": \"G6WA6rd+gVVne/Dl3ErzWQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"4jwZIeP5m64NxS3q+zUt9Jy320zeEXH75uWC809wsyc=\", \"salt\": \"K6hsiCz6P9A8SZDg5iAEgA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"C4X5Kw5+VBCm2yT5b4anesSBNa9ZRsnPP37bwBoPIx0=\", \"salt\": \"sBsxlbYaLTk1HrpWmy1SPg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -697,23 +712,23 @@
       }
     },
     {
-      "username": "teacher_tenant_a_3",
-      "email": "omar.nasser.tenant_a@school.com",
+      "username": "omar.nasser@schoola.com",
+      "email": "omar.nasser@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Omar",
-      "lastName": "Nasser",
+      "lastName": "Nasser (tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"quoGVjLlVSQ72GRNQCWWgReVOMhgyI770/zjo6k+I1c=\", \"salt\": \"BDiw1yp1WBHBsoCr0HPAOw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"xPQF16u5py9GfuWC0jts+uCi6mEyIhqM1xJ+abp4Xww=\", \"salt\": \"TYtx+w5g7RoGl5ssHkVvtg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"siUcnx/CC75BzFVN340lb8M1YBgR3J79OCoFMMJpI+o=\", \"salt\": \"z//G4BmT4M77Rpr1FEXrnw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"lglyYx75lKx2va2a/X1ua44q/bItUQMsKB1eib1cJs8=\", \"salt\": \"IPewQ+CVU0BaiiRJUuyFbA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -731,23 +746,23 @@
       }
     },
     {
-      "username": "teacher_tenant_a_4",
-      "email": "lina.farouk.tenant_a@school.com",
+      "username": "lina.farouk@schoola.com",
+      "email": "lina.farouk@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Lina",
-      "lastName": "Farouk",
+      "lastName": "Farouk (tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"cFTqlCyPx6jyzyh0ZOykFoDW5AccAKFXL/Ok0673gB4=\", \"salt\": \"xDhqkSUE8zcR+RPOKsldPA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"5irKx/JlZ42/u8y+ZU7DSxvrkYYUS9PkjrLuk9g80VI=\", \"salt\": \"7Zkfp3shjojtlkJSQbaksg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"7zcMOAgKDh6NaAX0CSD/pLWapI/zNG7LJyBCjiGjagU=\", \"salt\": \"DqhSBjMIXV0w8+izfvbiiw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"3wboW7xtSAJN8VNab/uOqtIqgWokR8bQAAgke5kz33I=\", \"salt\": \"aobnuU6br+GAj2La216cLg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -765,23 +780,23 @@
       }
     },
     {
-      "username": "teacher_tenant_a_5",
-      "email": "hassan.mahmoud.tenant_a@school.com",
+      "username": "hassan.mahmoud@schoola.com",
+      "email": "hassan.mahmoud@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Hassan",
-      "lastName": "Mahmoud",
+      "lastName": "Mahmoud (tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"kECRNPEdAKWe9Lf/kmxZUbfEj6rDz2DNXOmDW3wrP7A=\", \"salt\": \"6hAWT9bmzpgJpa+PD3nXpw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"+QSEt90xvRA8hNAh03EgP+II+ZRkJtuJI1hilBF1YnU=\", \"salt\": \"v04mFIZzv/W+I6GUPmCjEQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"quAZopVPhjGuoCL34fDZVBBkLkI+R6VGMl3uoRjhoAs=\", \"salt\": \"ZRr47le8rGtuWdX4YDfD5Q==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"rSVd6VlFu63RJfLsoVurIf8tkc6iJyYecTrItzF6FEI=\", \"salt\": \"WrovnxfntB5ljsFTu6aOpg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -799,23 +814,23 @@
       }
     },
     {
-      "username": "teacher_tenant_a_6",
-      "email": "dina.rabie.tenant_a@school.com",
+      "username": "dina.rabie@schoola.com",
+      "email": "dina.rabie@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Dina",
-      "lastName": "Rabie",
+      "lastName": "Rabie (tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"d+X528FmnkTRR6aBFB+54D1QV657SlEEw0WelPNc2vA=\", \"salt\": \"fp9QfWZ37r4I37oLcChLFA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"ZD1uszwvSqXl8/cweQ7medzyXSglx93JiXQc80W704A=\", \"salt\": \"TeuipoJRCMR0tjLS5QLeTg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"AvppaA0eJ2Q7MTTmK7WoIsNsBkCL63SDe2nAsxRtMJo=\", \"salt\": \"Rtc+fzqOTQ0+dAO/PRH3MQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"i9C6Jw8mi05D+LsNBKZaNK+uoAMo/zNc06E2/j2r87w=\", \"salt\": \"RDv7paw+0HsA/vy47bFucw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -833,23 +848,23 @@
       }
     },
     {
-      "username": "parent_al1_tenant_a",
-      "email": "parent.al1.tenant_a@school.com",
+      "username": "parent.alrashid@schoola.com",
+      "email": "parent.alrashid@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Parent",
-      "lastName": "AL1",
+      "lastName": "Al-Rashid (tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"fcisDMqGqNw+ysZ3aXpqFBuIn4wBl2LBER4txTe8O5k=\", \"salt\": \"4EopFgJMZLg4H3Lh+AMITQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"v+cVdJf9evPqve6JC0tJmcAmFQoVunZsMOHH6qbbesY=\", \"salt\": \"22NOFXo9XHK7SlZtsOwvFw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"GoyK81PbH6qqCWsOpBFrZ5f3FS+WnRwna8YZ6cpKykI=\", \"salt\": \"L5LJj3NcEPqKk3DT8N6Q9w==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"9/Erg+FrIO5fQfHxRs+/7KXTPjSHq5PRqszkOXV7RBQ=\", \"salt\": \"CTFPTI9iEjnpe3Fho44yuA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -867,23 +882,23 @@
       }
     },
     {
-      "username": "parent_bn2_tenant_a",
-      "email": "parent.bn2.tenant_a@school.com",
+      "username": "parent.bennour@schoola.com",
+      "email": "parent.bennour@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Parent",
-      "lastName": "BN2",
+      "lastName": "Ben-Nour (tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"Vab76LJ97MgXhNEuO1XrPr/Ybz7G7sC+f2+lR5Kc6as=\", \"salt\": \"TIMBeB4h+5hUw3Gvgyzt4g==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"DSCxubsMcJfD2FSkPCm+MwfBtJqyeLain5osUL+5PU8=\", \"salt\": \"ORX9ILpxtYF0fbqHoEtffQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"Oq2erV9/kTxgcmZByDstoWGstlwfTJYr4cRHlsemzrU=\", \"salt\": \"foEH1WW12HnCuF8ccc/Y8g==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"DJ4d+CjltnPlWO3YYg2L8liy75SNinBWBXJlR3gFr8w=\", \"salt\": \"YujkD8CMXR1+pSijVFPNrg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -901,23 +916,23 @@
       }
     },
     {
-      "username": "parent_cm3_tenant_a",
-      "email": "parent.cm3.tenant_a@school.com",
+      "username": "parent.chami@schoola.com",
+      "email": "parent.chami@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Parent",
-      "lastName": "CM3",
+      "lastName": "Chami (tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"sZFQesHT1ZdAEbbvLFcjlLfabzEP0VxbX7p9V5Y1DvU=\", \"salt\": \"X6fBVjpDHm/s7+Y5vCD1vQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"DUJZuWTQ78kvGYIQ0IadBUJSoKnOb2nvJ9fite1XtEI=\", \"salt\": \"mBtTi7/EmbxFgUgNHdJP0A==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"dLgPXrKC5/o9GyAz23fzOl4gtObyQHGWJBIRfmM9n7M=\", \"salt\": \"HzsZ+4jfOEiLKJDp4bSuZQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"IbR5qurGzqRWalNXuaxzsNLaR7xsxub4oF7iWPsLICQ=\", \"salt\": \"fK+MgXQnWGAB1MmU0i5I+Q==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -935,23 +950,23 @@
       }
     },
     {
-      "username": "parent_da4_tenant_a",
-      "email": "parent.da4.tenant_a@school.com",
+      "username": "parent.darwish@schoola.com",
+      "email": "parent.darwish@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Parent",
-      "lastName": "DA4",
+      "lastName": "Darwish (tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"ESPW7RN2vPCiPU0V20nLe3QoILuslx5js47Cr0Vtojw=\", \"salt\": \"8cEYeC7kQzn3Fq+i3GaqYg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"iX0/XUfXhyR8vGIzV6FzXAeDMiWx1Us0MF/E5TUXv/k=\", \"salt\": \"yHgt8jVCGkVYbYF/+PUYsQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"qu1lcjoN9c81RlUTQNzsyVKV2ILFUJB1nCDJnKp1pUQ=\", \"salt\": \"lju550WqUAmT1+ynQrINLA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"JpIc0O18AqQhOG+L7gTbFPgaTJWPMwV9HWny5azu0SI=\", \"salt\": \"E6yVBIXJYIcaQ8VT/LmHyw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -969,23 +984,23 @@
       }
     },
     {
-      "username": "parent_el5_tenant_a",
-      "email": "parent.el5.tenant_a@school.com",
+      "username": "parent.elsayed@schoola.com",
+      "email": "parent.elsayed@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Parent",
-      "lastName": "EL5",
+      "lastName": "El-Sayed (tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"Ktojd2qWm0RPd6s8fvUK0PppilHazIlN/oY5UgpUqd4=\", \"salt\": \"uJc12Ek1dvDr7KNXMQE5aA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"crhrAyHLpmFmezwX2d1mRQMcjAsJnlkq52BpOqSPmBI=\", \"salt\": \"36T0m21dA1A9pn4rKNXXYw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"LUZsnKFmkLWwgec4njkSglpunLnezb151IDH8+Bb/cc=\", \"salt\": \"pdXYvp6kUvLLPex77cHQoA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"7iqkyjjPwYN9GIKPC5kQ0VNSIcAHB5DnJB0W4nASExI=\", \"salt\": \"0ffvFzgevxPsQrHkcl0hfA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1003,23 +1018,23 @@
       }
     },
     {
-      "username": "parent_fa6_tenant_a",
-      "email": "parent.fa6.tenant_a@school.com",
+      "username": "parent.farouk@schoola.com",
+      "email": "parent.farouk@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Parent",
-      "lastName": "FA6",
+      "lastName": "Farouk (tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"pQo/R4ZP4TPpSwRLrXoKxzsY1oxouRhcG1gM9zsdIcc=\", \"salt\": \"Duch0+A6i8EMSJFIsv4bUw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"nbnl+YGFI5XmwTG65PI4UeFax8jH+IRhuSiyArTfBlQ=\", \"salt\": \"fKIrzdMxv7wSP0kRw+Qi4A==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"D8w18M3fqbiH1b37tJmfJQ4d9M8TrVU186CQT+MOd1g=\", \"salt\": \"MvoKgdr2SeDfHN8TuwYVPA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"qh6+lHAD+4zskjUue3PBjVXln+f56Qm1xGjQEDetI2M=\", \"salt\": \"taPkKInsQnSSToGEXKv6bA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1037,23 +1052,23 @@
       }
     },
     {
-      "username": "ahmed_tenant_a",
-      "email": "ahmed.s1.tenant_a@school.com",
+      "username": "ahmed@schoola.com",
+      "email": "ahmed@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Ahmed",
-      "lastName": "Student1",
+      "lastName": "(tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"aeBDmeOUZEONDU7TK8ZdyLP6B3rLMdLSpbQTn5gPbFM=\", \"salt\": \"Tk1JMwhcLeKi+Q+inI4ftg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"/aQFJ/xpPwooUyU3P1qGPYj3XGYwci4EDRhmyC7eeXw=\", \"salt\": \"vEW+mc7N6IqcSiS+ozhbkQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"we72JOnyPweqevBu/IKk3cI+ecrgJL2ahk95cmNi/MQ=\", \"salt\": \"XI9XN6lM1CJdYdppPNIaOg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"7phHj2F4gtSbK1AansIBwOqO06GdEg/1EO7LDKiG1OI=\", \"salt\": \"6QI7wBclGYuRYfqmWw4dmA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1071,23 +1086,23 @@
       }
     },
     {
-      "username": "mariam_tenant_a",
-      "email": "mariam.s2.tenant_a@school.com",
+      "username": "mariam@schoola.com",
+      "email": "mariam@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Mariam",
-      "lastName": "Student2",
+      "lastName": "(tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"3F2EnDrgSpFu9h8x+leJ3SONM5Z0KipevgEfnN1nKRI=\", \"salt\": \"43p3YZdAd379XVu6mDLYEg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"DNash0yeqbTjssNljcCMNOXeOfOAHoIMPw538NGaB8E=\", \"salt\": \"h9/WA5gCm5ScypVZm8XV/Q==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"dlPFQ/vg3PXW5xftwu5bPNyb3GSCcSSe3YiGyts/mVw=\", \"salt\": \"NuXM++nAo8j9VZqZcgTD1w==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"+2Xf//B47NAKeBhvFjhqFs/6bAjCDGzsRgfI6f/7wXk=\", \"salt\": \"J5Id85SnfylgEAI/yHVN3A==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1105,23 +1120,23 @@
       }
     },
     {
-      "username": "khalid_tenant_a",
-      "email": "khalid.s3.tenant_a@school.com",
+      "username": "khalid@schoola.com",
+      "email": "khalid@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Khalid",
-      "lastName": "Student3",
+      "lastName": "(tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"PgaJx1Y0zH3pPZBmkX1P6I7UHquriJMQdhP8EZk/6Dc=\", \"salt\": \"H6Mf5uqXp+9b28Di2drjYA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"gOoABxkVkom9fy5rCwN/qD4YdpMzSOMeMozVqFGsW/g=\", \"salt\": \"6SDiJfKOSKanWyNqPvcbPw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"aa3BMMjNRQKA8zPvTGd7BoiDR1JMlBencsbFc8pjEts=\", \"salt\": \"+BqOU3OHkXA8IlcjtNn+kg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"bhVT9rtkYLyDIH2mCix48pA/PRNMNssMJe+vzgabkFU=\", \"salt\": \"OGbQ70m0ulD1hYXWl3//eg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1139,23 +1154,23 @@
       }
     },
     {
-      "username": "fatima_tenant_a",
-      "email": "fatima.s4.tenant_a@school.com",
+      "username": "fatima@schoola.com",
+      "email": "fatima@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Fatima",
-      "lastName": "Student4",
+      "lastName": "(tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"ufbg6nTk+shwqDDE4709duRLR9FQHsw56j3iUHikWaY=\", \"salt\": \"TLK2SuoPwOfk5tFa40WidQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"rtFOmOUqK5k4r2YUQF8p50U3iP/6JPovwFt4rRQuhvI=\", \"salt\": \"wvsfslSK6bbzQ/ScshvzGg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"fFp1uiKbbz7ElIqBK3ijBk/eHi1S6kzv2VN8rHhu0Sg=\", \"salt\": \"VDIUT7ZQ/JMVVvOcneMN7w==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"3pg80sBbgUAI6KPeJIUZUGBGy7pniwtk4Z7XI1LU0LQ=\", \"salt\": \"LVSxI9SbfDuZyvUlWqybSQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1173,23 +1188,23 @@
       }
     },
     {
-      "username": "youssef_tenant_a",
-      "email": "youssef.s5.tenant_a@school.com",
+      "username": "youssef@schoola.com",
+      "email": "youssef@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Youssef",
-      "lastName": "Student5",
+      "lastName": "(tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"DqBaGVV/k7mkizHj2Hl6ggaEPVYvibsTveena53nr7s=\", \"salt\": \"HTN7hPi9YQthqIjO1VB50g==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"yytzAmzeyLc8gS6vqjInVRcA6qL80dQTOIyiwu/vufA=\", \"salt\": \"HK6RuVw0kTK1LYge1dosbg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"Aeltu9SCdep1+B9jZXImdgirIzUktMivA4ti+G1rgKA=\", \"salt\": \"zr0FyWOa08RR83bd72pdUw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"KwuI9xLaNe2eKrskTf0QCHVBUcSZm/IMeJVOMRo7/6Y=\", \"salt\": \"KlPnpd5gCab75hy0fGr0Mw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1207,23 +1222,23 @@
       }
     },
     {
-      "username": "nour_tenant_a",
-      "email": "nour.s6.tenant_a@school.com",
+      "username": "nour@schoola.com",
+      "email": "nour@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Nour",
-      "lastName": "Student6",
+      "lastName": "(tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"4Ib8Q3jl8h0FAjiUZF942b+X/ubPouRKY823M5UCuag=\", \"salt\": \"gJiWrPQKol5a+arK4pl/CA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"dDlwsXiavOBu3EJSzVgA+LqMXHvNyKwf8aVnmicUAz8=\", \"salt\": \"9wn4GF/8b3ikYW96kHGxIw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"dcpLE7e74hADapqgxJPmtW8cAWoyKoggeWPolLElmIU=\", \"salt\": \"utFeUM75mN8TEaZMrelNoA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"mWJkL1SsqMpxe0tKuccLCslCqcpqt1D0A1j2x1cWgps=\", \"salt\": \"deBbVK6CDr5yvLosG+fW7g==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1241,23 +1256,23 @@
       }
     },
     {
-      "username": "ziad_tenant_a",
-      "email": "ziad.s7.tenant_a@school.com",
+      "username": "ziad@schoola.com",
+      "email": "ziad@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Ziad",
-      "lastName": "Student7",
+      "lastName": "(tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"8Soumt/mXw6jMDbwWpR+fAwRIlT++8Sf/vyh93denIY=\", \"salt\": \"Kq3128fN9l06d9ViyprBQA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"H6TEBDOXeNDcek+r+6mmuSM5St0k3FC6CyzxCxdWkGg=\", \"salt\": \"cBJ6pRdJTjxqWdnYnvi9Vg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"nbZXxcda7V9adsCYIVACKxPoQREWn6DA+uowHGZE9SA=\", \"salt\": \"604L7AatyTFBufwC/heMtQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"arKS053X3kL4x/GjbL6AFt3kLQ87AvERqTHDydStWzc=\", \"salt\": \"pEn8FElkQbaX9OmBoiEsVQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1275,23 +1290,23 @@
       }
     },
     {
-      "username": "layla_tenant_a",
-      "email": "layla.s8.tenant_a@school.com",
+      "username": "layla@schoola.com",
+      "email": "layla@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Layla",
-      "lastName": "Student8",
+      "lastName": "(tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"BxZmrOZrarCyxMO9Foo0teyYVn5Q+m/edVJT1fUaijI=\", \"salt\": \"dGnqRAUWneoW6ThEfNUAJg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"VXmSacqmqwynjSxz4VrvYzpTo3xa9jsA1opF0inmFJc=\", \"salt\": \"0jtmvDV2UUvwnBkOuwy/Sw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"xuuELJ70EMFTPiLE4XLxvjj14azApmL1WfNFlzHP/Xg=\", \"salt\": \"3aDqC7Io24QHBmFBQToE7w==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"N2C0g+tVX9HVEi8yx8NqvNpPKUZlmw2eHyeYcbTIrGg=\", \"salt\": \"Fk1lvN/MnbA/nyg/mnU7Xg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1309,23 +1324,23 @@
       }
     },
     {
-      "username": "tariq_tenant_a",
-      "email": "tariq.s9.tenant_a@school.com",
+      "username": "tariq@schoola.com",
+      "email": "tariq@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Tariq",
-      "lastName": "Student9",
+      "lastName": "(tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"6g4SgAVoFILSfxlxHSqcvsC8AgJDoLm488hwB+HtLy4=\", \"salt\": \"wpF26doZs6FBqcVRJopMOg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"mbMVz4MGfIa8XTUJO8YgcJqz7+O0Wj79oqzIMo5crhA=\", \"salt\": \"qPnj/ml4X2Acuicq2Uf0fg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"Xi1G9W8VArd960roxF6P8cfkPxl1gGh6ETE8HR1RrQg=\", \"salt\": \"47lLgSbsCUZhs1RACdWTwQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"BJjNE5tPMdCMBCpJGll0q5OLBgGC/pPN//sAcELEGog=\", \"salt\": \"Jy3za/qIw0zEd2qJH6mZAQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1343,23 +1358,23 @@
       }
     },
     {
-      "username": "hana_tenant_a",
-      "email": "hana.s10.tenant_a@school.com",
+      "username": "hana@schoola.com",
+      "email": "hana@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Hana",
-      "lastName": "Student10",
+      "lastName": "(tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"QXoGMX9k5cgfOirMIm76uo0M4q4Waq4TIPpQtBC6UbU=\", \"salt\": \"5RbjUroYKuBBYzvylZJy3w==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"+2vJnmHmu9TPdfD84kzPt2pHp3yLCQLqYueHH7eCjsM=\", \"salt\": \"k1ejUKyhhf9hE0+zI3L13w==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"Qo9SWia/9KZhcqeiHvvd3ZVKxgG71ZxrZmikbIv1U58=\", \"salt\": \"7TsDCA1MIpNkeeifVQMasw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"d42guyITIpvwZyes37KV5efAvTxOpnqkm2WMmUMn8Cc=\", \"salt\": \"PFw81tqafAHBW1KDbvgoTg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1377,23 +1392,23 @@
       }
     },
     {
-      "username": "sami_tenant_a",
-      "email": "sami.s11.tenant_a@school.com",
+      "username": "sami@schoola.com",
+      "email": "sami@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Sami",
-      "lastName": "Student11",
+      "lastName": "(tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"n/zpqkKpo3+b3B2cQvIP+EUCtlnR0Wl7cS8ucvYX0eY=\", \"salt\": \"pFVm0y1lJYwyMgPzm+Rs/Q==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"HsgQy0jSqT7h/aUd4vhaCcJ6l8yLIBpbu4nXca189AA=\", \"salt\": \"ZVFSqczhP1K1slmaxHuqMg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"F7qpIfo1uuM/UjDW2Ggyiqtd2egAf8h2qTEwTFQuvBU=\", \"salt\": \"ezF6LR4aCRRC7JGwedmZ4A==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"gt/fXWRn4xIuDr+v6+v5SCJQPFWilb0SUTXJVqjO308=\", \"salt\": \"Egb92sCpYkjnkf1IT/gzSw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1411,23 +1426,23 @@
       }
     },
     {
-      "username": "rana_tenant_a",
-      "email": "rana.s12.tenant_a@school.com",
+      "username": "rana@schoola.com",
+      "email": "rana@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Rana",
-      "lastName": "Student12",
+      "lastName": "(tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"IQrDAZ5qAo9jiTXV04Uc9dB8IHPdcUCrtBIJJalq1/8=\", \"salt\": \"xdBtCtwwgmHgX4Y6ogbJJw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"oH2Q4XDPq/gNaii3+6ybToZH5EKqGphZslX5kXYrW6o=\", \"salt\": \"tSqX46qDjoW2sfUVK5YGfg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"s6lAxQsHf8Cdgvw472Ts+OOnGm5btZAYwrD62ZhSqw4=\", \"salt\": \"i7MUlnFIp//viOhPMgkjdw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"CPI6+M8Xd6J8e5qCuTx+qD+wtXIhYfaM7Gejcv33FE8=\", \"salt\": \"epcddLdnAYaMkvrtAmaHDw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1445,23 +1460,23 @@
       }
     },
     {
-      "username": "karim_tenant_a",
-      "email": "karim.s13.tenant_a@school.com",
+      "username": "karim@schoola.com",
+      "email": "karim@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Karim",
-      "lastName": "Student13",
+      "lastName": "(tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"Coi50JFmltUbzwyz7GPezx9RgvztXJXP8rq8WuTp3+k=\", \"salt\": \"BA4H+n7FrVHQXjZIGaFaIA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"HPMChTd2rrE/1L47qOV/HhGbv2G+8HPA3Fn/bJkjttU=\", \"salt\": \"un5KlUAJS35B3PtbwHGAgg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"3IXegmkmStcPHtixjn0JkPIZVHdp63QL+1eINPsqmsE=\", \"salt\": \"2QyMuUPp5XxiqwAEXMI3Bw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"buWOwy9csZJkObq8nisC1jdWm5s63/JOm3Pmo0c40Xo=\", \"salt\": \"mSJkx7h3zpXQu5c23x/DtQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1479,23 +1494,23 @@
       }
     },
     {
-      "username": "dalia_tenant_a",
-      "email": "dalia.s14.tenant_a@school.com",
+      "username": "dalia@schoola.com",
+      "email": "dalia@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Dalia",
-      "lastName": "Student14",
+      "lastName": "(tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"D61rOtmDKjg+lSm2yhI8RBBu8ku6/QCrE3KhWZSyqIo=\", \"salt\": \"1AMV1AuM/b5t6NPahaGUjw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"5jElrmbUpHnb+EImyctWQi/lulwDoXjrz/j1ytP8Xjg=\", \"salt\": \"+AXGjx7hFP/U0/4ZVOklCg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"PRufVlZ0mkpLaJp1TZRpcBnJY7Aa1/15SWoYi6EjKMo=\", \"salt\": \"Rhy0j48B0OvVh6/mBAg5JA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"VjUbm+dw5727eaoGNwGvzT/UjAYnG7NIKZCOZng7yxE=\", \"salt\": \"DiOP6pt/uGl/CWvmEiyrVw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1513,23 +1528,23 @@
       }
     },
     {
-      "username": "rami_tenant_a",
-      "email": "rami.s15.tenant_a@school.com",
+      "username": "rami@schoola.com",
+      "email": "rami@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Rami",
-      "lastName": "Student15",
+      "lastName": "(tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"1P8CfL0GM3HXTwNYb+WNFI7qKotfaL6SDILeGYWAQWs=\", \"salt\": \"qSgx5gRMPHkZ82EwSNVwPA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"rpgtrug+3/lh5YQU5kgM4xIjudvEobi8xk1WNgRDlWo=\", \"salt\": \"BxPOE9yacT6L6X1+exxdyg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"Ug8l9+HYb1Nqd0pvhexdwiAuvOKBRqbg8/W9I7PMf5U=\", \"salt\": \"csJ6jYCIyGrvgfrGNL3EAQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"ogOgTKWtIf6GsR9oOn9u9hdGUQC0tIAE5c1zPC0gagk=\", \"salt\": \"lfDCcIIvG7anoO0r/WuKxg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1547,23 +1562,23 @@
       }
     },
     {
-      "username": "heba_tenant_a",
-      "email": "heba.s16.tenant_a@school.com",
+      "username": "heba@schoola.com",
+      "email": "heba@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Heba",
-      "lastName": "Student16",
+      "lastName": "(tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"dzMSz7gu2OpY3O7nhx/pFJdrTpqtRnKGNS6peseYMlg=\", \"salt\": \"bTBSA6aVETYAtLNHsI238g==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"sTRQ762cmjVigJ84K/k51nB2xQ/bxViiie1OLfB74Gw=\", \"salt\": \"VVyIaAg+YdoPvmqjipmfOA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"SAuDqDgLvxSqFAqYiEAsAqQzynDEa9IkBlbxyE+SpP8=\", \"salt\": \"jJXn0xI+qbm4XIxq+lG0UA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"kLJg80sBYqqh6ir5soNVohLYiGKYckgnPUhRpex+3SI=\", \"salt\": \"uAQ1TrBQtOBKpFiQlW/ZQA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1581,23 +1596,23 @@
       }
     },
     {
-      "username": "adel_tenant_a",
-      "email": "adel.s17.tenant_a@school.com",
+      "username": "adel@schoola.com",
+      "email": "adel@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Adel",
-      "lastName": "Student17",
+      "lastName": "(tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"bZAKe4xXJstMoKOZAnmGWmBi3sfZCQJ9XIYp/fft5fk=\", \"salt\": \"VMR5mdDFqZ2I8TREuvWcRA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"lZU/7Utuo2lM/NnYhazs/OZ56qhqwXxg9F/1NN2KUXs=\", \"salt\": \"UkCA+FI19EDhdMTf04xo5w==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"IttQyqnimClU0yP1x00o53GrJsRKNMuf/M1/wWet0e0=\", \"salt\": \"ObcRfbCk/BrKuGrFxq7nXg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"RZUjSx8ryOzmaV46eJ15qnpb/sJ5j67tzJZDooWM8zI=\", \"salt\": \"kymvfzcu8kd5y00XTFiP5w==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1615,23 +1630,23 @@
       }
     },
     {
-      "username": "salma_tenant_a",
-      "email": "salma.s18.tenant_a@school.com",
+      "username": "salma@schoola.com",
+      "email": "salma@schoola.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Salma",
-      "lastName": "Student18",
+      "lastName": "(tenant_a)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"Ot58zAMWQkzUa7ks+oFxJ5yjVmt8HiCIbLyoLQ5lWMI=\", \"salt\": \"ejpYeF931h9Vgkz7b+RMKg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"y4tdVG5BzDPRT4x5rTO347AD1K8BgU5gMDQl3evXWfo=\", \"salt\": \"UZpMv91quK9il2g5ejae7A==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"E0P+5yvE9t7rce/ChT69L7pVebWtqdJPpVsxHo4hipE=\", \"salt\": \"9e/0TAnitEtDUCyZGX9slA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"f342fvIz6eaFr0mC+rPu4Fh0dW+qE98dGWSXn2Ed+i4=\", \"salt\": \"FWqfR/iO71CEF8TlGGzFbw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1649,23 +1664,23 @@
       }
     },
     {
-      "username": "admin_tenant_b",
-      "email": "admin.tenant_b@school.com",
+      "username": "admin@schoolb.com",
+      "email": "admin@schoolb.com",
       "enabled": true,
       "emailVerified": true,
-      "firstName": "Admin",
-      "lastName": "TENANT_B",
+      "firstName": "School",
+      "lastName": "Admin (tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"GvAyg26yaU0tdUtNkxOm4OgMf5oPC/1pCgEtXqf9Ip4=\", \"salt\": \"tTSCDuVNPPjsMjPJgAeJ8Q==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"vGqjY+yScCr/GHwEKLHZFogn8eLuv717NSYq4qgB1hg=\", \"salt\": \"MVk1rhGiBDU55pxhws/FOQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"UfTL9UFFKV5EdGuzLMp+TseNAH16MMyaS2WxCGg0+d8=\", \"salt\": \"trazTGU97Gvdj3Q8nuia9w==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"1n3SU4UFvDg93a3BSUAcRhjftaaDiJ+0efehufkhzM0=\", \"salt\": \"T4RT+bdXrRhL2BgSdyd6Wg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1683,23 +1698,23 @@
       }
     },
     {
-      "username": "manager_tenant_b",
-      "email": "manager.tenant_b@school.com",
+      "username": "manager@schoolb.com",
+      "email": "manager@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Manager",
-      "lastName": "TENANT_B",
+      "lastName": "(tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"ofjcC6Kvc8zr6iQnxo9LyQfXAW3M8zPWIHnDH6hWzPg=\", \"salt\": \"49VFZpaIN8VT0+MRZPnRfg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"9X73hg3K09a8k7NeKnvDm4kBBaq8Ijr5Cal/uqEgSg4=\", \"salt\": \"Z2rxoFQeO6XQW9yrEOGW5w==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"+j0SIPrQ5ChBOi8Q6m/pl2MvVKPjnTXYJ02w9J7cYLs=\", \"salt\": \"noTHwSpAUzGAbZzwCkY/Xw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"YTOTP8PsqChey2qS63oXpnrKjRaPwUmqahQHyp63Fhs=\", \"salt\": \"CU57KRWG7HFR8hk8KyR05Q==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1717,57 +1732,23 @@
       }
     },
     {
-      "username": "admin_b",
-      "email": "admin_b@school.com",
-      "enabled": true,
-      "emailVerified": true,
-      "firstName": "Admin",
-      "lastName": "B",
-      "credentials": [
-        {
-          "type": "password",
-          "temporary": false,
-          "secretData": "{\"value\": \"kW36xsp2jkZMXFMkDLu7yCimcda8g/IpMTSGmylg6pQ=\", \"salt\": \"1Q/J2Vf93rt3chn1KHEQyQ==\", \"additionalParameters\": {}}",
-          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
-        },
-        {
-          "type": "password",
-          "temporary": false,
-          "secretData": "{\"value\": \"33bg5dI99/wHoiC8FoqSJJDyM243qEBeZHCUpr7xM4U=\", \"salt\": \"5zLhn2mZS0/sM2cwfxWDOQ==\", \"additionalParameters\": {}}",
-          "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
-        }
-      ],
-      "realmRoles": [],
-      "groups": [
-        "/school_admins"
-      ],
-      "attributes": {
-        "role": [
-          "school_admin"
-        ],
-        "tenant_id": [
-          "tenant_b"
-        ]
-      }
-    },
-    {
-      "username": "teacher_tenant_b_1",
-      "email": "ali.hassan.tenant_b@school.com",
+      "username": "ali.hassan@schoolb.com",
+      "email": "ali.hassan@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Ali",
-      "lastName": "Hassan",
+      "lastName": "Hassan (tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"5kyIVWSYgVqRzybS77wWCsjxcaArBrBJupNt5W/XLh4=\", \"salt\": \"B/2gF8gTiWTvZBYE0NSjJg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"1uh5f0vobTVb1aMVKRRPZPm5vd6l2JPn+YyIpNGQwuc=\", \"salt\": \"+/TDdaAdJ2y+hAyb/maFzg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"HVzX6uxgrH7cYBj0uImtRNlYaD3ZPXcCX7ogfa7oqmc=\", \"salt\": \"JWQJGqTUYTfXQpV7so66Bw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"GSZXwgsoYpHeHDQ911dJbfIsMSHCa2sjQhoPswvZtPg=\", \"salt\": \"R0dYW47lE1PrF9No2aZ0tQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1785,23 +1766,23 @@
       }
     },
     {
-      "username": "teacher_tenant_b_2",
-      "email": "sara.karim.tenant_b@school.com",
+      "username": "sara.karim@schoolb.com",
+      "email": "sara.karim@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Sara",
-      "lastName": "Karim",
+      "lastName": "Karim (tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"7vzBwR5bFL7sXcCYZXz0Apcs6wMKzWwZuWVGgeoFC9Y=\", \"salt\": \"70NjfL6W2OefkV9sUOxk8Q==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"bODaE5hW4aQM93/yxlvXEtFqhWgqjpmNi9xIO+OPl+c=\", \"salt\": \"G7Lc7YJwaZ13yiBNfxyg/w==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"DMK/ESh1peQIR8yGZhmBl6vVl1WFLry0Vj1NTjMVIGU=\", \"salt\": \"2dmjfOeMd5ek2zRA9o2lpQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"DhPERsh3EkeOLvVqdvQrxjHsKshCKqwYdvnO7YE/KBw=\", \"salt\": \"09aUyg9ZSnb13UbpNft9MA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1819,23 +1800,23 @@
       }
     },
     {
-      "username": "teacher_tenant_b_3",
-      "email": "omar.nasser.tenant_b@school.com",
+      "username": "omar.nasser@schoolb.com",
+      "email": "omar.nasser@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Omar",
-      "lastName": "Nasser",
+      "lastName": "Nasser (tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"5uYfLX+id9Q34HTf6KDYOFZ+heuCjlpxaeFYKXRkJaY=\", \"salt\": \"aAw5t4oCh0pA1sHLI8Ge7w==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"j5IKnCH641bZ5LpztzwoZ0XfmANaiB/Q47vehqTyL6w=\", \"salt\": \"/pWym5XQ81jC2FQomxkzaw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"DdU29sU+d5aEw2cZQRaLY9Wxy5QY6eo6weRdFsxc1kk=\", \"salt\": \"F3pJaK0S60pTOZ/fdO4wkw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"gTWm+vToG3IbnfkrdS1s0q6s2zO/HaVItmpgkLrGNTg=\", \"salt\": \"a0MeyE0uo2x7tqrFc1JEZQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1853,23 +1834,23 @@
       }
     },
     {
-      "username": "teacher_tenant_b_4",
-      "email": "lina.farouk.tenant_b@school.com",
+      "username": "lina.farouk@schoolb.com",
+      "email": "lina.farouk@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Lina",
-      "lastName": "Farouk",
+      "lastName": "Farouk (tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"LAdEscDpGBXXvEXcaOLZa6ELsGUtw7bgE0d38dGdmmQ=\", \"salt\": \"DSgzSYIZVoMqDG3nZbRJDA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"qZWdSt2oqJVuawCWcvfWC/Nyer9MODTeI941xI8Inkc=\", \"salt\": \"dUqvIsFtqa96AWJOidJQpQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"yENjRqYZqx5/JCI3+0Xa0EVmOC9fZ1DA0sSWW0W8QUE=\", \"salt\": \"FUnclhEMC01j14Nx0jmNNA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"TApRRPvr+WL6AoJ0QIoUCWE0uKk4JaFBLymhvTbr/u0=\", \"salt\": \"znHl1YI2HMPGJtck89dNAA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1887,23 +1868,23 @@
       }
     },
     {
-      "username": "teacher_tenant_b_5",
-      "email": "hassan.mahmoud.tenant_b@school.com",
+      "username": "hassan.mahmoud@schoolb.com",
+      "email": "hassan.mahmoud@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Hassan",
-      "lastName": "Mahmoud",
+      "lastName": "Mahmoud (tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"1Mm1DkkD7vJYWti8gPD4s1Wr2lsX+vzQKzXQh6fJ/1I=\", \"salt\": \"R7ZvW+pvr828nr0wowt6og==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"p+fGYMJPl/U09xtdsrLTZiy2iHZVHN4gDkaAjx2w1F0=\", \"salt\": \"XtJfbmBOH/Ac+fQ/X6PhrQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"ZBwQbcqJyGSjiJ1uV0CJuOfMYGdEDqnGYSxPw6ocxcw=\", \"salt\": \"FZpopjQuImJ7Qm2PiiNC6g==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"/Wyr9otbj32X/JE1xD941T9cPXbFNr+N0cAGRWfTjJA=\", \"salt\": \"RLGXi99F2uVWTcMHhh4yyQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1921,23 +1902,23 @@
       }
     },
     {
-      "username": "teacher_tenant_b_6",
-      "email": "dina.rabie.tenant_b@school.com",
+      "username": "dina.rabie@schoolb.com",
+      "email": "dina.rabie@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Dina",
-      "lastName": "Rabie",
+      "lastName": "Rabie (tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"TV4W85WOhuigQgV4hQ7G/JAHobdn6V5L+XXuj+UifJc=\", \"salt\": \"3OHSsF3GhJpcgVjKhR9Tfg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"s5J1NwlaUSPWHAilGKj1ELJE+WrE7FU+c1IYhzxI3AQ=\", \"salt\": \"Fb/PDtPdXGnTrpskhvJPMw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"BWfH47ONT70gIiRHWg3sPdNs12Aw2sOkaVKprYEhyPg=\", \"salt\": \"43M0Xjz9j9giGGUw9eAB8A==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"pZYazs8+PefANX9rlzMLkcyEBxlPQI0oL+OrQX9SuOc=\", \"salt\": \"+M/R0GfzxOWNgX7Q9/uHYw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1955,23 +1936,23 @@
       }
     },
     {
-      "username": "parent_al1_tenant_b",
-      "email": "parent.al1.tenant_b@school.com",
+      "username": "parent.alrashid@schoolb.com",
+      "email": "parent.alrashid@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Parent",
-      "lastName": "AL1",
+      "lastName": "Al-Rashid (tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"jNLOa+o+b/mqHOhsUmmiRUta5c2r+xaCEIGxtNZv6OE=\", \"salt\": \"ROZRQeAZoG71lVkI3+5NYA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"/YzAATJZyxpNUHRoKzdRFfybuLA5r/X8FLcjjrbLQu0=\", \"salt\": \"zURv43dd+xoXF9mArUrPuQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"oJJrLZwhXk6Qe5UP3Co0qd4bFIEhctrzzfBFgUd6TcI=\", \"salt\": \"1IIwiZy5Mv1SxOTTo38Avw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"8qIjYrGvbx41AwK2/Er6Xccj5TPoVX5Z/9qj26sTG7s=\", \"salt\": \"wGz0e4FlJRlyryQ7U2W4Xg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -1989,23 +1970,23 @@
       }
     },
     {
-      "username": "parent_bn2_tenant_b",
-      "email": "parent.bn2.tenant_b@school.com",
+      "username": "parent.bennour@schoolb.com",
+      "email": "parent.bennour@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Parent",
-      "lastName": "BN2",
+      "lastName": "Ben-Nour (tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"0YSSvYNxqrmMDUpYaW9l2s4IfhT1YCyANN86sGCBHg4=\", \"salt\": \"DoIxzR9gpFi4l9Jf6U9eDQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"dg71YqQNCddpWKfdiSp07iXARbvWtMh3MIqOlWVylN0=\", \"salt\": \"GGX6mar4961MN7XUKFQTlg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"8ox5AGNSzUK4GYLp6qNgaEP+/O9vQYVnepoDtRjnSZE=\", \"salt\": \"fJyDITOjQr5TU3TV5e7ZaQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"D6mXQPve/2hC1toWllaTA52WgRu1Zln4SGjFbDH3cdM=\", \"salt\": \"CLcP00E+vEFiGb/eQ7SEsg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -2023,23 +2004,23 @@
       }
     },
     {
-      "username": "parent_cm3_tenant_b",
-      "email": "parent.cm3.tenant_b@school.com",
+      "username": "parent.chami@schoolb.com",
+      "email": "parent.chami@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Parent",
-      "lastName": "CM3",
+      "lastName": "Chami (tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"jsqzuGVqKHLoldzUM5hTkfXZcuVGhazWNhmMtFyEGSk=\", \"salt\": \"qJTa0VSCNvYoPJ9zUz/lxQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"WF0c5YnbN+8BskQyo2z02W6W7Z7Qw0ecEauDhWQ7dg8=\", \"salt\": \"8nO1RsWxw59x1oEj0eDY8w==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"r0qN7AJ2FcINstPbEkGKZXJs6IGXRijKm+hj7g2LBUo=\", \"salt\": \"b9ruIePn6DjPS/mX6I0Dtg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"8zuXcwWvefwEfOy1Xl6BYLdqjBEmpbyjuh+lC2awn10=\", \"salt\": \"KP1mbEB0IHz7AoIWUQDTVQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -2057,23 +2038,23 @@
       }
     },
     {
-      "username": "parent_da4_tenant_b",
-      "email": "parent.da4.tenant_b@school.com",
+      "username": "parent.darwish@schoolb.com",
+      "email": "parent.darwish@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Parent",
-      "lastName": "DA4",
+      "lastName": "Darwish (tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"Ju61olSfAsI21c+ivRJ0rh/2L3Yk9vuh9uzVbRGecNU=\", \"salt\": \"MSgyOxnkiNp+xvTJQYci+A==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"OZ84AHnCecYRhtss/gmj2/gNfOdbf05GP/3IQIT6xmI=\", \"salt\": \"9iAIcWsq5uH42h3gjv9BHQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"6Nm4cRsJP11xgoTElRj/yhSdRyk5W9p809hs6OMR3fM=\", \"salt\": \"VnshYPrgIo1D+edY5oGUSQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"WKI/nlWeoV2zABELqqT4+0WBKM+caCJgc9tya1pIjAw=\", \"salt\": \"SVNlasV44tXGlM2Qjpe8nA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -2091,23 +2072,23 @@
       }
     },
     {
-      "username": "parent_el5_tenant_b",
-      "email": "parent.el5.tenant_b@school.com",
+      "username": "parent.elsayed@schoolb.com",
+      "email": "parent.elsayed@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Parent",
-      "lastName": "EL5",
+      "lastName": "El-Sayed (tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"qIoZUxgQaCyXHexUauL1dDO1BPVj5c3noql49yiuGs0=\", \"salt\": \"qubcGVEKmdBESUzl9VeS6A==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"Z1dsdniljzk9e7RtNHhzGNFiSx85BgXzUrEOJt2imeY=\", \"salt\": \"Xe5hakI3Bd7l7yoz232TxA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"18Ba5zjqITZIkc36NjxLxI6Czzn4LQIligX56tzwNfs=\", \"salt\": \"5n3zSqI5pnmeEE3PSwFPXQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"3SBT6Fs2YubhDNG5LtM/356g2mefcaqeEJ324f8xHOA=\", \"salt\": \"zeM4Bw89cpn7jTkwjqjX8A==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -2125,23 +2106,23 @@
       }
     },
     {
-      "username": "parent_fa6_tenant_b",
-      "email": "parent.fa6.tenant_b@school.com",
+      "username": "parent.farouk@schoolb.com",
+      "email": "parent.farouk@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Parent",
-      "lastName": "FA6",
+      "lastName": "Farouk (tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"ttw5hAttD8VRcrLtQzvajctx/T8wEgoKkVm3S2Lk1l4=\", \"salt\": \"U7rFsh9+p88S51/FcwsU1g==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"iDM1ThPXCHy2gUOe1A+BPGXB7DsL7tXSLE8UCDmfnSk=\", \"salt\": \"9s+LDOD3/hvmYDU6a8jEZg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"R3rQtvSNFkLcXEcC7FftcO+lUeHuFtfd3Qbe4bj6RHE=\", \"salt\": \"785radfvU92UPilrCQU6Ew==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"RcTK9Go7eFvWFWvMFbhGEvL+wOLXZRdrb6ues57BT1M=\", \"salt\": \"VpVt3xdQS9tey2htojs+6Q==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -2159,23 +2140,23 @@
       }
     },
     {
-      "username": "ahmed_tenant_b",
-      "email": "ahmed.s1.tenant_b@school.com",
+      "username": "ahmed@schoolb.com",
+      "email": "ahmed@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Ahmed",
-      "lastName": "Student1",
+      "lastName": "(tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"ddYd3839rKW4MvgN81DtyqcW8jBfvpNz6WDKacmuI2M=\", \"salt\": \"eKRneZ7DMyO/K+c1hDbHeA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"G+dYfpr3WLf4L0KZiy0FwauvXw8c8xjGzDluIZKpGM0=\", \"salt\": \"rJYBMY02UFL84fpISVHHUg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"Wjv6R73VZKJILdOkE/dFR5WNEkwzccnvQ9V2wRkjF04=\", \"salt\": \"+s5tG1d7FapRip+SAbRAAA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"0BRwLgUcnS8VCN68ryJA7nPPgDp2nmy6dfjWRMv+NMQ=\", \"salt\": \"+MLjDs0kcrxvU3oquFQZ1Q==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -2193,23 +2174,23 @@
       }
     },
     {
-      "username": "mariam_tenant_b",
-      "email": "mariam.s2.tenant_b@school.com",
+      "username": "mariam@schoolb.com",
+      "email": "mariam@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Mariam",
-      "lastName": "Student2",
+      "lastName": "(tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"itaMaCRI+xx1wiDpeJMsuWv7apdhA1vzQ+SklRgoYSU=\", \"salt\": \"dXBD+5E2EcCirWxa2cDJPA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"Q0Owa3/TDbJIp9nOdP0Q7z1WoSIV1UKpvInBzOYve4Q=\", \"salt\": \"hJwOtEEWHVOs9gwX8fyhqg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"XMrMeOl6Z6Qxx5WMd+fI+vaOcpVKNqSIB8eHvxlm6+8=\", \"salt\": \"trS1+I9MbeFOq2qMdQ7sVA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"txezH33LSINt58nCu28rX6rjTaNgUxl465ANDNv29wk=\", \"salt\": \"5YrSNoKvBI5KWXMTzisJ/g==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -2227,23 +2208,23 @@
       }
     },
     {
-      "username": "khalid_tenant_b",
-      "email": "khalid.s3.tenant_b@school.com",
+      "username": "khalid@schoolb.com",
+      "email": "khalid@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Khalid",
-      "lastName": "Student3",
+      "lastName": "(tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"Ndwk/LiRI28QyMn65Hz28eF6k1PIhFhk1bwQvAVe9Q4=\", \"salt\": \"Ga+bpxxZZ5igO+xrN+GpNA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"UBryN9b7PAwWs3GpGZ6CA1cZcK9vBHzl7bBm6fmk5VQ=\", \"salt\": \"2jWatXRPg9zfU9m+2OgwLw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"6+skDyJ2ukMn+sMHkQO3YJkoYccTzi6jMkue4t0U+CI=\", \"salt\": \"u+zvYOxL5cmQp+oX1GowKw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"CRLVjS/8ZQKXDAjQJ/xztEmEs32iDtm3D5U4hYUB230=\", \"salt\": \"x2FAn6XycYdlfz5xZKeiYw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -2261,23 +2242,23 @@
       }
     },
     {
-      "username": "fatima_tenant_b",
-      "email": "fatima.s4.tenant_b@school.com",
+      "username": "fatima@schoolb.com",
+      "email": "fatima@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Fatima",
-      "lastName": "Student4",
+      "lastName": "(tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"s4CxY74kiHZvVT9LLiqU2ylltTc5YjTyofJ31LWROAw=\", \"salt\": \"gIRmYA9giqk/zPryFGVl7w==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"BY2/ChUFOHpl5C9JP/LuKkKMZKoyVbZFvbK3Qno+IdQ=\", \"salt\": \"PRyD1rO5aK4oUFrfRXRsFw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"+CJ5EVaIa57jz0KpK2wQoqkz3OTn1NrHbutPVdB4wDU=\", \"salt\": \"533XUUPgkQ9RlaZfJnxvlQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"7Awgkvq4DrPMD3HNxZzKNSxta/cdSIh+UuWeJCIsmuI=\", \"salt\": \"da/3+g6M1x6hca4rhPDKQQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -2295,23 +2276,23 @@
       }
     },
     {
-      "username": "youssef_tenant_b",
-      "email": "youssef.s5.tenant_b@school.com",
+      "username": "youssef@schoolb.com",
+      "email": "youssef@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Youssef",
-      "lastName": "Student5",
+      "lastName": "(tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"U0ceUTUkKZCgN5tPrfraX8sXhZJFKssRMFJVDJWg2pA=\", \"salt\": \"N5ZuuIX2bv9FwMzoNmfRTA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"dMsoTqn7vB+MEYj+QRhG3AVy15ITa1TtB5m+YEZcxb4=\", \"salt\": \"+29wS12mFd8ts7CPe2hRVw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"T5bwk8BbR9RpNfqtTvcG6CbEtv01shdScr0SEH86WrQ=\", \"salt\": \"NYCwkVFK1H8Y13rA1FpLDg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"MFn6vs/IrBaVXOUEljdJ6Wyri6TLLyxWdCBXsb0urOg=\", \"salt\": \"UgRnvSoAEkyQCipAbrRWOg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -2329,23 +2310,23 @@
       }
     },
     {
-      "username": "nour_tenant_b",
-      "email": "nour.s6.tenant_b@school.com",
+      "username": "nour@schoolb.com",
+      "email": "nour@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Nour",
-      "lastName": "Student6",
+      "lastName": "(tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"FuPFAE7MoKYy3cyGogz6UAOghR/UX84jLa+hyOlcsAk=\", \"salt\": \"OOe0fkvgwhK+uNBuhN5Ebw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"WVFkAV/rXa9fl/6XzHw1ACIZsjJC6l11sCVW5rw3zsY=\", \"salt\": \"2HIn3abLApeQpSfRVSqYaw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"5cXhsbeYBrCUYUU5uTQAE5jAvbPTz9SiTCBmsl0MmrA=\", \"salt\": \"K9EmrkzYollUNBXUIKpdyg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"e24+klhfhQrWWT2731eWPyGcqHHhQSnS4HXpwnZ9FI8=\", \"salt\": \"xcD5R8ZC8LYUZmlPk2L2lA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -2363,23 +2344,23 @@
       }
     },
     {
-      "username": "ziad_tenant_b",
-      "email": "ziad.s7.tenant_b@school.com",
+      "username": "ziad@schoolb.com",
+      "email": "ziad@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Ziad",
-      "lastName": "Student7",
+      "lastName": "(tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"TYlLLAJQkBpFXxAjPxOBboLt0qqT4ftD3z+zBifa7rs=\", \"salt\": \"JCSym8mPXnj5Uomx6fOr2g==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"/GjsYykgvKOqZIa9v1ZozRbSkOhv7qzX3oUMGWH+Gxw=\", \"salt\": \"GPbPZEGQdO0jzWUGdJCiUw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"mSgvX3W9X46wosE4ZIyyrxvLS2jaX6VRcKw2Oz1fDyo=\", \"salt\": \"1jLY+HdwSr02Uz1LLKxeiQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"J5v1Xo34Dyivay9GNnjhA4BZiy0z2PeFVX4fPhvvAzA=\", \"salt\": \"HZHJaGfl/1zC+Z5yDc/5MA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -2397,23 +2378,23 @@
       }
     },
     {
-      "username": "layla_tenant_b",
-      "email": "layla.s8.tenant_b@school.com",
+      "username": "layla@schoolb.com",
+      "email": "layla@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Layla",
-      "lastName": "Student8",
+      "lastName": "(tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"h8FjKCxAxmzGtIzT9Lf/7XoxBf2+vKSnpqFmtVSONpA=\", \"salt\": \"PikZU1oc8Vmt1JEJRo//3g==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"6CO0qTizbyi/fC3gySL81bs8Myt6o25pp2fCrz411nI=\", \"salt\": \"ufdN1y5qVsgej3n+yJF36Q==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"R9iagvUGPCIBTReQfFE5IOxjK2spW35/miJrtS6JPSQ=\", \"salt\": \"Op8rpLYAKGWJ8EhPFEDApQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"3d/XRoWyeD6yBCATxN90jHGx6dbDsNf2GhxpKsGi/18=\", \"salt\": \"T8v7GTZBgRROZRb9LLFDXQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -2431,23 +2412,23 @@
       }
     },
     {
-      "username": "tariq_tenant_b",
-      "email": "tariq.s9.tenant_b@school.com",
+      "username": "tariq@schoolb.com",
+      "email": "tariq@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Tariq",
-      "lastName": "Student9",
+      "lastName": "(tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"kZje6nFA9pGEUk87vwaetgm/plJk6dVIoHNCu96qEno=\", \"salt\": \"TGb7ph+PrSjTdim8AXXgmA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"/fF5gZ5dhIz/dtpa1oczEOR70LSv5K5GAoEvBR0jmj8=\", \"salt\": \"K2Is1PVRoemjp89jbHgWxQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"6h0YCQC9wHo/kv3TKEL3Iu6GdeVAkhymMHkgdpuVlc0=\", \"salt\": \"j4uN0Tmp69zaZu6bLqd9Qg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"RZr+Dz036pXvxP+k+/LYqP9cGwUtj4V9oslB5bNq9MY=\", \"salt\": \"1Ltf6O8tqfzRuJ4XszUvBQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -2465,23 +2446,23 @@
       }
     },
     {
-      "username": "hana_tenant_b",
-      "email": "hana.s10.tenant_b@school.com",
+      "username": "hana@schoolb.com",
+      "email": "hana@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Hana",
-      "lastName": "Student10",
+      "lastName": "(tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"3MnlrzB86vVuVcCAlor3zWImqTGdV0rpdtkOsW8UxzM=\", \"salt\": \"AbIWHmZwvoWtmaKYaRXtqQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"QDATVNHoeJ5g2vVPhl6Vm7wXAw5IPJgdfnW8S3yY5f8=\", \"salt\": \"G9C91rboySyCEmVELkiJIw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"uE902Dk1gOfyDzh1SRhjokBntPJIP6t5/KlCcsOt5n0=\", \"salt\": \"jxF+NJElA8MEJc7TjhcQ5g==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"IWKpdaZBhMoH7G56YhM9dm24DPR6MMt1fE5ico+VRLs=\", \"salt\": \"bSJBkU9CtlU+3rgI7fuFiA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -2499,23 +2480,23 @@
       }
     },
     {
-      "username": "sami_tenant_b",
-      "email": "sami.s11.tenant_b@school.com",
+      "username": "sami@schoolb.com",
+      "email": "sami@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Sami",
-      "lastName": "Student11",
+      "lastName": "(tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"UoGfw899dF9fDe9RJRZLpRyqI4LyWqKjmSiRzmHgCeA=\", \"salt\": \"XNt6gfT+NucoJJM5oh9jMQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"/rEfoXk/xMVYhRHXuR75znqMn+7AMLKC21v5OsiZf2k=\", \"salt\": \"k+RzY1kbOrRqaP4Qx2HJgw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"bs0Ij/rpAa9jPU9SQqE9KW8UFzLd5FLz5DJfiJori1s=\", \"salt\": \"RTRF0MbWiywdYgVlZ+oGGA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"x1JWt7eiSAUYfNIbTG+Cbd1atm8K7uo+1BlvcMAxeMY=\", \"salt\": \"GtEgeWPItk7k/AJh9Ui6iQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -2533,23 +2514,23 @@
       }
     },
     {
-      "username": "rana_tenant_b",
-      "email": "rana.s12.tenant_b@school.com",
+      "username": "rana@schoolb.com",
+      "email": "rana@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Rana",
-      "lastName": "Student12",
+      "lastName": "(tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"jFJfgrEDdTSDekn4fZMBfNGc2i89RgIHhv+Jxj+jfcA=\", \"salt\": \"QRQ0wXPXwsz51qAaBIoyng==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"9CbLOl0HPCb3mAEWDXG3wUulJlUzHp6y8Lxg/jLRbC0=\", \"salt\": \"JAXu0rMZkKsrIXCof8uCSA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"fJxXQgEgFFi1vs4mbMZ7Urauv4Vcb03f6vPc5XxwP68=\", \"salt\": \"m1SlpSr46zVXugHFcgRKIw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"TxCs9316fyGI3dfpKoniDOzIq8l6dmm7Gw9oG/wt9vo=\", \"salt\": \"lxIwmPprCcuLNsSidvVPJA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -2567,23 +2548,23 @@
       }
     },
     {
-      "username": "karim_tenant_b",
-      "email": "karim.s13.tenant_b@school.com",
+      "username": "karim@schoolb.com",
+      "email": "karim@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Karim",
-      "lastName": "Student13",
+      "lastName": "(tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"MutBfpu0tX7iYQW+vLA2G7AqLMBJjVm1vyfeRC+teRQ=\", \"salt\": \"JnZxoDwnTtz+M9Yds5dzLA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"QL+vwYQImTN0EZvzMjQ0xBbPx9FzKlMLMO2gur0Kh7U=\", \"salt\": \"VNtlTQg8doyA92M68BxQaQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"FAGHPDBIv48SZk1p/rHaRazJGRmD4O0ZnFPDI8ljFhQ=\", \"salt\": \"snxdk6AjaZP0aT+0YblDBg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"9RA2krT+3OlkC61iwvrpTBxnZW8j+x+Qbg+E6kZfzfc=\", \"salt\": \"Tlr1ARWbojw1bS26xIL7Xg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -2601,23 +2582,23 @@
       }
     },
     {
-      "username": "dalia_tenant_b",
-      "email": "dalia.s14.tenant_b@school.com",
+      "username": "dalia@schoolb.com",
+      "email": "dalia@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Dalia",
-      "lastName": "Student14",
+      "lastName": "(tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"Q3bVDHK4w6gVu8ZGkGpNGyqLdq0iK5rCWcR2tP/pxZw=\", \"salt\": \"R2jvLwh/0PjLHqOXO11rig==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"tOjjftnSN9XiM6TmotgNlO5nWpiFVlTGjHF+QVo2MRI=\", \"salt\": \"HdfLtm13boAPwlAMXO7zGQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"NL9yCV1rVpiWOIn9hcebBYAKKpfYIcCHYuHZYkKx6pA=\", \"salt\": \"5/+DUHWPe1gULYa+YXOVTQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"FuamA7ZniFkglu2YvrY3/DPL5BsaUzppQZDT9MqxLBo=\", \"salt\": \"stW8pFihdayLyXtYiaiqog==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -2635,23 +2616,23 @@
       }
     },
     {
-      "username": "rami_tenant_b",
-      "email": "rami.s15.tenant_b@school.com",
+      "username": "rami@schoolb.com",
+      "email": "rami@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Rami",
-      "lastName": "Student15",
+      "lastName": "(tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"Gn7fUXte+if8vQhpTTD1KIugzfgvc3ZftvTHFXuLz8A=\", \"salt\": \"6U6k4KXCQDmN5rCvb/kx5w==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"4SzUpHqrbARHocRytRYmvWpdgxUuSMbsuJATwNuS8jM=\", \"salt\": \"6Vr32QaaY44IusWU+vCnjQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"ZmK6Kx0xMMWof8KNC8x2ECjacl+4emFdSwS6+6gxTw4=\", \"salt\": \"60cDhtbuYLbQ6s+6d4qzIg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"0YAjj5GMyKe9qltBeYzffYx+v1budjz4Opzq2ISJpbI=\", \"salt\": \"VgYIxJbMh414HkLOAgUegw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -2669,23 +2650,23 @@
       }
     },
     {
-      "username": "heba_tenant_b",
-      "email": "heba.s16.tenant_b@school.com",
+      "username": "heba@schoolb.com",
+      "email": "heba@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Heba",
-      "lastName": "Student16",
+      "lastName": "(tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"0ssZ/ugS3UN/670k92X270Dryk6hBAJR9hVinwNNTrY=\", \"salt\": \"JGpWD35Gg4MI8PCIk3o/zw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"1jS0si7RsH+sNCqqbHhfmEiTg68Kht1ccTmFUbOBLjA=\", \"salt\": \"LtDRmc2LObDdDF70uIW9PQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"H+w9wEKKVTtXDeMP+lhKUOcCca5ur10qfEwGVXQyyXY=\", \"salt\": \"wI6ana523vkkxkAE+3EL9Q==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"KrtExO56i22Y9qDeS+hI8v1pwCnYanQMeB42C5iFFwo=\", \"salt\": \"0tl7WmmdmqgqPQixTnCYlg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -2703,23 +2684,23 @@
       }
     },
     {
-      "username": "adel_tenant_b",
-      "email": "adel.s17.tenant_b@school.com",
+      "username": "adel@schoolb.com",
+      "email": "adel@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Adel",
-      "lastName": "Student17",
+      "lastName": "(tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"Vcx5kMFNnb9Nb47DDx9u/UXyOAjipCkLBELKZ3bUKtE=\", \"salt\": \"IbTh89Fi72Czm120i2QxVA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"YYjM6VnsGFVgzzVRVDqqCqIj+Ofp7BMW/IuOti8UHwM=\", \"salt\": \"ECw1QZ4v64RodyElCueOSQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"5jMpTXZH+Xss3sIH52XAZtsFu7ix9pHwQ2gw4Q+/AHM=\", \"salt\": \"cMJp7hO4CYTIZBtaipYhZw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"HUVV3zKadrWIWssWVKwpLaTp+VZBvd+jOMvpu5dUGtk=\", \"salt\": \"41OOZq+aiUBR2crrUzzngg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -2737,23 +2718,23 @@
       }
     },
     {
-      "username": "salma_tenant_b",
-      "email": "salma.s18.tenant_b@school.com",
+      "username": "salma@schoolb.com",
+      "email": "salma@schoolb.com",
       "enabled": true,
       "emailVerified": true,
       "firstName": "Salma",
-      "lastName": "Student18",
+      "lastName": "(tenant_b)",
       "credentials": [
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"UXWScEDoJNyz7jp8zOP9vCqB0QNmi0WZf4IVBPARt1w=\", \"salt\": \"bbE8r9TrTvyuoLCP98j2Ig==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"Auj5ln30j4ypajKzFrVdU3oJCeTg8w0eTHi51BEX8mo=\", \"salt\": \"tjQji7ZsTYuPEpSyWOq0NQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"VtEP3FwbsCvEVs59Jne3nALBncdp40/qr1nPJiZv8pc=\", \"salt\": \"U0WvIu4uIkPN6RPqJF1QOA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"WJ4oqlF/pCJjcQqewUFBjb8Nxzs4P/Vxm0ZwNZOMZzw=\", \"salt\": \"v/gqqqP41dnTPqVPkQnMQA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
@@ -2781,8 +2762,40 @@
       "standardFlowEnabled": true,
       "implicitFlowEnabled": false,
       "redirectUris": [
+        "http://localhost:5173",
+        "http://localhost:5173/",
+        "http://localhost:5173/*",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5173/",
+        "http://127.0.0.1:5173/*",
+        "http://localhost:5174",
+        "http://localhost:5174/",
+        "http://localhost:5174/*",
+        "http://127.0.0.1:5174",
+        "http://127.0.0.1:5174/",
+        "http://127.0.0.1:5174/*",
+        "http://localhost:3000",
+        "http://localhost:3000/",
         "http://localhost:3000/*",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3000/",
         "http://127.0.0.1:3000/*",
+        "http://localhost:9080",
+        "http://localhost:9080/",
+        "http://localhost:9080/*",
+        "http://127.0.0.1:9080",
+        "http://127.0.0.1:9080/",
+        "http://127.0.0.1:9080/*",
+        "http://localhost:8000",
+        "http://localhost:8000/",
+        "http://localhost:8000/*",
+        "http://127.0.0.1:8000",
+        "http://127.0.0.1:8000/",
+        "http://127.0.0.1:8000/*",
+        "http://localhost:*",
+        "http://localhost:*/*",
+        "http://127.0.0.1:*",
+        "http://127.0.0.1:*/*",
         "*"
       ],
       "webOrigins": [

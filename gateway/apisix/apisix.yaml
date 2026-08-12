@@ -1,0 +1,13 @@
+routes:
+  -
+    uri: /api/v1/*
+    plugins:
+      limit-count:
+        count: 3000
+        time_window: 60
+        rejected_code: 429
+    upstream:
+      nodes:
+        "host.docker.internal:8001": 1
+      type: roundrobin
+#END

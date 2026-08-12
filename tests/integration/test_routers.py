@@ -16,7 +16,8 @@ class TestAuthRouter:
         reg_payload = {
             "email": "sa@desk.com",
             "password": "sapassword123",
-            "role": "super_admin"
+            "role": "super_admin",
+            "invite_code": "regester123"
         }
         reg_resp = await test_client.post("/api/v1/auth/register", json=reg_payload)
         assert reg_resp.status_code == 200
@@ -35,7 +36,8 @@ class TestAuthRouter:
             "email": "parent@school.com",
             "password": "parentpassword",
             "role": "parent",
-            "tenant_id": "tenant_a"
+            "tenant_id": "tenant_a",
+            "invite_code": "regester123"
         }
         reg_resp = await test_client.post("/api/v1/auth/register", json=reg_payload)
         assert reg_resp.status_code == 200
@@ -70,7 +72,8 @@ class TestAuthRouter:
             "email": "student@school.com",
             "password": "studentpass",
             "role": "student",
-            "tenant_id": "tenant_a"
+            "tenant_id": "tenant_a",
+            "invite_code": "regester123"
         }
         reg_resp = await test_client.post("/api/v1/auth/register", json=reg_payload)
         assert reg_resp.status_code == 200
@@ -246,7 +249,8 @@ class TestStudentsAndClassesRouter:
             "email": "student@class.com",
             "password": "pass",
             "role": "student",
-            "tenant_id": "tenant_a"
+            "tenant_id": "tenant_a",
+            "invite_code": "regester123"
         }
         s_reg = await test_client.post("/api/v1/auth/register", json=s_payload)
         s_headers = {"Authorization": f"Bearer {s_reg.json()['access_token']}"}
@@ -279,7 +283,8 @@ class TestStudentsAndClassesRouter:
             "email": "parent_wf_new@class.com",
             "password": "pass",
             "role": "parent",
-            "tenant_id": "tenant_a"
+            "tenant_id": "tenant_a",
+            "invite_code": "regester123"
         }
         p_reg = await test_client.post("/api/v1/auth/register", json=p_payload)
         p_headers = {"Authorization": f"Bearer {p_reg.json()['access_token']}"}
@@ -358,7 +363,8 @@ class TestStudentsAndClassesRouter:
             "email": "student2@class.com",
             "password": "pass",
             "role": "student",
-            "tenant_id": "tenant_a"
+            "tenant_id": "tenant_a",
+            "invite_code": "regester123"
         }
         s_reg = await test_client.post("/api/v1/auth/register", json=s_payload)
         s_headers = {"Authorization": f"Bearer {s_reg.json()['access_token']}"}
@@ -374,7 +380,8 @@ class TestStudentsAndClassesRouter:
             "email": "parent2@class.com",
             "password": "pass",
             "role": "parent",
-            "tenant_id": "tenant_a"
+            "tenant_id": "tenant_a",
+            "invite_code": "regester123"
         }
         p_reg = await test_client.post("/api/v1/auth/register", json=p_payload)
         p_headers = {"Authorization": f"Bearer {p_reg.json()['access_token']}"}
@@ -469,7 +476,8 @@ class TestStudentsAndClassesRouter:
             "email": "student3@class.com",
             "password": "pass",
             "role": "student",
-            "tenant_id": "tenant_a"
+            "tenant_id": "tenant_a",
+            "invite_code": "regester123"
         }
         s_reg = await test_client.post("/api/v1/auth/register", json=s_payload)
         s_headers = {"Authorization": f"Bearer {s_reg.json()['access_token']}"}
@@ -560,8 +568,8 @@ class TestStudentsAndClassesRouter:
         lvl_resp = await test_client.post("/api/v1/students/levels", json={"name": "Grade 9"}, headers=t_headers)
         lvl_id = lvl_resp.json()["level_id"]
 
-        teachers_list = await test_client.get("/api/v1/students/teachers", headers=t_headers)
-        t_id = teachers_list.json()[0]["id"]
+        t_me = await test_client.get("/api/v1/auth/me", headers=t_headers)
+        t_id = int(t_me.json()["user_id"])
 
         cls_resp = await test_client.post("/api/v1/students/classes", json={"name": "Science G", "level_id": lvl_id, "head_teacher_id": t_id}, headers=t_headers)
         class_id = cls_resp.json()["id"]
@@ -571,7 +579,8 @@ class TestStudentsAndClassesRouter:
             "email": "parent4@class.com",
             "password": "pass",
             "role": "parent",
-            "tenant_id": "tenant_a"
+            "tenant_id": "tenant_a",
+            "invite_code": "regester123"
         }
         p_reg = await test_client.post("/api/v1/auth/register", json=p_payload)
         p_headers = {"Authorization": f"Bearer {p_reg.json()['access_token']}"}
@@ -583,7 +592,8 @@ class TestStudentsAndClassesRouter:
             "email": "student4@class.com",
             "password": "pass",
             "role": "student",
-            "tenant_id": "tenant_a"
+            "tenant_id": "tenant_a",
+            "invite_code": "regester123"
         }
         s_reg = await test_client.post("/api/v1/auth/register", json=s_payload)
         s_headers = {"Authorization": f"Bearer {s_reg.json()['access_token']}"}
@@ -649,12 +659,12 @@ class TestStudentsAndClassesRouter:
         class_b_id = cls2_resp.json()["id"]
 
         # 2. Setup 2 Students (Child 1 in Class A, Child 2 in Class B)
-        s1_reg = await test_client.post("/api/v1/auth/register", json={"email": "child1@school.com", "password": "pass", "role": "student", "tenant_id": "tenant_a"})
+        s1_reg = await test_client.post("/api/v1/auth/register", json={"email": "child1@school.com", "password": "pass", "role": "student", "tenant_id": "tenant_a", "invite_code": "regester123"})
         s1_headers = {"Authorization": f"Bearer {s1_reg.json()['access_token']}"}
         s1_me = await test_client.get("/api/v1/auth/me", headers=s1_headers)
         child1_id = int(s1_me.json()["user_id"])
 
-        s2_reg = await test_client.post("/api/v1/auth/register", json={"email": "child2@school.com", "password": "pass", "role": "student", "tenant_id": "tenant_a"})
+        s2_reg = await test_client.post("/api/v1/auth/register", json={"email": "child2@school.com", "password": "pass", "role": "student", "tenant_id": "tenant_a", "invite_code": "regester123"})
         s2_headers = {"Authorization": f"Bearer {s2_reg.json()['access_token']}"}
         s2_me = await test_client.get("/api/v1/auth/me", headers=s2_headers)
         child2_id = int(s2_me.json()["user_id"])
@@ -664,7 +674,7 @@ class TestStudentsAndClassesRouter:
         await repo.create_student(child2_id, "Sami (Class B)", class_b_id)
 
         # 3. Setup Parent linked to BOTH Child 1 and Child 2
-        p_reg = await test_client.post("/api/v1/auth/register", json={"email": "parent_two_kids@school.com", "password": "pass", "role": "parent", "tenant_id": "tenant_a"})
+        p_reg = await test_client.post("/api/v1/auth/register", json={"email": "parent_two_kids@school.com", "password": "pass", "role": "parent", "tenant_id": "tenant_a", "invite_code": "regester123"})
         p_headers = {"Authorization": f"Bearer {p_reg.json()['access_token']}"}
         p_me = await test_client.get("/api/v1/auth/me", headers=p_headers)
         parent_id = int(p_me.json()["user_id"])
@@ -754,7 +764,8 @@ class TestNotificationsRouter:
             "email": "student@notif.com",
             "password": "pass",
             "role": "student",
-            "tenant_id": "tenant_a"
+            "tenant_id": "tenant_a",
+            "invite_code": "regester123"
         }
         s_reg = await test_client.post("/api/v1/auth/register", json=s_payload)
         s_headers = {"Authorization": f"Bearer {s_reg.json()['access_token']}"}
@@ -812,7 +823,8 @@ class TestStudentHealthRouter:
             "email": "student@health.com",
             "password": "pass",
             "role": "student",
-            "tenant_id": "tenant_a"
+            "tenant_id": "tenant_a",
+            "invite_code": "regester123"
         }
         s_reg = await test_client.post("/api/v1/auth/register", json=s_payload)
         s_me = await test_client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {s_reg.json()['access_token']}"})
@@ -953,7 +965,8 @@ class TestAdminStaffCreation:
             "email": "school_admin@test.com",
             "password": "pass",
             "role": "school_admin",
-            "tenant_id": "tenant_a"
+            "tenant_id": "tenant_a",
+            "invite_code": "regester123"
         }
         admin_reg = await test_client.post("/api/v1/auth/register", json=admin_payload)
         admin_headers = {"Authorization": f"Bearer {admin_reg.json()['access_token']}"}

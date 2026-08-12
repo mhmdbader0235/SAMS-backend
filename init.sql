@@ -8,6 +8,9 @@
 CREATE EXTENSION IF NOT EXISTS citext;     -- Case-insensitive text (email)
 CREATE EXTENSION IF NOT EXISTS pgcrypto;   -- gen_random_uuid()
 
+-- Keycloak Schema (isolated namespace for OIDC data)
+CREATE SCHEMA IF NOT EXISTS keycloak;
+
 -- =============================================================================
 -- 1. CONTROL-PLANE TABLES (in public schema — the default)
 -- =============================================================================
@@ -54,7 +57,7 @@ CREATE TABLE IF NOT EXISTS super_admins (
 
 CREATE INDEX IF NOT EXISTS idx_super_admins_email ON super_admins(email);
 
--- Parent-Child Cross-DB Link Table
+-- Parent-Child Cross-SCHEMA Link Table
 CREATE TABLE IF NOT EXISTS parent_child_links (
     id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     parent_id  UUID        NOT NULL REFERENCES parents(id) ON DELETE CASCADE,
@@ -74,6 +77,42 @@ CREATE TABLE IF NOT EXISTS parent_tenant_links (
     PRIMARY KEY (parent_id, tenant_id)
 );
 
+-- Invitations Table
+CREATE TABLE IF NOT EXISTS invitations (
+    id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    code          VARCHAR(100) UNIQUE NOT NULL,
+    tenant_id     VARCHAR(50) NOT NULL REFERENCES tenants(tenant_id) ON DELETE CASCADE,
+    role          TEXT        NOT NULL CHECK (role IN ('school_admin', 'teacher', 'parent', 'student', 'manager', 'finance', 'event_teacher', 'pending', 'super_admin')),
+    target_email  CITEXT      DEFAULT NULL,
+    max_uses      INTEGER     NOT NULL DEFAULT 1,
+    uses_count    INTEGER     NOT NULL DEFAULT 0,
+    expires_at    TIMESTAMPTZ NOT NULL,
+    created_by    UUID        DEFAULT NULL,
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    is_active     BOOLEAN     NOT NULL DEFAULT TRUE
+);
+
+-- User-to-tenant mapping table — used to resolve which tenant a Keycloak user belongs to
+CREATE TABLE IF NOT EXISTS user_tenant_map (
+    email      CITEXT      NOT NULL,
+    tenant_id  VARCHAR(50) NOT NULL REFERENCES tenants(tenant_id) ON DELETE CASCADE,
+    role       TEXT        NOT NULL DEFAULT 'student',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (email)
+);
+
+-- Audit log for pre-provisioned user invitations
+CREATE TABLE IF NOT EXISTS user_invitations (
+    id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    email         CITEXT      NOT NULL,
+    tenant_id     VARCHAR(50) NOT NULL REFERENCES tenants(tenant_id) ON DELETE CASCADE,
+    role          TEXT        NOT NULL,
+    inviter_id    TEXT        DEFAULT NULL,
+    status        TEXT        NOT NULL DEFAULT 'pending',
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+
 
 -- =============================================================================
 -- 2. TENANT SCHEMA: tenant_a (isolated logical schema)
@@ -85,7 +124,7 @@ CREATE SCHEMA IF NOT EXISTS tenant_a;
 CREATE TABLE IF NOT EXISTS tenant_a.users (
     id            BIGSERIAL   PRIMARY KEY,
     email         CITEXT      UNIQUE NOT NULL,
-    role          TEXT        NOT NULL CHECK (role IN ('school_admin', 'teacher', 'parent', 'student', 'manager', 'super_admin')),
+    role          TEXT        NOT NULL CHECK (role IN ('school_admin', 'teacher', 'parent', 'student', 'manager', 'finance', 'event_teacher', 'pending', 'super_admin')),
     password_hash TEXT        NOT NULL,
     phone         VARCHAR(50) DEFAULT NULL,
     address       TEXT        DEFAULT NULL,
@@ -304,7 +343,7 @@ CREATE SCHEMA IF NOT EXISTS tenant_b;
 CREATE TABLE IF NOT EXISTS tenant_b.users (
     id            BIGSERIAL   PRIMARY KEY,
     email         CITEXT      UNIQUE NOT NULL,
-    role          TEXT        NOT NULL CHECK (role IN ('school_admin', 'teacher', 'parent', 'student', 'manager', 'super_admin')),
+    role          TEXT        NOT NULL CHECK (role IN ('school_admin', 'teacher', 'parent', 'student', 'manager', 'finance', 'event_teacher', 'pending', 'super_admin')),
     password_hash TEXT        NOT NULL,
     phone         VARCHAR(50) DEFAULT NULL,
     address       TEXT        DEFAULT NULL,
