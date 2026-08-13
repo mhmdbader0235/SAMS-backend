@@ -72,3 +72,19 @@ class TestRoleMapping:
             user_role=["school_admin"],
             allowed_roles={"school_admin", "super_admin"}
         ) is True
+
+    def test_admin_role_alias_mapping(self):
+        admin_alias_user = CurrentUser(
+            user_id="admin_456",
+            tenant_id="tenant_a",
+            role="admin",
+            roles=["admin"]
+        )
+        assert admin_alias_user.has_role("school_admin") is True
+        assert admin_alias_user.has_role("admin") is True
+        assert admin_alias_user.has_role("user:view") is True
+        assert TenantService._has_intersection(
+            user_role=["admin"],
+            allowed_roles={"school_admin", "super_admin", "admin"}
+        ) is True
+

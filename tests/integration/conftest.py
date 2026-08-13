@@ -10,14 +10,21 @@ async def clean_db(db_pool: asyncpg.Pool):
     """
     yield
     async with db_pool.acquire() as conn:
-        await conn.execute(
-            """
-            TRUNCATE TABLE 
-                parents, super_admins, tenants, parent_child_links,
-                users, levels, students, class, teachers, parenets,
-                event, event_class_map, enrollment,
-                payments, event_feedback, notifications, student_health_and_records,
-                resource_types, resources, resource_cost, student_parent_map
-            CASCADE
-            """
-        )
+        try:
+            await conn.execute('SET search_path TO "tenant_a", public;')
+            # Truncate tenant and control plane tables safely
+            tables = [
+                "user_tenant_map", "parent_child_links", "parent_tenant_links",
+                "invitations", "parents", "super_admins", "event_feedback",
+                "payments", "enrollment", "event_class_map", "resource_cost",
+                "resources", "resource_types", "notifications", "student_health_and_records",
+                "student_parent_map", "students", "class", "teachers", "parenets",
+                "levels", "users"
+            ]
+            for t in tables:
+                try:
+                    await conn.execute(f"TRUNCATE TABLE {t} RESTART IDENTITY CASCADE;")
+                except Exception:
+                    pass
+        except Exception:
+            pass

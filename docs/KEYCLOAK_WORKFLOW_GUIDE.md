@@ -4,38 +4,10 @@ This document explains the unified authentication, authorization, and permission
 
 ---
 
-## 1. Authentication & Authorization Workflow
+1. Keycloak handles **Authentication (AuthN ONLY)**: User login, identity verification, and issuing signed JWTs with `sub`, `roles`, and `tenant_id`. Keycloak does **NOT** enforce authorization rules.
+2. Apache APISIX validates JWT signatures at the network edge.
+3. Open Policy Agent (OPA) handles **Authorization (AuthZ)**: The FastAPI Service Layer queries OPA (`http://opa:8181/v1/data/school/authz/allow`) for access control decisions.
 
-The following diagram illustrates how authentication claims propagate through the microservices infrastructure when a user logs in:
-
-```mermaid
-sequenceDiagram
-    autonumber
-    actor User as Client (User)
-    participant Front as Vue 3 Client
-    participant KC as Keycloak (IdP)
-    participant GW as APISIX Gateway
-    participant API as FastAPI Backend
-
-    User->>Front: Access Application
-    Front->>KC: Redirect to OIDC Login Page
-    User->>KC: Enter Credentials (Invite Passphrase)
-    KC-->>Front: Auth Code & Redirect to App
-    Front->>KC: Exchange Code for OIDC tokens
-    KC-->>Front: Return JWT Access Token (with Roles in realm_access)
-    
-    Note over Front: Token saved in local storage / Keycloak Adapter
-    
-    Front->>GW: API Request (Auth: Bearer JWT)
-    Note over GW: Upstream validation & header passing
-    GW->>API: Proxy Request (Bearer JWT)
-    
-    Note over API: dependency: get_current_user decodes claims
-    API->>API: Map granular permissions to capability buckets
-    
-    API-->>Front: Return Authorized JSON Payload
-    Front-->>User: Dynamic UI updates instantly based on active role
-```
 
 ### Flow Breakdown:
 1. **OIDC Redirect**: The Vue 3 client detects a login request and redirects the user to Keycloak.

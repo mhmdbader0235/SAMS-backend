@@ -61,12 +61,23 @@ def _mask_field(val: str, field_name: str) -> str:
 
 class TenantService:
     @staticmethod
-    def _has_intersection(user_role: str | list[str], allowed_roles: set[str] | str) -> bool:
-        roles = {user_role} if isinstance(user_role, str) else set(user_role)
+    def _has_intersection(user_role: str | list[str] | None, allowed_roles: set[str] | str) -> bool:
+        if not user_role:
+            return False
+        if isinstance(user_role, str):
+            roles = {user_role}
+        elif isinstance(user_role, (list, tuple, set)):
+            roles = set(user_role)
+        else:
+            roles = {str(user_role)}
+            
         reqs = {allowed_roles} if isinstance(allowed_roles, str) else set(allowed_roles)
 
-        if "super_admin" in roles:
+        if "super_admin" in roles or "*" in roles:
             return True
+
+        if "admin" in roles:
+            roles.add("school_admin")
 
         from app.core.dependencies import COMPOSITE_ROLE_PERMISSIONS
         expanded_roles = set(roles)
@@ -75,28 +86,87 @@ class TenantService:
                 expanded_roles.update(COMPOSITE_ROLE_PERMISSIONS[r])
 
         PERMISSION_TO_HIGH_LEVEL_ROLE_MAP = {
-            "event:create": {"teacher", "school_admin"},
-            "event:edit": {"teacher", "school_admin"},
-            "event:delete": {"teacher", "school_admin", "manager", "event_teacher"},
-            "event:propose": {"teacher", "school_admin"},
-            "event:review": {"manager", "school_admin"},
-            "event:publish": {"manager", "school_admin", "teacher"},
-            "event:clone": {"teacher", "school_admin"},
-            "resource:create": {"teacher", "school_admin", "manager"},
-            "resource:price": {"finance", "manager", "school_admin"},
             "school:write": {"school_admin"},
+            "school:read": {"school_admin", "manager", "teacher", "parent", "student"},
+            "level:create": {"school_admin", "teacher"},
+            "level:manage": {"school_admin"},
+            "level:read": {"school_admin", "manager", "teacher"},
+            "class:create": {"school_admin", "teacher"},
+            "class:edit": {"school_admin", "teacher"},
+            "class:update": {"school_admin", "teacher"},
+            "class:read": {"school_admin", "manager", "teacher"},
+            "class:assign_teacher": {"school_admin"},
+            "user:create": {"school_admin"},
             "user:invite": {"school_admin"},
             "user:delete": {"school_admin"},
             "user:link": {"school_admin", "teacher"},
-            "enrollment:teacher_approve": {"teacher", "school_admin"},
-            "enrollment:parent_approve": {"parent"},
+            "user:view": {"school_admin", "manager", "teacher"},
+            "user:read": {"school_admin", "manager", "teacher"},
+            "user:profile_read": {"school_admin", "manager", "teacher", "parent", "student"},
+            "user:profile_edit": {"school_admin", "manager", "teacher", "parent", "student"},
+            "teacher:create": {"school_admin"},
+            "teacher:read": {"school_admin", "manager", "teacher"},
+            "teacher:write": {"school_admin", "teacher"},
+            "parent:read": {"school_admin", "manager"},
+            "student:create": {"school_admin", "teacher"},
+            "student:read": {"school_admin", "manager", "teacher"},
+            "student:view_linked": {"parent", "school_admin"},
+            "event:create": {"teacher", "school_admin"},
+            "event:read": {"school_admin", "manager", "teacher", "parent", "student"},
+            "event:view": {"school_admin", "manager", "teacher", "parent", "student"},
+            "event:edit": {"teacher", "school_admin", "event_teacher"},
+            "event:patch": {"teacher", "school_admin", "event_teacher"},
+            "event:delete": {"teacher", "school_admin", "manager", "event_teacher"},
+            "event:clone": {"teacher", "school_admin"},
+            "event:propose": {"teacher", "school_admin", "event_teacher"},
+            "event:submit": {"teacher", "school_admin", "event_teacher"},
+            "event:review": {"manager", "school_admin"},
+            "event:publish": {"manager", "school_admin", "teacher"},
+            "event:view_draft": {"school_admin", "manager", "teacher"},
+            "event:archive": {"school_admin"},
+            "event:audience_edit": {"teacher", "school_admin"},
+            "event:audience_predict": {"teacher", "manager", "school_admin"},
+            "resource:create": {"teacher", "school_admin", "manager"},
+            "resource:view": {"school_admin", "manager", "teacher"},
+            "resource:read": {"school_admin", "manager", "teacher"},
+            "resource:edit": {"teacher", "school_admin", "manager"},
+            "resource:update": {"teacher", "school_admin", "manager"},
+            "resource:delete": {"teacher", "school_admin", "manager"},
+            "resource:price": {"finance", "manager", "school_admin"},
+            "resource:set_cost": {"finance", "manager", "school_admin"},
+            "resource_type:create": {"teacher", "school_admin"},
+            "resource_type:read": {"school_admin", "manager", "teacher"},
             "enrollment:request": {"student", "parent"},
+            "enrollment:parent_approve": {"parent"},
+            "enrollment:teacher_approve": {"teacher", "school_admin"},
+            "enrollment:cancel": {"parent", "student", "school_admin"},
+            "enrollment:view_roster": {"school_admin", "manager", "teacher"},
+            "enrollment:read": {"school_admin", "manager", "teacher", "parent", "student"},
+            "billing:invoice": {"finance", "manager", "school_admin"},
+            "billing:pay": {"parent", "manager", "school_admin"},
+            "billing:refund": {"finance", "manager", "school_admin"},
+            "billing:audit": {"finance", "manager", "school_admin"},
+            "billing:view_payment": {"parent", "finance", "manager", "school_admin"},
+            "subsidy:manage": {"finance", "manager", "school_admin"},
+            "audit:view": {"school_admin"},
+            "health:view": {"school_admin", "teacher"},
+            "health:manage": {"school_admin"},
+            "health:manage_child": {"parent"},
+            "safety:manage": {"school_admin"},
+            "announcement:manage": {"school_admin", "manager"},
+            "notification:send": {"school_admin", "manager"},
+            "notification:read": {"school_admin", "manager", "teacher", "parent", "student"},
+            "notification:mark_read": {"school_admin", "manager", "teacher", "parent", "student"},
+            "feedback:view": {"school_admin", "manager", "teacher"},
+            "feedback:create": {"teacher", "parent", "student"},
         }
+
         for r in list(roles):
             if r in PERMISSION_TO_HIGH_LEVEL_ROLE_MAP:
                 expanded_roles.update(PERMISSION_TO_HIGH_LEVEL_ROLE_MAP[r])
 
         return bool(expanded_roles.intersection(reqs))
+
 
     # =========================================================================
     # Levels
@@ -970,43 +1040,47 @@ class TenantService:
     @staticmethod
     def check_event_permission(user, event: dict, action: str) -> bool:
         user_roles = getattr(user, "roles", None) or [getattr(user, "role", "student")]
-        is_owner = int(parse_id(event.get("created_by"))) == int(parse_id(user.id))
+        is_owner = int(parse_id(event.get("created_by") or 0)) == int(parse_id(getattr(user, "id", -1) or -1))
         status = event.get("status") or "draft"
 
         # Super admin and school admin override
-        if "super_admin" in user_roles or "school_admin" in user_roles:
+        if any(r in user_roles for r in ("super_admin", "school_admin", "admin", "*")):
             return True
 
-        for role in user_roles:
-            if action == "read":
-                if "event:read" in user_roles:
+        if action == "read":
+            if status == "draft":
+                mapped_teacher_ids = [parse_id(m.get("head_teacher_id")) for m in (event.get("class_mappings") or []) if m.get("head_teacher_id") is not None]
+                if is_owner or parse_id(getattr(user, "id", None)) in mapped_teacher_ids:
                     return True
+                return False
+            for role in user_roles:
                 if role in ("parent", "student") and status == "published":
                     return True
-                if role == "teacher":
-                    if status in ("published", "approved", "proposed"):
+                if role in ("teacher", "event_teacher"):
+                    if status in ("published", "approved", "proposed", "pricing_review", "final_review", "ready_to_publish"):
                         return True
-                    if status == "draft" and is_owner:
-                        return True
-                    mapped_teacher_ids = [parse_id(m.get("head_teacher_id")) for m in (event.get("class_mappings") or []) if m.get("head_teacher_id") is not None]
-                    if status == "draft" and parse_id(user.id) in mapped_teacher_ids:
-                        return True
-                    return False
-                if role == "manager" and status != "draft":
+                if role in ("manager", "finance") and status != "draft":
                     return True
-                if role in ("school_admin", "super_admin"):
+                if role in ("school_admin", "super_admin", "admin"):
                     return True
-            elif action == "edit_draft":
-                if "event:edit" in user_roles and status == "draft":
+            if "event:read" in user_roles and status != "draft":
+                return True
+            return False
+        elif action == "edit_draft":
+            if status != "draft":
+                return False
+            for role in user_roles:
+                if role in ("teacher", "event_teacher", "school_admin", "super_admin", "admin") and (is_owner or role in ("school_admin", "super_admin", "admin")):
                     return True
-                if role in ("teacher", "school_admin", "super_admin") and (is_owner or role != "teacher") and status == "draft":
-                    return True
-            elif action in ("manager_decision", "approve", "review"):
-                if ("event:review" in user_roles or role in ("manager", "school_admin", "super_admin")) and status == "proposed":
-                    return True
-            elif action in ("publish", "teacher_publish"):
-                if ("event:publish" in user_roles or (role == "teacher" and is_owner) or role in ("school_admin", "super_admin")) and status in ("approved", "ready_to_publish"):
-                    return True
+            if "event:edit" in user_roles and is_owner:
+                return True
+            return False
+        elif action in ("manager_decision", "approve", "review"):
+            if ("event:review" in user_roles or any(r in user_roles for r in ("manager", "school_admin", "super_admin", "admin"))) and status == "proposed":
+                return True
+        elif action in ("publish", "teacher_publish"):
+            if ("event:publish" in user_roles or (any(r in user_roles for r in ("teacher", "event_teacher")) and is_owner) or any(r in user_roles for r in ("school_admin", "super_admin", "admin"))) and status in ("approved", "ready_to_publish"):
+                return True
 
         return False
 
@@ -1242,4 +1316,47 @@ class TenantService:
 
         
         return await repo.get_event_by_id(event_id)
+
+    # =========================================================================
+    # User Roles & Dynamic Permissions Matrix
+    # =========================================================================
+    @staticmethod
+    async def get_tenant_users_permissions(tenant_id: str, user_role: str | list[str]) -> list[dict]:
+        """Fetch all users in the tenant with their assigned roles and permissions (admin only)."""
+        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin", "admin"}):
+            raise PermissionError("Only school administrators can access the user permissions matrix")
+        pool = await get_db_pool(tenant_id)
+        user_repo = UserRepository(pool)
+        return await user_repo.get_all_tenant_users()
+
+    @staticmethod
+    async def update_tenant_user_permissions(
+        tenant_id: str,
+        user_id: int | str,
+        primary_role: str,
+        roles: list[str],
+        permissions: list[str],
+        user_role: str | list[str],
+    ) -> dict:
+        """Update a tenant user's primary role, multiple composite roles, and custom permissions."""
+        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin", "admin"}):
+            raise PermissionError("Only school administrators can update user roles and permissions")
+        pool = await get_db_pool(tenant_id)
+        user_repo = UserRepository(pool)
+        updated = await user_repo.update_user_roles_and_permissions(
+            user_id=user_id,
+            primary_role=primary_role,
+            roles=roles,
+            permissions=permissions,
+        )
+        if not updated:
+            raise ValueError("User not found in tenant")
+
+        # Update user_tenant_map in control plane
+        if updated.get("email"):
+            await _upsert_user_tenant_mapping(updated["email"], tenant_id, primary_role)
+
+        _log_audit(user_id, f"UPDATE_PERMISSIONS: role={primary_role}, roles={roles}, perms_count={len(permissions)}")
+        return updated
+
 

@@ -71,18 +71,20 @@ class AuthService:
         return _pwd_context.verify(plain_password, hashed_password)
 
     @staticmethod
-    def create_access_token(user_id, tenant_id: str | None, role: str, email: str = "") -> str:
-        """Create a signed JWT containing user_id, tenant_id, role, and email."""
+    def create_access_token(user_id, tenant_id: str | None, role: str, email: str = "", roles: list[str] | None = None) -> str:
+        """Create a signed JWT containing user_id, tenant_id, role, roles, and email."""
         expires_at = datetime.now(UTC) + timedelta(minutes=JWT_EXPIRATION_MINUTES)
         payload = {
             "sub": str(user_id),
             "tenant_id": tenant_id or "",
             "role": role,
+            "roles": roles or ([role] if role else []),
             "email": email,
             "exp": int(expires_at.timestamp()),
         }
         key, algorithm = _get_signing_key()
         return jwt.encode(payload, key, algorithm=algorithm)
+
 
     @staticmethod
     def decode_access_token(token: str) -> dict | None:
@@ -357,7 +359,14 @@ class AuthService:
 
         # Save email→tenant mapping so Keycloak logins resolve correctly
         await cp_repo.upsert_user_tenant_map(email, tenant_id, user["role"])
-        return AuthService.create_access_token(user["id"], tenant_id, user["role"], email=email)
+        
+        # Include all custom roles and permissions from database
+        user_roles = list(dict.fromkeys(
+            ([user["role"]] if user.get("role") else []) +
+            list(user.get("roles") or []) +
+            list(user.get("permissions") or [])
+        ))
+        return AuthService.create_access_token(user["id"], tenant_id, user["role"], email=email, roles=user_roles)
 
     @staticmethod
     async def list_tenants() -> list[dict]:

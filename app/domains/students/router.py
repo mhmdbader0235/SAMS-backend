@@ -53,11 +53,14 @@ async def create_level(
 async def list_levels(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[LevelResponse]:
+    if not (current_user.has_any_role("school_admin", "super_admin", "manager", "teacher") or current_user.has_role("level:read")):
+        raise HTTPException(status_code=403, detail="Forbidden: Students and unauthorized users cannot list school levels")
     try:
         results = await TenantService.get_all_levels(current_user.tenant_id)
         return [LevelResponse(**r) for r in results]
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
 
 
 # =============================================================================
@@ -154,6 +157,8 @@ async def create_finance(
 async def list_teachers(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[TeacherResponse]:
+    if not (current_user.has_any_role("school_admin", "super_admin", "manager", "teacher") or current_user.has_role("teacher:read")):
+        raise HTTPException(status_code=403, detail="Forbidden: Students and unauthorized users cannot list teachers")
     try:
         results = await TenantService.get_all_teachers(current_user.tenant_id)
         return [TeacherResponse(**r) for r in results]
@@ -165,6 +170,8 @@ async def list_teachers(
 async def list_parents(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[ParentResponse]:
+    if not (current_user.has_any_role("school_admin", "super_admin", "manager") or current_user.has_role("parent:read")):
+        raise HTTPException(status_code=403, detail="Forbidden: Students and unauthorized users cannot list parents")
     try:
         results = await TenantService.get_all_parents(current_user.tenant_id)
         return [ParentResponse(**r) for r in results]
@@ -204,6 +211,8 @@ async def create_student(
 async def list_students(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[StudentResponse]:
+    if not (current_user.has_any_role("school_admin", "super_admin", "manager", "teacher") or current_user.has_role("student:read")):
+        raise HTTPException(status_code=403, detail="Forbidden: Students and unauthorized users cannot list all students")
     try:
         results = await TenantService.get_all_students(current_user.tenant_id)
         return [StudentResponse(**r) for r in results]
@@ -281,11 +290,14 @@ async def create_class(
 async def list_classes(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[ClassResponse]:
+    if not (current_user.has_any_role("school_admin", "super_admin", "manager", "teacher") or current_user.has_role("class:read")):
+        raise HTTPException(status_code=403, detail="Forbidden: Students and unauthorized users cannot list classes")
     try:
         results = await TenantService.get_all_classes(current_user.tenant_id)
         return [ClassResponse(**r) for r in results]
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
 
 
 class ClassUpdateRequest(BaseModel):

@@ -65,9 +65,11 @@ def main():
     print("  - DMZ (Nginx)     : http://localhost:9080")
     print("  - APISIX Gateway  : Internal Docker Network (9180)")
     print("  - Keycloak Server : http://localhost:8000")
+    print("  - OPA Policy Eng. : http://localhost:8181")
     print("  - FastAPI Backend : http://localhost:8001")
     print("  - Frontend SPA    : http://localhost:3000")
     print("="*55)
+
     print("Press Ctrl+C to stop all services and containers.")
 
     # Keep script running

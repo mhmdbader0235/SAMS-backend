@@ -36,11 +36,18 @@ class CurrentUser:
         if self.role:
             roles_set.add(self.role)
 
-        if "super_admin" in roles_set:
+        if "super_admin" in roles_set or "*" in roles_set:
+            return True
+
+        if role_name in ("admin", "school_admin") and ("school_admin" in roles_set or "admin" in roles_set):
             return True
 
         if role_name in roles_set:
             return True
+
+        for r in list(roles_set):
+            if r in COMPOSITE_ROLE_PERMISSIONS and role_name in COMPOSITE_ROLE_PERMISSIONS[r]:
+                return True
 
         return False
 
@@ -48,38 +55,101 @@ class CurrentUser:
         """Check if user has any of the specified roles."""
         return any(self.has_role(r) for r in role_names)
 
+    async def can(self, action: str, resource: dict | None = None) -> bool:
+
+        """Verify action authorization against OPA (with local fallback)."""
+        try:
+            from app.core.opa import verify_opa_authorization
+            is_allowed = await verify_opa_authorization(
+                user_id=str(self.id or ""),
+                tenant_id=str(self.tenant_id or ""),
+                roles=list(self.roles),
+                action=action,
+                resource=resource,
+            )
+            if is_allowed:
+                return True
+        except Exception:
+            pass
+        return self.has_role(action)
+
 
 COMPOSITE_ROLE_PERMISSIONS: dict[str, set[str]] = {
     "super_admin": {
-        "school:write", "school:read", "user:invite", "user:delete", "user:link", "user:view",
-        "event:create", "event:edit", "event:delete", "event:propose", "event:review", "event:publish",
-        "event:clone", "event:view_draft", "resource:create", "resource:price", "resource:view",
-        "teacher:write", "teacher:read", "enrollment:request", "enrollment:parent_approve",
-        "enrollment:teacher_approve", "enrollment:cancel", "enrollment:view_roster",
-        "billing:invoice", "billing:pay", "billing:refund", "billing:audit", "announcement:manage"
+        "*"
     },
     "school_admin": {
-        "school:write", "school:read", "user:invite", "user:delete", "user:link", "user:view",
-        "event:review", "event:publish", "teacher:read", "enrollment:cancel", "enrollment:view_roster",
-        "billing:audit", "announcement:manage"
+        "school:write", "school:read", "level:create", "level:manage", "level:read",
+        "class:create", "class:edit", "class:update", "class:read", "class:assign_teacher",
+        "user:create", "user:invite", "user:delete", "user:link", "user:view", "user:read",
+        "user:profile_read", "user:profile_edit", "teacher:create", "teacher:read", "teacher:write",
+        "parent:read", "student:create", "student:read", "event:create", "event:read", "event:view",
+        "event:edit", "event:patch", "event:delete", "event:clone", "event:propose", "event:submit",
+        "event:review", "event:publish", "event:view_draft", "event:archive", "event:audience_edit",
+        "event:audience_predict", "resource:create", "resource:view", "resource:read", "resource:edit",
+        "resource:update", "resource:delete", "resource:price", "resource:set_cost", "resource_type:create",
+        "resource_type:read", "enrollment:teacher_approve", "enrollment:cancel", "enrollment:view_roster",
+        "enrollment:read", "billing:audit", "billing:invoice", "billing:view_payment", "subsidy:manage",
+        "audit:view", "health:view", "health:manage", "safety:manage", "announcement:manage",
+        "notification:send", "notification:read", "notification:mark_read", "feedback:view"
+    },
+    "admin": {
+        "school:write", "school:read", "level:create", "level:manage", "level:read",
+        "class:create", "class:edit", "class:update", "class:read", "class:assign_teacher",
+        "user:create", "user:invite", "user:delete", "user:link", "user:view", "user:read",
+        "user:profile_read", "user:profile_edit", "teacher:create", "teacher:read", "teacher:write",
+        "parent:read", "student:create", "student:read", "event:create", "event:read", "event:view",
+        "event:edit", "event:patch", "event:delete", "event:clone", "event:propose", "event:submit",
+        "event:review", "event:publish", "event:view_draft", "event:archive", "event:audience_edit",
+        "event:audience_predict", "resource:create", "resource:view", "resource:read", "resource:edit",
+        "resource:update", "resource:delete", "resource:price", "resource:set_cost", "resource_type:create",
+        "resource_type:read", "enrollment:teacher_approve", "enrollment:cancel", "enrollment:view_roster",
+        "enrollment:read", "billing:audit", "billing:invoice", "billing:view_payment", "subsidy:manage",
+        "audit:view", "health:view", "health:manage", "safety:manage", "announcement:manage",
+        "notification:send", "notification:read", "notification:mark_read", "feedback:view"
     },
     "manager": {
-        "school:read", "event:review", "event:publish", "event:view_draft", "resource:view",
-        "resource:price", "billing:invoice", "billing:pay", "billing:refund", "billing:audit",
-        "enrollment:view_roster"
+        "school:read", "level:read", "class:read", "teacher:read", "parent:read", "student:read",
+        "user:view", "user:read", "user:profile_read", "user:profile_edit", "event:read", "event:view",
+        "event:review", "event:publish", "event:view_draft", "event:audience_predict", "resource:view",
+        "resource:read", "resource:price", "resource:set_cost", "resource_type:read", "billing:invoice",
+        "billing:pay", "billing:refund", "billing:audit", "billing:view_payment", "subsidy:manage",
+        "enrollment:view_roster", "enrollment:read", "announcement:manage", "notification:send",
+        "notification:read", "notification:mark_read", "feedback:view"
     },
     "teacher": {
-        "school:read", "user:view", "event:create", "event:edit", "event:delete", "event:propose",
-        "event:clone", "teacher:write", "teacher:read", "resource:create", "resource:view",
-        "enrollment:teacher_approve", "enrollment:view_roster"
+        "school:read", "level:read", "class:read", "teacher:read", "student:read", "user:view",
+        "user:read", "user:profile_read", "user:profile_edit", "event:create", "event:read", "event:view",
+        "event:edit", "event:patch", "event:delete", "event:clone", "event:propose", "event:submit",
+        "event:view_draft", "event:audience_edit", "event:audience_predict", "resource:create",
+        "resource:view", "resource:read", "resource:edit", "resource:update", "resource:delete",
+        "resource_type:create", "resource_type:read", "enrollment:teacher_approve", "enrollment:view_roster",
+        "enrollment:read", "health:view", "notification:read", "notification:mark_read", "feedback:view",
+        "feedback:create"
     },
     "parent": {
-        "school:read", "enrollment:parent_approve", "enrollment:cancel", "billing:pay"
+        "school:read", "user:profile_read", "user:profile_edit", "student:view_linked",
+        "event:read", "event:view", "enrollment:parent_approve", "enrollment:cancel",
+        "enrollment:read", "billing:pay", "billing:view_payment", "health:manage_child",
+        "notification:read", "notification:mark_read", "feedback:create"
     },
     "student": {
-        "school:read", "enrollment:request"
+        "school:read", "user:profile_read", "user:profile_edit", "event:read", "event:view",
+        "enrollment:request", "enrollment:read", "notification:read", "notification:mark_read",
+        "feedback:create"
     }
 }
+
+
+def require_permission(action: str):
+    """FastAPI Dependency Guard verifying that current user has permission for action via OPA."""
+    async def _guard(current_user: CurrentUser = Depends(get_current_user)):
+        allowed = await current_user.can(action)
+        if not allowed:
+            raise HTTPException(status_code=403, detail=f"Permission denied for action '{action}'")
+        return current_user
+    return _guard
+
 
 
 async def get_current_user(
@@ -118,7 +188,7 @@ async def get_current_user(
     
     VALID_ROLES = {
         # High-level Roles
-        "super_admin", "school_admin", "manager", "teacher", "finance", "event_teacher", "parent", "student", "pending",
+        "super_admin", "school_admin", "admin", "administrator", "manager", "teacher", "finance", "event_teacher", "parent", "student", "pending",
         
         # Granular Roles / Permissions
         "system:write", "system:read", "tenant:manage", "tenant:view",
@@ -135,7 +205,7 @@ async def get_current_user(
     }
     
     PRIMARY_ROLE_ORDER = [
-        "super_admin", "school_admin", "manager", "teacher", "finance", "event_teacher", "parent", "student"
+        "super_admin", "school_admin", "admin", "manager", "teacher", "finance", "event_teacher", "parent", "student"
     ]
     
     keycloak_roles = list(payload.get("realm_access", {}).get("roles", []))
@@ -152,6 +222,10 @@ async def get_current_user(
         "super_admin": "super_admin",
         "school_admins": "school_admin",
         "school_admin": "school_admin",
+        "admins": "school_admin",
+        "admin": "school_admin",
+        "administrators": "school_admin",
+        "administrator": "school_admin",
         "managers": "manager",
         "manager": "manager",
         "teachers": "teacher",
@@ -175,12 +249,17 @@ async def get_current_user(
     single_role = payload.get("role")
     
     role = None
-    if single_role and single_role in VALID_ROLES:
-        role = single_role
-    else:
+    if single_role:
+        clean_sr = single_role.lower().strip()
+        if clean_sr in ("admin", "administrator", "school_admin"):
+            role = "school_admin"
+        elif clean_sr in VALID_ROLES:
+            role = clean_sr
+    
+    if not role:
         for p_role in PRIMARY_ROLE_ORDER:
             if p_role in keycloak_roles:
-                role = p_role
+                role = "school_admin" if p_role in ("admin", "administrator") else p_role
                 break
     
     if not role:
@@ -189,6 +268,10 @@ async def get_current_user(
 
     extracted_roles = set(r for r in keycloak_roles if r in VALID_ROLES)
     extracted_roles.add(role)
+    if role == "school_admin" or "school_admin" in extracted_roles:
+        extracted_roles.add("admin")
+    elif role == "admin" or "admin" in extracted_roles:
+        extracted_roles.add("school_admin")
 
     # Expand composite role permissions
     for r in list(extracted_roles):
@@ -299,17 +382,35 @@ async def get_current_user(
 
 
 
-    # Resolve local database user ID for school roles (teachers, managers, finance, admins, students, parents)
+    # Resolve local database user ID, dynamic roles, and custom permissions for school roles
     if role != "super_admin" and email:
         try:
             from app.core.database import get_db_pool
             pool = await get_db_pool(tenant_id)
             async with pool.acquire() as conn:
-                local_id = await conn.fetchval(
-                    "SELECT id FROM users WHERE email = $1", email
+                user_row = await conn.fetchrow(
+                    """
+                    SELECT id, role, 
+                           COALESCE(roles, ARRAY[]::TEXT[]) as roles,
+                           COALESCE(permissions, ARRAY[]::TEXT[]) as permissions
+                    FROM users 
+                    WHERE UPPER(email) = UPPER($1)
+                    """,
+                    email.strip()
                 )
-                if local_id is not None:
-                    user_id = str(local_id)
+                if user_row:
+                    user_id = str(user_row["id"])
+                    db_role = user_row.get("role")
+                    if db_role and db_role in VALID_ROLES:
+                        extracted_roles.add(db_role)
+                        if not role or role in ("student", "pending"):
+                            role = db_role
+                    for r in (user_row.get("roles") or []):
+                        if r and r in VALID_ROLES:
+                            extracted_roles.add(r)
+                    for p in (user_row.get("permissions") or []):
+                        if p:
+                            extracted_roles.add(p)
                 else:
                     # JIT Auto-provision missing Keycloak user locally
                     local_id = await conn.fetchval(
@@ -399,6 +500,13 @@ async def get_current_user(
                 user_id = str(local_id)
         except Exception as exc:
             print(f"[get_current_user] Warning: could not resolve/provision local parent for email '{email}': {exc}")
+
+    # Re-expand composite role permissions with database roles/permissions
+    for r in list(extracted_roles):
+        if r in COMPOSITE_ROLE_PERMISSIONS:
+            extracted_roles.update(COMPOSITE_ROLE_PERMISSIONS[r])
+
+    final_roles_list = list(extracted_roles)
 
     return CurrentUser(
         user_id=user_id,

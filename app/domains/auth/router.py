@@ -1,8 +1,8 @@
-"""Auth router — registration, login, and current-user endpoints."""
-
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import datetime
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPBearer
 from pydantic import BaseModel
+
 
 from app.core.database import get_control_plane_pool, get_db_pool
 from app.core.dependencies import CurrentUser, get_current_user
@@ -340,3 +340,131 @@ async def get_parent_profile_by_email(
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+# =============================================================================
+# User Permissions & Dynamic Roles Management (School Admin only)
+# =============================================================================
+class UserPermissionsResponse(BaseModel):
+    id: int | str
+    email: str
+    role: str
+    roles: list[str] = []
+    permissions: list[str] = []
+    phone: str | None = None
+    address: str | None = None
+    created_at: datetime | None = None
+
+
+class UserPermissionsUpdateRequest(BaseModel):
+    role: str
+    roles: list[str] = []
+    permissions: list[str] = []
+
+
+@router.get("/users-permissions", response_model=list[UserPermissionsResponse], summary="List all users and permissions (admin only)")
+async def list_users_permissions(
+    request: Request,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> list[UserPermissionsResponse]:
+    if not (current_user.has_any_role("school_admin", "super_admin", "admin") or current_user.has_role("user:view")):
+        raise HTTPException(status_code=403, detail="Only school administrators can access user permissions")
+    
+    tenant_id = (request.headers.get("x-tenant-id") or current_user.tenant_id or "tenant_a").strip().lower()
+    try:
+        from app.domains.tenant.service import TenantService
+        users = await TenantService.get_tenant_users_permissions(tenant_id, current_user.roles)
+        return [UserPermissionsResponse(**u) for u in users]
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.put("/users/{user_id}/permissions", response_model=UserPermissionsResponse, summary="Update user roles and permissions (admin only)")
+async def update_user_permissions(
+    user_id: int | str,
+    payload: UserPermissionsUpdateRequest,
+    request: Request,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> UserPermissionsResponse:
+    if not (current_user.has_any_role("school_admin", "super_admin", "admin") or current_user.has_role("user:invite")):
+        raise HTTPException(status_code=403, detail="Only school administrators can modify user roles and permissions")
+    
+    tenant_id = (request.headers.get("x-tenant-id") or current_user.tenant_id or "tenant_a").strip().lower()
+    try:
+        from app.domains.tenant.service import TenantService
+        updated = await TenantService.update_tenant_user_permissions(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            primary_role=payload.role,
+            roles=payload.roles,
+            permissions=payload.permissions,
+            user_role=current_user.roles,
+        )
+        return UserPermissionsResponse(**updated)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/roles-catalog", summary="Get comprehensive roles & permissions catalog")
+async def get_roles_catalog(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    from app.core.dependencies import COMPOSITE_ROLE_PERMISSIONS
+    
+    COMPOSITE_ROLES = [
+        {"id": "school_admin", "label": "School Administrator", "description": "Full school-level management, staffing, and settings."},
+        {"id": "manager", "label": "Operations Manager", "description": "Event proposal review, pricing, publishing, and budget approvals."},
+        {"id": "teacher", "label": "Teacher / Class Lead", "description": "Draft event creation, resource requests, and student approvals."},
+        {"id": "parent", "label": "Parent / Guardian", "description": "Child trip view, enrollment approval, and payment."},
+        {"id": "student", "label": "Student", "description": "Browse class events and submit enrollment requests."},
+        {"id": "finance", "label": "Finance Officer", "description": "Resource unit pricing and trip budget management."},
+        {"id": "event_teacher", "label": "Event Lead Teacher", "description": "Designated lead for event execution."},
+    ]
+    
+    CATEGORIES = {
+        "Events Planning & Approvals": [
+            "event:create", "event:edit", "event:patch", "event:delete", "event:clone",
+            "event:propose", "event:submit", "event:review", "event:publish", "event:view_draft",
+            "event:audience_edit", "event:audience_predict"
+        ],
+        "Resources & Pricing": [
+            "resource:create", "resource:view", "resource:read", "resource:edit",
+            "resource:update", "resource:delete", "resource:price", "resource:set_cost",
+            "resource_type:create", "resource_type:read"
+        ],
+        "Enrollments & Roster": [
+            "enrollment:request", "enrollment:parent_approve", "enrollment:teacher_approve",
+            "enrollment:cancel", "enrollment:view_roster", "enrollment:read"
+        ],
+        "Billing & Invoices": [
+            "billing:invoice", "billing:pay", "billing:refund", "billing:audit",
+            "billing:view_payment", "subsidy:manage"
+        ],
+        "Health & Safety": [
+            "health:view", "health:manage", "health:manage_child", "safety:manage"
+        ],
+        "Academic & Directory": [
+            "school:write", "school:read", "level:create", "level:manage", "level:read",
+            "class:create", "class:edit", "class:update", "class:read", "class:assign_teacher",
+            "user:create", "user:invite", "user:delete", "user:link", "user:view", "user:read",
+            "teacher:create", "teacher:read", "teacher:write", "parent:read", "student:create",
+            "student:read", "student:view_linked"
+        ],
+        "Announcements & Feedback": [
+            "announcement:manage", "notification:send", "notification:read", "notification:mark_read",
+            "feedback:view", "feedback:create"
+        ]
+    }
+    
+    return {
+        "composite_roles": COMPOSITE_ROLES,
+        "composite_role_permissions": {k: list(v) for k, v in COMPOSITE_ROLE_PERMISSIONS.items()},
+        "categories": CATEGORIES,
+    }
+

@@ -2,17 +2,20 @@
 
 This document serves as the master architectural reference and catalog for all high-level **Composite Roles** and **Granular Permission Objects** supported by **SchoolDesk**.
 
-All permission objects defined here are fully compatible with:
-1. **Keycloak OIDC Realm Roles** & **Client Roles**.
-2. **Apache APISIX JWT Token Claims**.
-3. **FastAPI Backend RBAC & Fine-Grained Authorization Guards**.
+All permission objects defined here are enforced by:
+1. **Open Policy Agent (OPA - Sole AuthZ Engine)**: Defined in [`policies/school_policy.rego`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/policies/school_policy.rego).
+2. **Keycloak OIDC (AuthN ONLY)**: Issues JWT tokens containing user identity and assigned role claims.
+3. **Apache APISIX JWT Token Claims & FastAPI Backend Service Layer Guard**.
 
 ---
 
 ## 📁 Files Included
 
-- **JSON Import File**: [`docs/keycloak_roles_catalog.json`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/doumind-backend/docs/keycloak_roles_catalog.json) — Machine-readable catalog designed for direct Keycloak import or automated seed scripts.
-- **Backend Enforcer**: [`app/core/dependencies.py`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/doumind-backend/app/core/dependencies.py) — Enforces composite permission expansion and direct granular role overrides.
+- **OPA Authorization Policy**: [`policies/school_policy.rego`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/policies/school_policy.rego) — Centralized Rego policy engine executing all authorization and state machine decisions.
+- **Backend OPA Client**: [`app/core/opa.py`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/doumind-backend/app/core/opa.py) — Async OPA client for service-layer access checks.
+- **JSON Role Catalog**: [`docs/keycloak_roles_catalog.json`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/doumind-backend/docs/keycloak_roles_catalog.json) — Catalog for automated seed scripts.
+- **Backend Context Enforcer**: [`app/core/dependencies.py`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/doumind-backend/app/core/dependencies.py) — Extracts authenticated user context and tenant bindings.
+
 
 ---
 
