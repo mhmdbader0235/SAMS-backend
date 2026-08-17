@@ -487,7 +487,97 @@ class AuthService:
 
         if inv.get("uses_count", 0) >= inv.get("max_uses", 1):
             raise ValueError("Invitation code maximum usage limit reached")
-
         return inv
 
+    @staticmethod
+    async def get_pending_users(tenant_id: str) -> list[dict]:
+        """Fetch all users in the tenant DB with role='pending'."""
+        db_pool = await get_db_pool(tenant_id)
+        repo = UserRepository(db_pool)
+        return await repo.get_users_by_role("pending")
+
+    @staticmethod
+    async def assign_user_role(tenant_id: str, email: str, new_role: str) -> dict:
+        """Assign a new role to a pending user (or update an existing role)."""
+        valid_roles = ('super_admin', 'school_admin', 'admin', 'teacher', 'parent', 'student', 'manager', 'finance', 'event_teacher', 'pending')
+        if new_role not in valid_roles:
+            raise ValueError(f"Invalid role: {new_role}")
+
+        # 1. Update the user in the tenant DB
+        db_pool = await get_db_pool(tenant_id)
+        repo = UserRepository(db_pool)
+        user = await repo.get_user_by_email(email)
+        if not user:
+            # JIT provision if missing in tenant
+            user_id = await repo.create_user(email=email, password_hash="managed", role=new_role)
+            user = {"id": user_id, "email": email}
+        else:
+            success = await repo.update_user_role(email, new_role)
+            if not success:
+                raise RuntimeError(f"Failed to update role for {email} in tenant DB")
+
+        user_id = user.get("id")
+        user_display_name = email.split("@")[0].replace(".", " ").title()
+
+        # 2. Ensure profile records in tenant DB
+        try:
+            async with db_pool.acquire() as conn_t:
+                if new_role in ("teacher", "event_teacher", "school_admin", "manager", "finance", "admin"):
+                    await conn_t.execute(
+                        "INSERT INTO teachers (id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                        user_id,
+                        user_display_name
+                    )
+                elif new_role == "student":
+                    c_id = await conn_t.fetchval("SELECT id FROM class LIMIT 1")
+                    if c_id is None:
+                        l_id = await conn_t.fetchval("SELECT level_id FROM levels LIMIT 1")
+                        if l_id is None:
+                            l_id = await conn_t.fetchval("INSERT INTO levels (name) VALUES ('Grade 1') RETURNING level_id")
+                        t_id = await conn_t.fetchval("SELECT id FROM teachers LIMIT 1")
+                        if t_id is None:
+                            t_u = await conn_t.fetchval("INSERT INTO users (email, role, password_hash) VALUES ($1, 'teacher', 'managed') RETURNING id", f"head_teacher_{tenant_id}@school.com")
+                            t_id = await conn_t.fetchval("INSERT INTO teachers (id, name) VALUES ($1, 'Head Teacher') RETURNING id", t_u)
+                        c_id = await conn_t.fetchval("INSERT INTO class (name, level_id, head_teacher_id) VALUES ('Default Class', $1, $2) RETURNING id", l_id, t_id)
+                    await conn_t.execute(
+                        "INSERT INTO students (id, name, class_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+                        user_id,
+                        user_display_name,
+                        c_id
+                    )
+                elif new_role == "parent":
+                    try:
+                        await conn_t.execute(
+                            "INSERT INTO parenets (id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                            user_id,
+                            user_display_name
+                        )
+                    except Exception:
+                        pass
+        except Exception as _e:
+            print(f"[assign_user_role] Warning profile records sync: {_e}")
+
+        # 3. Update the control plane user_tenant_map and super_admins if applicable
+        cp_pool = await get_control_plane_pool()
+        cp_repo = ControlPlaneRepository(cp_pool)
+        await cp_repo.upsert_user_tenant_map(email, tenant_id, new_role)
+
+        if new_role == "super_admin":
+            try:
+                async with cp_pool.acquire() as conn_cp:
+                    await conn_cp.execute(
+                        "INSERT INTO super_admins (email, password_hash) VALUES ($1, 'managed') ON CONFLICT DO NOTHING",
+                        email
+                    )
+            except Exception as _e:
+                print(f"[assign_user_role] Warning super_admins insert: {_e}")
+
+        # 4. Update Keycloak
+        try:
+            from app.core.keycloak_admin import update_user_role_in_keycloak
+            update_user_role_in_keycloak(email, new_role, tenant_id)
+        except Exception as _e:
+            print(f"[assign_user_role] Warning Keycloak update for {email}: {_e}")
+
+        return {"status": "ok", "email": email, "role": new_role}
 

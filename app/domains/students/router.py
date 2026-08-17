@@ -7,16 +7,21 @@ from app.core.dependencies import CurrentUser, get_current_user
 from app.core.schemas import (
     ClassCreateRequest,
     ClassResponse,
+    ClassUpdateRequest,
     EnrollmentCreateRequest,
     EnrollmentResponse,
     EnrollmentStateUpdateRequest,
     LevelCreateRequest,
     LevelResponse,
+    LevelUpdateRequest,
     ParentResponse,
+    StructureSetupRequest,
+    StudentBulkEnrollRequest,
     StudentCreateRequest,
     StudentHealthCreateRequest,
     StudentHealthResponse,
     StudentParentLinkRequest,
+    StudentReassignClassRequest,
     StudentResponse,
     TeacherCreateRequest,
     TeacherResponse,
@@ -42,7 +47,15 @@ async def create_level(
             name=payload.name,
             user_role=current_user.roles,
         )
-        return LevelResponse(level_id=level_id, name=payload.name)
+        return LevelResponse(
+            level_id=level_id,
+            name=payload.name,
+            isced_level=payload.isced_level,
+            age_band_min=payload.age_band_min,
+            age_band_max=payload.age_band_max,
+            ordinal=payload.ordinal,
+            is_active=payload.is_active
+        )
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
     except Exception as exc:
@@ -58,6 +71,86 @@ async def list_levels(
     try:
         results = await TenantService.get_all_levels(current_user.tenant_id)
         return [LevelResponse(**r) for r in results]
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.put("/levels/{level_id}", response_model=LevelResponse, summary="Update level details")
+async def update_level(
+    level_id: int,
+    payload: LevelUpdateRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> LevelResponse:
+    try:
+        res = await TenantService.update_level(
+            tenant_id=current_user.tenant_id,
+            level_id=level_id,
+            name=payload.name,
+            isced_level=payload.isced_level,
+            age_band_min=payload.age_band_min,
+            age_band_max=payload.age_band_max,
+            ordinal=payload.ordinal,
+            is_active=payload.is_active,
+            user_role=current_user.roles
+        )
+        return LevelResponse(**res)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.delete("/levels/{level_id}", summary="Delete school level")
+async def delete_level(
+    level_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    try:
+        await TenantService.delete_level(
+            tenant_id=current_user.tenant_id,
+            level_id=level_id,
+            user_role=current_user.roles
+        )
+        return {"status": "ok", "message": f"Level {level_id} deleted successfully"}
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+from app.core.schemas import StructureSetupRequest
+
+@router.get("/structure", summary="Get current Academic Structure and Calendar")
+async def get_academic_structure(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    try:
+        tenant_id = current_user.tenant_id or "tenant_a"
+        return await TenantService.get_academic_structure(
+            tenant_id=tenant_id,
+            user_role=current_user.roles,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/structure/setup", summary="Save Academic Structure and Calendar (admin only)")
+async def setup_academic_structure(
+    payload: StructureSetupRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    try:
+        tenant_id = current_user.tenant_id or "tenant_a"
+        await TenantService.save_academic_structure(
+            tenant_id=tenant_id,
+            payload=payload.model_dump(),
+            user_role=current_user.roles,
+        )
+        return {"status": "ok", "message": "Academic structure configured successfully"}
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -274,6 +367,7 @@ async def create_class(
             name=payload.name,
             level_id=payload.level_id,
             head_teacher_id=payload.head_teacher_id,
+            capacity=payload.capacity,
             user_role=current_user.roles,
         )
         pool = await get_db_pool(current_user.tenant_id)
@@ -299,12 +393,6 @@ async def list_classes(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-
-class ClassUpdateRequest(BaseModel):
-    name: str | None = None
-    level_id: int | None = None
-    head_teacher_id: int | None = None
-
 @router.put("/classes/{class_id}", response_model=ClassResponse, summary="Update class details")
 async def update_class(
     class_id: int,
@@ -320,10 +408,80 @@ async def update_class(
             name=payload.name,
             level_id=payload.level_id,
             head_teacher_id=payload.head_teacher_id,
+            capacity=payload.capacity,
+            user_role=current_user.roles,
         )
         return ClassResponse(**updated)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.delete("/classes/{class_id}", summary="Delete a class")
+async def delete_class(
+    class_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    try:
+        await TenantService.delete_class(
+            tenant_id=current_user.tenant_id,
+            class_id=class_id,
+            user_role=current_user.roles,
+        )
+        return {"status": "ok", "message": f"Class {class_id} deleted successfully"}
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/classes/{class_id}/students", summary="List students in a class")
+async def get_class_students(
+    class_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> list[dict]:
+    try:
+        return await TenantService.get_students_for_class(current_user.tenant_id, class_id)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.put("/students/{student_id}/class", summary="Reassign student to class")
+async def reassign_student_class(
+    student_id: int,
+    payload: StudentReassignClassRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    try:
+        await TenantService.reassign_student_class(
+            tenant_id=current_user.tenant_id,
+            student_id=student_id,
+            new_class_id=payload.class_id,
+            user_role=current_user.roles,
+        )
+        return {"status": "ok", "message": f"Student {student_id} reassigned successfully"}
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post("/students/bulk-enroll", summary="Bulk enroll/reassign students to a class section")
+async def bulk_reassign_students(
+    payload: StudentBulkEnrollRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    try:
+        count = await TenantService.bulk_reassign_students(
+            tenant_id=current_user.tenant_id,
+            student_ids=payload.student_ids,
+            new_class_id=payload.class_id,
+            user_role=current_user.roles,
+        )
+        return {"status": "ok", "enrolled_count": count, "message": f"Successfully enrolled {count} students."}
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 

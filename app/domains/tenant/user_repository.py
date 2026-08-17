@@ -27,7 +27,7 @@ class UserRepository:
 
     async def create_user(self, email: str, password_hash: str, role: str) -> int:
         """Insert a new tenant user and return their bigint ID."""
-        valid_roles = ('school_admin', 'teacher', 'parent', 'student', 'manager', 'finance', 'event_teacher')
+        valid_roles = ('super_admin', 'school_admin', 'admin', 'teacher', 'parent', 'student', 'manager', 'finance', 'event_teacher', 'pending')
         if role not in valid_roles:
             raise ValueError(f"Invalid tenant user role: {role}")
         return await self.pool.fetchval(
@@ -40,6 +40,36 @@ class UserRepository:
             password_hash,
             role,
         )
+
+    async def get_users_by_role(self, role: str) -> list[dict]:
+        """Fetch users matching a specific role."""
+        rows = await self.pool.fetch(
+            "SELECT id, email, role, created_at FROM users WHERE role = $1 ORDER BY created_at DESC",
+            role
+        )
+        return [dict(row) for row in rows]
+
+    async def update_user_role(self, email: str, new_role: str) -> bool:
+        """Update a user's role and roles array."""
+        valid_roles = ('super_admin', 'school_admin', 'admin', 'teacher', 'parent', 'student', 'manager', 'finance', 'event_teacher', 'pending')
+        if new_role not in valid_roles:
+            raise ValueError(f"Invalid tenant user role: {new_role}")
+        
+        try:
+            res = await self.pool.execute(
+                "UPDATE users SET role = $1, roles = ARRAY[$1]::TEXT[] WHERE UPPER(email) = UPPER($2)",
+                new_role,
+                email.strip()
+            )
+            return res == "UPDATE 1"
+        except Exception:
+            # Fallback if 'roles' column doesn't exist
+            res = await self.pool.execute(
+                "UPDATE users SET role = $1 WHERE UPPER(email) = UPPER($2)",
+                new_role,
+                email.strip()
+            )
+            return res == "UPDATE 1"
 
     async def get_user_by_email(self, email: str) -> dict | None:
         """Fetch a user record by email, or None if not found."""
@@ -207,23 +237,52 @@ class UserRepository:
         self, user_id, primary_role: str, roles: list[str], permissions: list[str]
     ) -> dict | None:
         """Update a tenant user's primary role, composite roles, and custom permissions."""
+        try:
+            await self.pool.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS roles TEXT[] DEFAULT '{}';")
+            await self.pool.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions TEXT[] DEFAULT '{}';")
+        except Exception:
+            pass
+
         parsed = parse_id(user_id)
+        if primary_role in ('pending', 'none', 'unassigned'):
+            all_roles = [primary_role]
+            permissions = []
+        else:
+            clean_roles = [r for r in roles if r and r not in ('pending', 'none', 'unassigned')]
+            all_roles = list(dict.fromkeys([primary_role] + clean_roles))
+        
         if isinstance(parsed, (int, UUID)):
-            # Ensure primary_role is in roles
-            all_roles = list(dict.fromkeys([primary_role] + [r for r in roles if r]))
             row = await self.pool.fetchrow(
                 """
                 UPDATE users 
                 SET role = $1, roles = $2, permissions = $3
                 WHERE id = $4
-                RETURNING id, email, role, roles, permissions, phone, created_at
+                RETURNING id, email, role, roles, permissions, phone, address, created_at
                 """,
                 primary_role,
                 all_roles,
                 permissions,
                 parsed,
             )
-            return dict(row) if row else None
+            if row:
+                return dict(row)
+
+        # Fallback: if user_id was an email string
+        if isinstance(user_id, str) and "@" in user_id:
+            row = await self.pool.fetchrow(
+                """
+                UPDATE users 
+                SET role = $1, roles = $2, permissions = $3
+                WHERE UPPER(email) = UPPER($4)
+                RETURNING id, email, role, roles, permissions, phone, address, created_at
+                """,
+                primary_role,
+                all_roles,
+                permissions,
+                user_id.strip(),
+            )
+            if row:
+                return dict(row)
         return None
 
     async def update_user_profile(self, user_id, phone: str | None, address: str | None) -> None:

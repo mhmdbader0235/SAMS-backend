@@ -35,45 +35,9 @@ def make_credential(password: str = PASSWORD_PLAIN):
         "credentialData": credential_data,
     }
 
-# ─── Roles ────────────────────────────────────────────────────────────────────
-ROLES = [
-    "system:write", "system:read", "tenant:manage", "tenant:view",
-    "school:write", "school:read", "academic:direct", "academic:view",
-    "user:invite", "user:delete", "user:link", "user:view",
-    "event:create", "event:edit", "event:delete", "event:propose",
-    "event:review", "event:publish", "event:clone", "event:view_draft",
-    "resource:create", "resource:price", "resource:view",
-    "teacher:write", "teacher:read",
-    "enrollment:request", "enrollment:parent_approve", "enrollment:teacher_approve",
-    "enrollment:cancel", "enrollment:view_roster",
-    "billing:invoice", "billing:pay", "billing:refund", "billing:audit",
-    "content:create", "content:publish", "announcement:manage",
-    "school_admin", "teacher", "event_teacher", "manager", "finance", "parent", "student", "super_admin"
-]
-
-GROUP_MAPPINGS = {
-    "super_admins":     ROLES[:],
-    "school_admins":    ["school_admin", "school:write", "school:read", "user:invite", "user:delete",
-                         "user:link", "user:view", "event:review", "event:publish", "teacher:read",
-                         "enrollment:cancel", "enrollment:view_roster", "billing:audit", "announcement:manage"],
-    "managers":         ["manager", "school:read", "event:review", "event:publish", "event:view_draft",
-                         "resource:view", "enrollment:view_roster"],
-    "teachers":         ["teacher", "school:read", "user:view", "event:create", "event:edit",
-                         "event:delete", "event:propose", "event:clone", "teacher:write", "teacher:read",
-                         "enrollment:teacher_approve", "enrollment:view_roster"],
-    "event_organizers": ["event_teacher", "school:read", "event:create", "event:edit", "event:delete",
-                         "event:propose", "event:clone", "event:view_draft", "resource:create",
-                         "resource:view", "enrollment:view_roster"],
-    "finance_officers": ["finance", "school:read", "resource:price", "resource:view",
-                         "billing:invoice", "billing:pay", "billing:refund", "billing:audit"],
-    "parents":          ["parent", "school:read", "enrollment:parent_approve", "enrollment:cancel", "billing:pay"],
-    "students":         ["student", "school:read", "enrollment:request"],
-}
-
-# Generate users for both tenant_a and tenant_b in the single SAMS realm
-# Generate users for both tenant_a and tenant_b in the single SAMS realm
+# ─── Pure Authentication Users Seed (AuthN Only) ──────────────────────────────
 USERS = [
-    {"email": "sa@desk.com", "username": "sa@desk.com", "firstName": "Super", "lastName": "Admin", "group": "super_admins", "role": "super_admin", "tenant_id": "tenant_a"},
+    {"email": "sa@desk.com", "username": "sa@desk.com", "firstName": "Super", "lastName": "Admin", "role": "super_admin", "tenant_id": "tenant_a"},
 ]
 
 parents_keys = [
@@ -104,27 +68,27 @@ for tid in ["tenant_a", "tenant_b"]:
     domain = "schoola.com" if tid == "tenant_a" else "schoolb.com"
 
     # Admin & Manager
-    USERS.append({"email": f"admin@{domain}", "username": f"admin@{domain}", "firstName": "School", "lastName": f"Admin ({tid})", "group": "school_admins", "role": "school_admin", "tenant_id": tid})
-    USERS.append({"email": f"manager@{domain}", "username": f"manager@{domain}", "firstName": "Manager", "lastName": f"({tid})", "group": "managers", "role": "manager", "tenant_id": tid})
+    USERS.append({"email": f"admin@{domain}", "username": f"admin@{domain}", "firstName": "School", "lastName": f"Admin ({tid})", "role": "school_admin", "tenant_id": tid})
+    USERS.append({"email": f"manager@{domain}", "username": f"manager@{domain}", "firstName": "Manager", "lastName": f"({tid})", "role": "manager", "tenant_id": tid})
 
     if tid == "tenant_a":
-        USERS.append({"email": "admin@school.com", "username": "admin@school.com", "firstName": "Admin", "lastName": "School", "group": "school_admins", "role": "school_admin", "tenant_id": "tenant_a"})
-        USERS.append({"email": "manager@school.com", "username": "manager@school.com", "firstName": "Manager", "lastName": "School", "group": "managers", "role": "manager", "tenant_id": "tenant_a"})
+        USERS.append({"email": "admin@school.com", "username": "admin@school.com", "firstName": "Admin", "lastName": "School", "role": "school_admin", "tenant_id": "tenant_a"})
+        USERS.append({"email": "manager@school.com", "username": "manager@school.com", "firstName": "Manager", "lastName": "School", "role": "manager", "tenant_id": "tenant_a"})
 
     # Teachers
     for prefix, fname, lname in teachers_list:
         u_email = f"{prefix}@{domain}"
-        USERS.append({"email": u_email, "username": u_email, "firstName": fname, "lastName": f"{lname} ({tid})", "group": "teachers", "role": "teacher", "tenant_id": tid})
+        USERS.append({"email": u_email, "username": u_email, "firstName": fname, "lastName": f"{lname} ({tid})", "role": "teacher", "tenant_id": tid})
 
     # Parents
     for prefix, fname, lname in parents_keys:
         u_email = f"{prefix}@{domain}"
-        USERS.append({"email": u_email, "username": u_email, "firstName": fname, "lastName": f"{lname} ({tid})", "group": "parents", "role": "parent", "tenant_id": tid})
+        USERS.append({"email": u_email, "username": u_email, "firstName": fname, "lastName": f"{lname} ({tid})", "role": "parent", "tenant_id": tid})
 
     # Students
     for sname in students_list:
         u_email = f"{sname.lower()}@{domain}"
-        USERS.append({"email": u_email, "username": u_email, "firstName": sname, "lastName": f"({tid})", "group": "students", "role": "student", "tenant_id": tid})
+        USERS.append({"email": u_email, "username": u_email, "firstName": sname, "lastName": f"({tid})", "role": "student", "tenant_id": tid})
 
 
 def build_realm(realm_name="SAMS"):
@@ -133,7 +97,6 @@ def build_realm(realm_name="SAMS"):
         "realm": realm_name,
         "displayName": realm_name,
         "enabled": True,
-        "organizationsEnabled": True,
         "registrationAllowed": True,
         "resetPasswordAllowed": True,
         "loginWithEmailAllowed": True,
@@ -142,31 +105,10 @@ def build_realm(realm_name="SAMS"):
         "accessTokenLifespan": 86400,
         "ssoSessionMaxLifespan": 86400,
         "roles": {
-            "realm": [{"name": r, "description": f"Role: {r}", "composite": False, "clientRole": False} for r in ROLES]
+            "realm": [],
+            "client": {}
         },
-        "groups": [
-            {
-                "name": gname,
-                "path": f"/{gname}",
-                "realmRoles": groles,
-                "subGroups": []
-            }
-            for gname, groles in GROUP_MAPPINGS.items()
-        ],
-        "organizations": [
-            {
-                "name": "Organization A",
-                "alias": "tenant_a",
-                "enabled": True,
-                "domains": [{"name": "schoolA.com", "verified": True}]
-            },
-            {
-                "name": "Organization B",
-                "alias": "tenant_b",
-                "enabled": True,
-                "domains": [{"name": "schoolB.com", "verified": True}]
-            }
-        ],
+        "groups": [],
         "users": [
             {
                 "username": u["username"],
@@ -177,7 +119,7 @@ def build_realm(realm_name="SAMS"):
                 "lastName": u["lastName"],
                 "credentials": [make_credential("123456"), make_credential("123321")],
                 "realmRoles": [],
-                "groups": [f"/{u['group']}"],
+                "groups": [],
                 "attributes": {
                     "role": [u["role"]],
                     "tenant_id": [u["tenant_id"]]

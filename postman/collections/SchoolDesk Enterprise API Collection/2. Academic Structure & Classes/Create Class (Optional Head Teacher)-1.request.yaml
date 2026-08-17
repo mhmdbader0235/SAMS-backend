@@ -1,0 +1,16 @@
+$kind: http-request
+name: Create Class (Optional Head Teacher)
+url: "{{baseUrl}}/api/v1/students/classes"
+method: POST
+headers:
+  Content-Type: application/json
+  Authorization: Bearer {{teacherToken}}
+body:
+  type: text
+  content: |-
+    {
+      "name": "Class 7A",
+      "level_id": 1,
+      "head_teacher_id": null
+    }
+order: 4398

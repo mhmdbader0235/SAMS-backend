@@ -335,9 +335,9 @@ class TenantService:
     # =========================================================================
     @staticmethod
     async def create_class(
-        tenant_id: str, name: str, level_id: int, head_teacher_id, user_role: str | list[str]
+        tenant_id: str, name: str, level_id: int, head_teacher_id = None, capacity: int = 25, user_role: str | list[str] = ""
     ) -> int:
-        if not TenantService._has_intersection(user_role, {"school_admin", "teacher"}):
+        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin", "admin", "teacher", "class:write"}):
             raise PermissionError("Only staff can create classes")
 
         pool = await get_db_pool(tenant_id)
@@ -345,7 +345,7 @@ class TenantService:
         existing = await repo.get_class_by_name_and_level(name, level_id)
         if existing:
             return existing["id"]
-        return await repo.create_class(name, level_id, head_teacher_id)
+        return await repo.create_class(name, level_id, head_teacher_id, capacity=capacity)
 
     @staticmethod
     async def get_all_classes(tenant_id: str) -> list[dict]:
@@ -365,11 +365,87 @@ class TenantService:
         class_id: int,
         name: str | None = None,
         level_id: int | None = None,
-        head_teacher_id: int | None = None,
+        head_teacher_id = None,
+        capacity: int | None = None,
+        user_role: str | list[str] = "",
     ) -> dict:
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
-        return await repo.update_class(class_id, name=name, level_id=level_id, head_teacher_id=head_teacher_id)
+        return await repo.update_class(
+            class_id,
+            name=name,
+            level_id=level_id,
+            head_teacher_id=head_teacher_id,
+            capacity=capacity
+        )
+
+    @staticmethod
+    async def delete_class(tenant_id: str, class_id: int, user_role: str | list[str] = "") -> bool:
+        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin", "admin"}):
+            raise PermissionError("Only school admins can delete classes")
+        pool = await get_db_pool(tenant_id)
+        repo = TenantRepository(pool)
+        return await repo.delete_class(class_id)
+
+    @staticmethod
+    async def delete_level(tenant_id: str, level_id: int, user_role: str | list[str] = "") -> bool:
+        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin", "admin"}):
+            raise PermissionError("Only school admins can delete levels")
+        pool = await get_db_pool(tenant_id)
+        repo = TenantRepository(pool)
+        return await repo.delete_level(level_id)
+
+    @staticmethod
+    async def update_level(
+        tenant_id: str,
+        level_id: int,
+        name: str | None = None,
+        isced_level: int | None = None,
+        age_band_min: int | None = None,
+        age_band_max: int | None = None,
+        ordinal: int | None = None,
+        is_active: bool | None = None,
+        user_role: str | list[str] = "",
+    ) -> dict | None:
+        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin", "admin"}):
+            raise PermissionError("Only school admins can update levels")
+        pool = await get_db_pool(tenant_id)
+        repo = TenantRepository(pool)
+        return await repo.update_level(
+            level_id=level_id,
+            name=name,
+            isced_level=isced_level,
+            age_band_min=age_band_min,
+            age_band_max=age_band_max,
+            ordinal=ordinal,
+            is_active=is_active
+        )
+
+    @staticmethod
+    async def get_students_for_class(tenant_id: str, class_id: int) -> list[dict]:
+        pool = await get_db_pool(tenant_id)
+        repo = TenantRepository(pool)
+        return await repo.get_students_for_class(class_id)
+
+    @staticmethod
+    async def reassign_student_class(
+        tenant_id: str, student_id, new_class_id: int | None, user_role: str | list[str] = ""
+    ) -> bool:
+        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin", "admin", "teacher", "student:manage"}):
+            raise PermissionError("Only staff can reassign student classes")
+        pool = await get_db_pool(tenant_id)
+        repo = TenantRepository(pool)
+        return await repo.reassign_student_class(student_id, new_class_id)
+
+    @staticmethod
+    async def bulk_reassign_students(
+        tenant_id: str, student_ids: list[int], new_class_id: int | None, user_role: str | list[str] = ""
+    ) -> int:
+        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin", "admin", "teacher", "student:manage"}):
+            raise PermissionError("Only staff can reassign student classes")
+        pool = await get_db_pool(tenant_id)
+        repo = TenantRepository(pool)
+        return await repo.bulk_reassign_students(student_ids, new_class_id)
 
 
 
@@ -584,7 +660,7 @@ class TenantService:
 
         roles = {user_role} if isinstance(user_role, str) else set(user_role)
 
-        if roles.intersection({"school_admin", "manager", "finance", "event_teacher"}):
+        if roles.intersection({"super_admin", "school_admin", "manager", "finance", "event_teacher"}):
             events = await repo.get_all_events()
             return [ev for ev in events if TenantService.check_event_permission(actor, ev, "read")]
         
@@ -631,7 +707,7 @@ class TenantService:
                     filtered_events.append(ev)
                     already_added.add(ev["id"])
 
-        if roles.intersection({"school_admin", "manager", "finance", "event_teacher", "teacher", "student", "parent"}):
+        if roles.intersection({"super_admin", "school_admin", "manager", "finance", "event_teacher", "teacher", "student", "parent"}):
             return sorted(filtered_events, key=lambda e: e["date"]) if filtered_events else filtered_events
 
         return []
@@ -906,6 +982,24 @@ class TenantService:
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
         return await repo.get_notifications_for_user(user_id)
+
+    @staticmethod
+    async def save_academic_structure(tenant_id: str, payload: dict, user_role: str | list[str]) -> None:
+        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin", "admin", "level:manage", "level:create", "school:write"}):
+            raise PermissionError("Insufficient permissions to manage structure.")
+        
+        pool = await get_db_pool(tenant_id)
+        repo = TenantRepository(pool)
+        await repo.save_academic_structure(payload)
+
+    @staticmethod
+    async def get_academic_structure(tenant_id: str, user_role: str | list[str]) -> dict:
+        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin", "admin", "manager", "teacher", "level:read", "level:manage", "school:read"}):
+            raise PermissionError("Insufficient permissions to view structure.")
+        
+        pool = await get_db_pool(tenant_id)
+        repo = TenantRepository(pool)
+        return await repo.get_academic_structure()
 
     @staticmethod
     async def mark_notification_read(tenant_id: str, notif_id: UUID) -> bool:
@@ -1339,7 +1433,7 @@ class TenantService:
         user_role: str | list[str],
     ) -> dict:
         """Update a tenant user's primary role, multiple composite roles, and custom permissions."""
-        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin", "admin"}):
+        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin", "admin", "user:invite"}):
             raise PermissionError("Only school administrators can update user roles and permissions")
         pool = await get_db_pool(tenant_id)
         user_repo = UserRepository(pool)
@@ -1352,9 +1446,70 @@ class TenantService:
         if not updated:
             raise ValueError("User not found in tenant")
 
-        # Update user_tenant_map in control plane
-        if updated.get("email"):
-            await _upsert_user_tenant_mapping(updated["email"], tenant_id, primary_role)
+        user_email = updated.get("email")
+        target_id = updated.get("id")
+
+        # 1. Update user_tenant_map in control plane
+        if user_email:
+            await _upsert_user_tenant_mapping(user_email, tenant_id, primary_role)
+
+            # 2. If promoted to super_admin, persist in control-plane super_admins table
+            if primary_role == "super_admin":
+                try:
+                    cp_pool = await get_control_plane_pool()
+                    async with cp_pool.acquire() as conn_cp:
+                        await conn_cp.execute(
+                            "INSERT INTO super_admins (email, password_hash) VALUES ($1, 'managed') ON CONFLICT DO NOTHING",
+                            user_email
+                        )
+                except Exception as _e:
+                    print(f"[update_tenant_user_permissions] Warning super_admins insert: {_e}")
+
+            # 3. Ensure role-specific profile records in tenant DB
+            try:
+                async with pool.acquire() as conn_t:
+                    user_display_name = user_email.split("@")[0].replace(".", " ").title()
+                    if primary_role in ("teacher", "event_teacher", "school_admin", "manager", "finance", "admin"):
+                        await conn_t.execute(
+                            "INSERT INTO teachers (id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                            target_id,
+                            user_display_name
+                        )
+                    elif primary_role == "student":
+                        c_id = await conn_t.fetchval("SELECT id FROM class LIMIT 1")
+                        if c_id is None:
+                            l_id = await conn_t.fetchval("SELECT level_id FROM levels LIMIT 1")
+                            if l_id is None:
+                                l_id = await conn_t.fetchval("INSERT INTO levels (name) VALUES ('Grade 1') RETURNING level_id")
+                            t_id = await conn_t.fetchval("SELECT id FROM teachers LIMIT 1")
+                            if t_id is None:
+                                t_u = await conn_t.fetchval("INSERT INTO users (email, role, password_hash) VALUES ($1, 'teacher', 'managed') RETURNING id", f"head_teacher_{tenant_id}@school.com")
+                                t_id = await conn_t.fetchval("INSERT INTO teachers (id, name) VALUES ($1, 'Head Teacher') RETURNING id", t_u)
+                            c_id = await conn_t.fetchval("INSERT INTO class (name, level_id, head_teacher_id) VALUES ('Default Class', $1, $2) RETURNING id", l_id, t_id)
+                        await conn_t.execute(
+                            "INSERT INTO students (id, name, class_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+                            target_id,
+                            user_display_name,
+                            c_id
+                        )
+                    elif primary_role == "parent":
+                        try:
+                            await conn_t.execute(
+                                "INSERT INTO parenets (id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                                target_id,
+                                user_display_name
+                            )
+                        except Exception:
+                            pass
+            except Exception as _e:
+                print(f"[update_tenant_user_permissions] Warning profile records sync: {_e}")
+
+            # 4. Synchronize role with Keycloak identity provider
+            try:
+                from app.core.keycloak_admin import update_user_role_in_keycloak
+                update_user_role_in_keycloak(user_email, primary_role, tenant_id)
+            except Exception as _e:
+                print(f"[update_tenant_user_permissions] Warning Keycloak update for {user_email}: {_e}")
 
         _log_audit(user_id, f"UPDATE_PERMISSIONS: role={primary_role}, roles={roles}, perms_count={len(permissions)}")
         return updated

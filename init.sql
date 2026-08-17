@@ -137,8 +137,13 @@ CREATE INDEX IF NOT EXISTS idx_users_email ON tenant_a.users(email);
 
 -- Table 2: levels
 CREATE TABLE IF NOT EXISTS tenant_a.levels (
-    level_id   BIGSERIAL   PRIMARY KEY,
-    name       TEXT        NOT NULL
+    level_id       BIGSERIAL   PRIMARY KEY,
+    name           TEXT        NOT NULL,
+    isced_level    INTEGER     DEFAULT NULL,
+    age_band_min   INTEGER     DEFAULT NULL,
+    age_band_max   INTEGER     DEFAULT NULL,
+    ordinal        INTEGER     DEFAULT NULL,
+    is_active      BOOLEAN     NOT NULL DEFAULT TRUE
 );
 
 -- Table 3: teachers
@@ -159,8 +164,26 @@ CREATE TABLE IF NOT EXISTS tenant_a.class (
     id              BIGSERIAL   PRIMARY KEY,
     name            TEXT        NOT NULL,
     level_id        BIGINT      NOT NULL REFERENCES tenant_a.levels(level_id) ON DELETE RESTRICT,
-    head_teacher_id BIGINT      NOT NULL REFERENCES tenant_a.teachers(id) ON DELETE RESTRICT,
+    head_teacher_id BIGINT      NULL REFERENCES tenant_a.teachers(id) ON DELETE RESTRICT,
+    capacity        INTEGER     NOT NULL DEFAULT 25,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS tenant_a.academic_settings (
+    id               BIGSERIAL   PRIMARY KEY,
+    academic_year    TEXT        NOT NULL,
+    start_month      INTEGER     NOT NULL,
+    weekend_days     TEXT[]      NOT NULL DEFAULT '{}',
+    system           TEXT        NOT NULL DEFAULT 'US',
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS tenant_a.blackout_dates (
+    id            BIGSERIAL   PRIMARY KEY,
+    date          DATE        NOT NULL,
+    title         TEXT        NOT NULL,
+    tags          TEXT[]      NOT NULL DEFAULT '{}',
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_class_level ON tenant_a.class(level_id);
@@ -358,8 +381,13 @@ CREATE INDEX IF NOT EXISTS idx_users_email_b ON tenant_b.users(email);
 
 -- Table 2: levels
 CREATE TABLE IF NOT EXISTS tenant_b.levels (
-    level_id   BIGSERIAL   PRIMARY KEY,
-    name       TEXT        NOT NULL
+    level_id       BIGSERIAL   PRIMARY KEY,
+    name           TEXT        NOT NULL,
+    isced_level    INTEGER     DEFAULT NULL,
+    age_band_min   INTEGER     DEFAULT NULL,
+    age_band_max   INTEGER     DEFAULT NULL,
+    ordinal        INTEGER     DEFAULT NULL,
+    is_active      BOOLEAN     NOT NULL DEFAULT TRUE
 );
 
 -- Table 3: teachers
@@ -380,8 +408,26 @@ CREATE TABLE IF NOT EXISTS tenant_b.class (
     id              BIGSERIAL   PRIMARY KEY,
     name            TEXT        NOT NULL,
     level_id        BIGINT      NOT NULL REFERENCES tenant_b.levels(level_id) ON DELETE RESTRICT,
-    head_teacher_id BIGINT      NOT NULL REFERENCES tenant_b.teachers(id) ON DELETE RESTRICT,
+    head_teacher_id BIGINT      NULL REFERENCES tenant_b.teachers(id) ON DELETE RESTRICT,
+    capacity        INTEGER     NOT NULL DEFAULT 25,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS tenant_b.academic_settings (
+    id               BIGSERIAL   PRIMARY KEY,
+    academic_year    TEXT        NOT NULL,
+    start_month      INTEGER     NOT NULL,
+    weekend_days     TEXT[]      NOT NULL DEFAULT '{}',
+    system           TEXT        NOT NULL DEFAULT 'US',
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS tenant_b.blackout_dates (
+    id            BIGSERIAL   PRIMARY KEY,
+    date          DATE        NOT NULL,
+    title         TEXT        NOT NULL,
+    tags          TEXT[]      NOT NULL DEFAULT '{}',
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_class_level_b ON tenant_b.class(level_id);
@@ -408,7 +454,7 @@ CREATE TABLE IF NOT EXISTS tenant_b.student_parent_map (
 
 -- Enum Type event_status
 DO $$ BEGIN
-    CREATE TYPE tenant_b.event_status AS ENUM ('draft', 'resource_planning', 'proposed', 'finance_approval', 'final_review', 'published');
+    CREATE TYPE tenant_b.event_status AS ENUM ('draft', 'resource_planning', 'proposed', 'approved', 'finance_approval', 'final_review', 'published');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;
@@ -432,7 +478,8 @@ CREATE TABLE IF NOT EXISTS tenant_b.event (
     submitted_at   TIMESTAMPTZ              NULL,
     manager_approved_at TIMESTAMPTZ         NULL,
     finance_priced_at TIMESTAMPTZ           NULL,
-    published_at   TIMESTAMPTZ              NULL
+    published_at   TIMESTAMPTZ              NULL,
+    rejection_reason TEXT                   NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_event_creator_b ON tenant_b.event(created_by);

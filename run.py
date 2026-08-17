@@ -40,21 +40,13 @@ def main():
     subprocess.run(["docker", "compose", "-f", compose_file, "up", "-d"], check=True)
 
     # Detect the correct python/uvicorn path
-    is_windows = os.name == 'nt'
-    if is_windows:
+    python_bin = sys.executable
+    if os.path.exists(os.path.join(".venv", "Scripts", "python.exe")):
         python_bin = os.path.join(".venv", "Scripts", "python.exe")
-    else:
+    elif os.path.exists(os.path.join(".venv", "bin", "python")):
         python_bin = os.path.join(".venv", "bin", "python")
 
-    if not os.path.exists(python_bin):
-        py312 = r"C:\Users\mb883\AppData\Local\Programs\Python\Python312\python.exe"
-        if os.path.exists(py312):
-            python_bin = py312
-        else:
-            print(f"Warning: Virtual env python not found at {python_bin}. Falling back to system python: {sys.executable}")
-            python_bin = sys.executable
-
-    print("Step 3: Starting Backend Service (port 8001)...")
+    print(f"Step 3: Starting Backend Service with Python: {python_bin} (port 8001)...")
     p_backend = subprocess.Popen(
         [python_bin, "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
     )

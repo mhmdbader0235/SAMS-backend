@@ -241,8 +241,41 @@ async def _initialize_tenant_tables(pool: asyncpg.Pool, tenant_id: str = "tenant
         await conn.execute(
             """
             CREATE TABLE IF NOT EXISTS levels (
-                level_id   BIGSERIAL   PRIMARY KEY,
-                name       TEXT        NOT NULL
+                level_id       BIGSERIAL   PRIMARY KEY,
+                name           TEXT        NOT NULL,
+                isced_level    INTEGER     DEFAULT NULL,
+                age_band_min   INTEGER     DEFAULT NULL,
+                age_band_max   INTEGER     DEFAULT NULL,
+                ordinal        INTEGER     DEFAULT NULL,
+                is_active      BOOLEAN     NOT NULL DEFAULT TRUE
+            );
+            ALTER TABLE levels ADD COLUMN IF NOT EXISTS isced_level INTEGER DEFAULT NULL;
+            ALTER TABLE levels ADD COLUMN IF NOT EXISTS age_band_min INTEGER DEFAULT NULL;
+            ALTER TABLE levels ADD COLUMN IF NOT EXISTS age_band_max INTEGER DEFAULT NULL;
+            ALTER TABLE levels ADD COLUMN IF NOT EXISTS ordinal INTEGER DEFAULT NULL;
+            ALTER TABLE levels ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+            """
+        )
+
+        # Academic settings & blackout dates
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS academic_settings (
+                id               BIGSERIAL   PRIMARY KEY,
+                academic_year    TEXT        NOT NULL,
+                start_month      INTEGER     NOT NULL,
+                weekend_days     TEXT[]      NOT NULL DEFAULT '{}',
+                system           TEXT        NOT NULL DEFAULT 'US',
+                updated_at       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            ALTER TABLE academic_settings ADD COLUMN IF NOT EXISTS system TEXT DEFAULT 'US';
+
+            CREATE TABLE IF NOT EXISTS blackout_dates (
+                id            BIGSERIAL   PRIMARY KEY,
+                date          DATE        NOT NULL,
+                title         TEXT        NOT NULL,
+                tags          TEXT[]      NOT NULL DEFAULT '{}',
+                created_at    TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
             """
         )
@@ -491,6 +524,8 @@ async def _initialize_tenant_tables(pool: asyncpg.Pool, tenant_id: str = "tenant
             """
             ALTER TABLE event_class_map DROP COLUMN IF EXISTS costbudget_id CASCADE;
             DROP TABLE IF EXISTS cost_budget CASCADE;
+            ALTER TABLE students ALTER COLUMN class_id DROP NOT NULL;
+            ALTER TABLE class ADD COLUMN IF NOT EXISTS capacity INTEGER DEFAULT 25;
             """
         )
 

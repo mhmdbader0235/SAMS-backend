@@ -1,0 +1,27 @@
+$kind: http-request
+name: Register User (Teacher / Staff)
+description: Register a new user account protected by the invitation passphrase.
+url: "{{baseUrl}}/api/v1/auth/register"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "email": "teacher_postman@school.com",
+      "password": "teacher123",
+      "role": "teacher",
+      "tenant_id": "{{tenantId}}",
+      "invite_code": "{{invitePassphrase}}"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      var jsonData = pm.response.json();
+      if (jsonData.access_token) {
+          pm.collectionVariables.set('teacherToken', jsonData.access_token);
+          console.log('Saved teacherToken:', jsonData.access_token);
+      }
+    language: text/javascript
+order: 3000

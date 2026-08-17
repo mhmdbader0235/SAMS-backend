@@ -1,0 +1,7 @@
+$kind: http-request
+description: Fetch user profile details including linked children for parents or classes for teachers.
+url: "{{baseUrl}}/api/v1/auth/profile"
+method: GET
+headers:
+  Authorization: Bearer {{teacherToken}}
+order: 6000

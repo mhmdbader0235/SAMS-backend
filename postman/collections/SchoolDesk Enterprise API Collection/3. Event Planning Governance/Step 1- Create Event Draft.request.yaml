@@ -1,0 +1,28 @@
+$kind: http-request
+name: "Step 1: Create Event Draft"
+description: "Teacher creates event draft (status: draft)."
+url: "{{baseUrl}}/api/v1/events"
+method: POST
+headers:
+  Content-Type: application/json
+  Authorization: Bearer {{teacherToken}}
+body:
+  type: text
+  content: |-
+    {
+      "title": "Science Museum Expedition",
+      "description": "Interactive physics and chemistry workshop",
+      "address": "Science Museum Center",
+      "date": "2026-09-15T09:00:00Z",
+      "class_mappings": []
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      var jsonData = pm.response.json();
+      if (jsonData.id) {
+          pm.collectionVariables.set('eventId', jsonData.id);
+          console.log('Created Event ID:', jsonData.id);
+      }
+    language: text/javascript
+order: 1000

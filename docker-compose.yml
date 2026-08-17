@@ -1,0 +1,82 @@
+name: doumind
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: doumind-db
+    restart: always
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: secure_local_password
+      POSTGRES_DB: user_service_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - doumind-backend_pgdata:/var/lib/postgresql/data
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.0
+    container_name: doumind-keycloak
+    command: start-dev --import-realm --features=organization
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HTTP_PORT: 8080
+      KC_FEATURES: organization
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://db:5432/user_service_db
+      KC_DB_USERNAME: admin
+      KC_DB_PASSWORD: secure_local_password
+      KC_DB_SCHEMA: keycloak
+    ports:
+      - "8000:8080"
+    volumes:
+      - ./SAMS-realm.json:/opt/keycloak/data/import/SAMS-realm.json
+      - keycloak_data:/opt/keycloak/data
+    depends_on:
+      - db
+
+  apisix:
+    image: apache/apisix:3.8.0-debian
+    container_name: doumind-apisix
+    restart: always
+    volumes:
+      - ./gateway/apisix/config.yaml:/usr/local/apisix/conf/config.yaml
+      - ./gateway/apisix/apisix.yaml:/usr/local/apisix/conf/apisix.yaml
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  gateway:
+    image: nginx:1.19.0-alpine
+    container_name: doumind-gateway
+    restart: always
+    ports:
+      - "9080:80"
+    volumes:
+      - ./gateway/nginx.conf:/etc/nginx/conf.d/default.conf
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - db
+      - keycloak
+      - apisix
+
+  opa:
+    image: openpolicyagent/opa:latest
+    container_name: doumind-opa
+    restart: always
+    ports:
+      - "8181:8181"
+    volumes:
+      - ./policies:/policies
+    command:
+      - "run"
+      - "--server"
+      - "--addr=0.0.0.0:8181"
+      - "/policies"
+
+volumes:
+  doumind-backend_pgdata:
+  keycloak_data:
+

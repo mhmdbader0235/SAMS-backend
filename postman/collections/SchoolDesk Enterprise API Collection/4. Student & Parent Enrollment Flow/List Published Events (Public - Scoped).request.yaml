@@ -1,0 +1,8 @@
+$kind: http-request
+name: List Published Events (Public / Scoped)
+description: Returns published trips mapped to the student or parent's registered classes.
+url: "{{baseUrl}}/api/v1/events/published"
+method: GET
+headers:
+  Authorization: Bearer {{parentToken}}
+order: 1000

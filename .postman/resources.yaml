@@ -1,0 +1,14 @@
+# Use this workspace to collaborate
+workspace:
+  id: 69d89ac4-d184-49f3-85e5-29165140b0bd
+
+localResources:
+  collections:
+    - ../doumind-backend/docs/SchoolDesk_API_Postman_Collection.json
+  environments:
+    - ../doumind-backend/docs/postman/environments/New
+      Environment.environment.yaml
+
+cloudResources:
+  collections:
+    ../postman/collections/SchoolDesk Enterprise API Collection: 09139736-9b3c-47d9-8881-8e13766d47ec

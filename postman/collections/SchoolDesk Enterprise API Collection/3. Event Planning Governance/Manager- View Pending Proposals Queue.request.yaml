@@ -1,0 +1,8 @@
+$kind: http-request
+name: "Manager: View Pending Proposals Queue"
+description: Manager views queue of proposed event submissions.
+url: "{{baseUrl}}/api/v1/events/manager-queue"
+method: GET
+headers:
+  Authorization: Bearer {{managerToken}}
+order: 4141

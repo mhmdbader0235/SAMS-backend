@@ -28,10 +28,25 @@ class TenantRepository:
     # =========================================================================
     # Levels
     # =========================================================================
-    async def create_level(self, name: str) -> int:
+    async def create_level(
+        self,
+        name: str,
+        isced_level: int = 1,
+        age_band_min: int = 6,
+        age_band_max: int = 7,
+        ordinal: int = 1,
+    ) -> int:
         return await self.pool.fetchval(
-            "INSERT INTO levels (name) VALUES ($1) RETURNING level_id",
+            """
+            INSERT INTO levels (name, isced_level, age_band_min, age_band_max, ordinal)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING level_id
+            """,
             name,
+            isced_level,
+            age_band_min,
+            age_band_max,
+            ordinal,
         )
 
     async def get_level_by_name(self, name: str) -> dict | None:
@@ -48,6 +63,232 @@ class TenantRepository:
     async def get_all_levels(self) -> list[dict]:
         rows = await self.pool.fetch("SELECT level_id, name FROM levels ORDER BY name ASC")
         return [dict(row) for row in rows]
+
+    async def save_academic_structure(self, payload: dict) -> None:
+        """
+        Saves or updates the school academic structure:
+        - Curriculums / Levels
+        - Sections / Classes with capacities
+        - Academic Settings (year, start month, weekend days)
+        - Blackout Dates / Holidays
+        """
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                # 1. Ensure table schema columns exist
+                await conn.execute("ALTER TABLE levels ADD COLUMN IF NOT EXISTS isced_level INTEGER;")
+                await conn.execute("ALTER TABLE levels ADD COLUMN IF NOT EXISTS age_band_min INTEGER;")
+                await conn.execute("ALTER TABLE levels ADD COLUMN IF NOT EXISTS age_band_max INTEGER;")
+                await conn.execute("ALTER TABLE levels ADD COLUMN IF NOT EXISTS ordinal INTEGER;")
+                await conn.execute("ALTER TABLE levels ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;")
+                await conn.execute("ALTER TABLE class ADD COLUMN IF NOT EXISTS capacity INTEGER NOT NULL DEFAULT 25;")
+                
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS academic_settings (
+                        id BIGSERIAL PRIMARY KEY,
+                        system TEXT DEFAULT 'US',
+                        academic_year TEXT NOT NULL,
+                        start_month INTEGER NOT NULL,
+                        weekend_days TEXT[] NOT NULL DEFAULT '{}',
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    );
+                """)
+                await conn.execute("ALTER TABLE academic_settings ADD COLUMN IF NOT EXISTS system TEXT DEFAULT 'US';")
+                
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS blackout_dates (
+                        id BIGSERIAL PRIMARY KEY,
+                        date DATE NOT NULL,
+                        title TEXT NOT NULL,
+                        tags TEXT[] NOT NULL DEFAULT '{}',
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+                    );
+                """)
+
+                # 2. Save Academic Settings
+                system_val = payload.get("system") or "US"
+                cal = payload.get("calendar") or {}
+                acad_year = cal.get("academic_year") or "2026-2027"
+                start_month = int(cal.get("start_month") or 9)
+                weekend_days = cal.get("weekend_days") or ["Saturday", "Sunday"]
+
+                existing_settings = await conn.fetchval("SELECT id FROM academic_settings LIMIT 1")
+                if existing_settings:
+                    await conn.execute(
+                        """
+                        UPDATE academic_settings
+                        SET system = $1, academic_year = $2, start_month = $3, weekend_days = $4, updated_at = CURRENT_TIMESTAMP
+                        WHERE id = $5
+                        """,
+                        system_val, acad_year, start_month, weekend_days, existing_settings
+                    )
+                else:
+                    await conn.execute(
+                        """
+                        INSERT INTO academic_settings (system, academic_year, start_month, weekend_days)
+                        VALUES ($1, $2, $3, $4)
+                        """,
+                        system_val, acad_year, start_month, weekend_days
+                    )
+
+                # 3. Save Blackout Dates
+                blackout_dates = payload.get("blackout_dates") or []
+                await conn.execute("DELETE FROM blackout_dates")
+                for bd in blackout_dates:
+                    d_val = bd.get("date")
+                    if d_val:
+                        if isinstance(d_val, str):
+                            d_parsed = datetime.strptime(d_val[:10], "%Y-%m-%d").date()
+                        else:
+                            d_parsed = d_val
+                        await conn.execute(
+                            "INSERT INTO blackout_dates (date, title, tags) VALUES ($1, $2, $3)",
+                            d_parsed, bd.get("title") or "Holiday", bd.get("tags") or []
+                        )
+
+                # 4. Upsert Levels and Classes / Sections
+                levels = payload.get("levels") or []
+                default_teacher_id = await conn.fetchval("SELECT id FROM teachers LIMIT 1")
+                if default_teacher_id is None:
+                    t_uid = await conn.fetchval("SELECT id FROM users WHERE role = 'teacher' LIMIT 1")
+                    if t_uid is None:
+                        t_uid = await conn.fetchval(
+                            "INSERT INTO users (email, role, password_hash) VALUES ('admin.teacher@school.com', 'teacher', 'managed') RETURNING id"
+                        )
+                    default_teacher_id = await conn.fetchval(
+                        "INSERT INTO teachers (id, name) VALUES ($1, 'Lead Teacher') ON CONFLICT DO NOTHING RETURNING id",
+                        t_uid
+                    ) or t_uid
+
+                for lvl in levels:
+                    lvl_name = lvl.get("name") or "Grade"
+                    ordinal = lvl.get("ordinal")
+                    isced = lvl.get("isced_level")
+                    age_min = lvl.get("age_band_min")
+                    age_max = lvl.get("age_band_max")
+                    is_active = bool(lvl.get("is_active", True))
+
+                    existing_lvl_id = None
+                    if ordinal is not None:
+                        existing_lvl_id = await conn.fetchval("SELECT level_id FROM levels WHERE ordinal = $1", ordinal)
+                    if not existing_lvl_id:
+                        existing_lvl_id = await conn.fetchval("SELECT level_id FROM levels WHERE LOWER(name) = LOWER($1)", lvl_name.strip())
+
+                    if existing_lvl_id:
+                        await conn.execute(
+                            """
+                            UPDATE levels
+                            SET name = $1, isced_level = $2, age_band_min = $3, age_band_max = $4, ordinal = $5, is_active = $6
+                            WHERE level_id = $7
+                            """,
+                            lvl_name, isced, age_min, age_max, ordinal, is_active, existing_lvl_id
+                        )
+                        lvl_id = existing_lvl_id
+                    else:
+                        lvl_id = await conn.fetchval(
+                            """
+                            INSERT INTO levels (name, isced_level, age_band_min, age_band_max, ordinal, is_active)
+                            VALUES ($1, $2, $3, $4, $5, $6)
+                            RETURNING level_id
+                            """,
+                            lvl_name, isced, age_min, age_max, ordinal, is_active
+                        )
+
+                    sections = lvl.get("sections") or []
+                    for sec in sections:
+                        sec_name = sec.get("name") or f"{lvl_name} - A"
+                        sec_cap = int(sec.get("capacity") or 25)
+
+                        existing_class_id = await conn.fetchval(
+                            "SELECT id FROM class WHERE level_id = $1 AND LOWER(name) = LOWER($2)",
+                            lvl_id, sec_name.strip()
+                        )
+                        if existing_class_id:
+                            await conn.execute(
+                                "UPDATE class SET capacity = $1 WHERE id = $2",
+                                sec_cap, existing_class_id
+                            )
+                        else:
+                            await conn.execute(
+                                """
+                                INSERT INTO class (name, level_id, capacity, head_teacher_id)
+                                VALUES ($1, $2, $3, $4)
+                                """,
+                                sec_name, lvl_id, sec_cap, default_teacher_id
+                            )
+
+    async def get_academic_structure(self) -> dict:
+        """Fetch complete saved academic structure & calendar for tenant."""
+        try:
+            await self.pool.execute("ALTER TABLE levels ADD COLUMN IF NOT EXISTS isced_level INTEGER;")
+            await self.pool.execute("ALTER TABLE levels ADD COLUMN IF NOT EXISTS age_band_min INTEGER;")
+            await self.pool.execute("ALTER TABLE levels ADD COLUMN IF NOT EXISTS age_band_max INTEGER;")
+            await self.pool.execute("ALTER TABLE levels ADD COLUMN IF NOT EXISTS ordinal INTEGER;")
+            await self.pool.execute("ALTER TABLE levels ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;")
+            await self.pool.execute("ALTER TABLE class ADD COLUMN IF NOT EXISTS capacity INTEGER NOT NULL DEFAULT 25;")
+            await self.pool.execute("ALTER TABLE academic_settings ADD COLUMN IF NOT EXISTS system TEXT DEFAULT 'US';")
+        except Exception:
+            pass
+
+        # 1. Academic Settings
+        settings_row = await self.pool.fetchrow("SELECT system, academic_year, start_month, weekend_days FROM academic_settings ORDER BY id DESC LIMIT 1")
+        if settings_row:
+            system = settings_row["system"] or "US"
+            calendar = {
+                "academic_year": settings_row["academic_year"],
+                "start_month": settings_row["start_month"],
+                "weekend_days": settings_row["weekend_days"] or ["Saturday", "Sunday"]
+            }
+        else:
+            system = "US"
+            calendar = {
+                "academic_year": "2026-2027",
+                "start_month": 9,
+                "weekend_days": ["Saturday", "Sunday"]
+            }
+
+        # 2. Blackout Dates
+        bd_rows = await self.pool.fetch("SELECT date, title, tags FROM blackout_dates ORDER BY date ASC")
+        blackout_dates = [
+            {
+                "date": str(r["date"]),
+                "title": r["title"],
+                "tags": r["tags"] or []
+            }
+            for r in bd_rows
+        ]
+
+        # 3. Levels and Classes
+        lvl_rows = await self.pool.fetch("SELECT level_id, name, isced_level, age_band_min, age_band_max, ordinal, is_active FROM levels ORDER BY COALESCE(ordinal, 999), level_id ASC")
+        levels = []
+        for lr in lvl_rows:
+            c_rows = await self.pool.fetch("SELECT id, name, capacity FROM class WHERE level_id = $1 ORDER BY name ASC", lr["level_id"])
+            sections = [
+                {
+                    "id": cr["id"],
+                    "name": cr["name"],
+                    "capacity": cr.get("capacity") or 25
+                }
+                for cr in c_rows
+            ]
+            levels.append({
+                "level_id": lr["level_id"],
+                "name": lr["name"],
+                "isced_level": lr.get("isced_level") or 1,
+                "age_band_min": lr.get("age_band_min"),
+                "age_band_max": lr.get("age_band_max"),
+                "ordinal": lr.get("ordinal"),
+                "is_active": lr.get("is_active", True),
+                "sections": sections
+            })
+
+        has_structure = (len(levels) > 0 and any(len(l["sections"]) > 0 for l in levels)) or settings_row is not None
+        return {
+            "has_structure": has_structure,
+            "system": system,
+            "calendar": calendar,
+            "blackout_dates": blackout_dates,
+            "levels": levels
+        }
 
     # =========================================================================
     # Teachers
@@ -161,7 +402,7 @@ class TenantRepository:
             SELECT s.id, s.name, s.class_id, s.gender, s.birth_data, s.created_at, u.email, c.name AS class_name
             FROM students s
             JOIN users u ON s.id = u.id
-            JOIN class c ON s.class_id = c.id
+            LEFT JOIN class c ON s.class_id = c.id
             WHERE s.id = $1
             """,
             parse_id(student_id),
@@ -189,7 +430,7 @@ class TenantRepository:
                    ) as parents
             FROM students s
             JOIN users u ON s.id = u.id
-            JOIN class c ON s.class_id = c.id
+            LEFT JOIN class c ON s.class_id = c.id
             ORDER BY s.name ASC
             """
         )
@@ -219,7 +460,7 @@ class TenantRepository:
             FROM students s
             JOIN student_parent_map m ON s.id = m.student_id
             JOIN users u ON s.id = u.id
-            JOIN class c ON s.class_id = c.id
+            LEFT JOIN class c ON s.class_id = c.id
             WHERE m.parent_id = $1
             """,
             parse_id(parent_id),
@@ -266,22 +507,24 @@ class TenantRepository:
     # =========================================================================
     # Classes
     # =========================================================================
-    async def create_class(self, name: str, level_id: int, head_teacher_id) -> int:
+    async def create_class(self, name: str, level_id: int, head_teacher_id = None, capacity: int = 25) -> int:
+        h_id = parse_id(head_teacher_id) if head_teacher_id else None
         return await self.pool.fetchval(
             """
-            INSERT INTO class (name, level_id, head_teacher_id)
-            VALUES ($1, $2, $3)
+            INSERT INTO class (name, level_id, head_teacher_id, capacity)
+            VALUES ($1, $2, $3, $4)
             RETURNING id
             """,
-            name,
+            name.strip(),
             parse_id(level_id),
-            parse_id(head_teacher_id),
+            h_id,
+            int(capacity or 25),
         )
 
     async def get_class_by_name_and_level(self, name: str, level_id: int) -> dict | None:
         row = await self.pool.fetchrow(
             """
-            SELECT id, name, level_id, head_teacher_id, created_at
+            SELECT id, name, level_id, head_teacher_id, COALESCE(capacity, 25) AS capacity, created_at
             FROM class
             WHERE LOWER(name) = LOWER($1) AND level_id = $2
             """,
@@ -293,8 +536,9 @@ class TenantRepository:
     async def get_class_by_id(self, class_id: int) -> dict | None:
         row = await self.pool.fetchrow(
             """
-            SELECT c.id, c.name, c.level_id, c.head_teacher_id, c.created_at,
-                   t.name AS teacher_name, u.email AS teacher_email, l.name AS level_name
+            SELECT c.id, c.name, c.level_id, c.head_teacher_id, c.created_at, COALESCE(c.capacity, 25) AS capacity,
+                   t.name AS teacher_name, u.email AS teacher_email, l.name AS level_name,
+                   (SELECT COUNT(*) FROM students s WHERE s.class_id = c.id) AS student_count
             FROM class c
             LEFT JOIN teachers t ON c.head_teacher_id = t.id
             LEFT JOIN users u ON t.id = u.id
@@ -310,34 +554,122 @@ class TenantRepository:
         class_id: int,
         name: str | None = None,
         level_id: int | None = None,
-        head_teacher_id: int | None = None,
+        head_teacher_id = None,
+        capacity: int | None = None,
     ) -> dict:
         cid = parse_id(class_id)
         current = await self.get_class_by_id(cid)
         if not current:
             raise ValueError(f"Class {cid} not found")
 
-        new_name = name.strip() if name else current["name"]
+        new_name = name.strip() if name is not None else current["name"]
         new_level_id = parse_id(level_id) if level_id is not None else current["level_id"]
         new_head = parse_id(head_teacher_id) if head_teacher_id is not None else current["head_teacher_id"]
+        new_capacity = int(capacity) if capacity is not None else current.get("capacity", 25)
 
         await self.pool.execute(
             """
             UPDATE class
-            SET name = $1, level_id = $2, head_teacher_id = $3
-            WHERE id = $4
+            SET name = $1, level_id = $2, head_teacher_id = $3, capacity = $4
+            WHERE id = $5
             """,
             new_name,
             new_level_id,
             new_head,
+            new_capacity,
             cid,
         )
         return await self.get_class_by_id(cid)
 
+    async def delete_class(self, class_id: int) -> bool:
+        cid = parse_id(class_id)
+        # Ensure students class_id column is nullable
+        await self.pool.execute("ALTER TABLE students ALTER COLUMN class_id DROP NOT NULL")
+        # Unlink students if any
+        await self.pool.execute("UPDATE students SET class_id = NULL WHERE class_id = $1", cid)
+        await self.pool.execute("DELETE FROM event_class_map WHERE class_id = $1", cid)
+        await self.pool.execute("DELETE FROM class WHERE id = $1", cid)
+        return True
+
+    async def delete_level(self, level_id: int) -> bool:
+        lid = parse_id(level_id)
+        # Delete/unlink all classes in this level
+        classes = await self.pool.fetch("SELECT id FROM class WHERE level_id = $1", lid)
+        for c in classes:
+            await self.delete_class(c["id"])
+        await self.pool.execute("DELETE FROM levels WHERE level_id = $1", lid)
+        return True
+
+    async def update_level(
+        self,
+        level_id: int,
+        name: str | None = None,
+        isced_level: int | None = None,
+        age_band_min: int | None = None,
+        age_band_max: int | None = None,
+        ordinal: int | None = None,
+        is_active: bool | None = None,
+    ) -> dict | None:
+        lid = parse_id(level_id)
+        current = await self.get_level_by_id(lid)
+        if not current:
+            raise ValueError(f"Level {lid} not found")
+        
+        new_name = name.strip() if name is not None else current.get("name")
+        new_isced = isced_level if isced_level is not None else current.get("isced_level")
+        new_min = age_band_min if age_band_min is not None else current.get("age_band_min")
+        new_max = age_band_max if age_band_max is not None else current.get("age_band_max")
+        new_ord = ordinal if ordinal is not None else current.get("ordinal")
+        new_active = is_active if is_active is not None else current.get("is_active", True)
+
+        await self.pool.execute(
+            """
+            UPDATE levels
+            SET name = $1, isced_level = $2, age_band_min = $3, age_band_max = $4, ordinal = $5, is_active = $6
+            WHERE level_id = $7
+            """,
+            new_name, new_isced, new_min, new_max, new_ord, new_active, lid
+        )
+        return await self.get_level_by_id(lid)
+
+    async def get_students_for_class(self, class_id: int) -> list[dict]:
+        cid = parse_id(class_id)
+        rows = await self.pool.fetch(
+            """
+            SELECT s.id, s.name, s.gender, s.birth_data, s.created_at, s.class_id, u.email,
+                   COALESCE((
+                       SELECT string_agg(p.name, ', ')
+                       FROM student_parent_map spm
+                       JOIN parenets p ON spm.parent_id = p.id
+                       WHERE spm.student_id = s.id
+                   ), '') AS parent_names
+            FROM students s
+            JOIN users u ON s.id = u.id
+            WHERE s.class_id = $1
+            ORDER BY s.name ASC
+            """,
+            cid,
+        )
+        return [dict(row) for row in rows]
+
+    async def reassign_student_class(self, student_id, new_class_id: int | None) -> bool:
+        sid = parse_id(student_id)
+        cid = parse_id(new_class_id) if new_class_id else None
+        await self.pool.execute("UPDATE students SET class_id = $1 WHERE id = $2", cid, sid)
+        return True
+
+    async def bulk_reassign_students(self, student_ids: list[int], new_class_id: int | None) -> int:
+        if not student_ids:
+            return 0
+        sids = [parse_id(s) for s in student_ids]
+        cid = parse_id(new_class_id) if new_class_id else None
+        await self.pool.execute("UPDATE students SET class_id = $1 WHERE id = ANY($2::bigint[])", cid, sids)
+        return len(sids)
+
     async def get_class_by_head_teacher(self, teacher_id) -> dict | None:
         row = await self.pool.fetchrow(
             """
-            SELECT c.id, c.name, c.level_id, c.head_teacher_id, l.name AS level_name
+            SELECT c.id, c.name, c.level_id, c.head_teacher_id, COALESCE(c.capacity, 25) AS capacity, l.name AS level_name
             FROM class c
             JOIN levels l ON c.level_id = l.level_id
             WHERE c.head_teacher_id = $1
@@ -350,13 +682,14 @@ class TenantRepository:
     async def get_all_classes(self) -> list[dict]:
         rows = await self.pool.fetch(
             """
-            SELECT c.id, c.name, c.level_id, c.head_teacher_id, c.created_at,
-                   t.name AS teacher_name, u.email AS teacher_email, l.name AS level_name
+            SELECT c.id, c.name, c.level_id, c.head_teacher_id, c.created_at, COALESCE(c.capacity, 25) AS capacity,
+                   t.name AS teacher_name, u.email AS teacher_email, l.name AS level_name,
+                   (SELECT COUNT(*) FROM students s WHERE s.class_id = c.id) AS student_count
             FROM class c
             LEFT JOIN teachers t ON c.head_teacher_id = t.id
             LEFT JOIN users u ON t.id = u.id
             LEFT JOIN levels l ON c.level_id = l.level_id
-            ORDER BY c.name ASC
+            ORDER BY COALESCE(l.ordinal, 999) ASC, c.name ASC
             """
         )
         return [dict(row) for row in rows]

@@ -9,6 +9,15 @@ from pydantic import BaseModel, EmailStr
 # =============================================================================
 # Auth schemas
 # =============================================================================
+class UserRoleUpdateRequest(BaseModel):
+    role: str
+
+class UserSummaryResponse(BaseModel):
+    id: int | str
+    email: str
+    role: str
+    created_at: datetime | None = None
+
 class UserRegisterRequest(BaseModel):
     email: EmailStr
     password: str
@@ -34,13 +43,30 @@ class TokenResponse(BaseModel):
 # =============================================================================
 # Level schemas
 # =============================================================================
-class LevelCreateRequest(BaseModel):
-    name: str
-
-
 class LevelResponse(BaseModel):
     level_id: int
     name: str
+    isced_level: int | None = None
+    age_band_min: int | None = None
+    age_band_max: int | None = None
+    ordinal: int | None = None
+    is_active: bool = True
+
+class LevelCreateRequest(BaseModel):
+    name: str
+    isced_level: int | None = None
+    age_band_min: int | None = None
+    age_band_max: int | None = None
+    ordinal: int | None = None
+    is_active: bool = True
+
+class LevelUpdateRequest(BaseModel):
+    name: str | None = None
+    isced_level: int | None = None
+    age_band_min: int | None = None
+    age_band_max: int | None = None
+    ordinal: int | None = None
+    is_active: bool | None = None
 
 
 # =============================================================================
@@ -68,20 +94,26 @@ class StudentCreateRequest(BaseModel):
     email: EmailStr
     password: str
     name: str
-    class_id: int
-    gender: str | None = None
-    birth_data: str | None = None
+    class_id: int | None = None
+
+class StudentReassignClassRequest(BaseModel):
+    class_id: int | None = None
+
+
+class StudentBulkEnrollRequest(BaseModel):
+    student_ids: list[int]
+    class_id: int | None = None
 
 
 class StudentResponse(BaseModel):
     id: int
     name: str
-    class_id: int
+    class_id: int | None = None
     gender: str | None = None
     birth_data: str | None = None
     email: str
     class_name: str | None = None
-    created_at: datetime
+    created_at: datetime | None = None
     parents: list[ParentResponse] = []
 
 
@@ -97,6 +129,13 @@ class ClassCreateRequest(BaseModel):
     name: str
     level_id: int
     head_teacher_id: int | None = None
+    capacity: int = 25
+
+class ClassUpdateRequest(BaseModel):
+    name: str | None = None
+    level_id: int | None = None
+    head_teacher_id: int | None = None
+    capacity: int | None = None
 
 
 class ClassResponse(BaseModel):
@@ -104,10 +143,12 @@ class ClassResponse(BaseModel):
     name: str
     level_id: int
     head_teacher_id: int | None = None
+    capacity: int = 25
     teacher_name: str | None = None
     teacher_email: str | None = None
     level_name: str | None = None
-    created_at: datetime
+    student_count: int = 0
+    created_at: datetime | None = None
 
 
 # =============================================================================
@@ -315,4 +356,37 @@ class PublishedEventOut(BaseModel):
     address: str | None
     date: datetime
     class_mappings: list[ClassMappingResponse] = []
+
+
+# =============================================================================
+# Structure Setup Schemas
+# =============================================================================
+class SpineSectionSchema(BaseModel):
+    name: str
+    capacity: int
+
+class SpineLevelSchema(BaseModel):
+    name: str
+    isced_level: int | None = None
+    age_band_min: int | None = None
+    age_band_max: int | None = None
+    ordinal: int | None = None
+    is_active: bool = True
+    sections: list[SpineSectionSchema] = []
+
+class AcademicSettingsSchema(BaseModel):
+    academic_year: str
+    start_month: int
+    weekend_days: list[str] = []
+
+class BlackoutDateSchema(BaseModel):
+    date: str
+    title: str
+    tags: list[str] = []
+
+class StructureSetupRequest(BaseModel):
+    system: str
+    levels: list[SpineLevelSchema]
+    calendar: AcademicSettingsSchema
+    blackout_dates: list[BlackoutDateSchema]
 

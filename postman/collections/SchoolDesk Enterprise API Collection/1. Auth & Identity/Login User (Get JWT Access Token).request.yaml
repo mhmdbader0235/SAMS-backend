@@ -1,0 +1,24 @@
+$kind: http-request
+name: Login User (Get JWT Access Token)
+description: Authenticate user and receive a signed Bearer JWT token.
+url: "{{baseUrl}}/api/v1/auth/login"
+method: POST
+headers:
+  Content-Type: application/json
+body:
+  type: text
+  content: |-
+    {
+      "email": "teacher_postman@school.com",
+      "password": "teacher123"
+    }
+scripts:
+  - type: afterResponse
+    code: |-
+      var jsonData = pm.response.json();
+      if (jsonData.access_token) {
+          pm.collectionVariables.set('teacherToken', jsonData.access_token);
+          console.log('Saved teacherToken on Login:', jsonData.access_token);
+      }
+    language: text/javascript
+order: 4000

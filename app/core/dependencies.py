@@ -170,9 +170,11 @@ async def get_current_user(
     payload = AuthService.decode_access_token(token)
 
     # Fallback attempt: Handle Keycloak OIDC claims (when verified upstream via APISIX)
+    is_keycloak = False
     if not payload:
         try:
             payload = jwt.decode(token, options={"verify_signature": False})
+            is_keycloak = True
         except Exception:
             payload = None
 
@@ -204,49 +206,14 @@ async def get_current_user(
         "content:create", "content:publish", "announcement:manage"
     }
     
-    PRIMARY_ROLE_ORDER = [
-        "super_admin", "school_admin", "admin", "manager", "teacher", "finance", "event_teacher", "parent", "student"
-    ]
-    
-    keycloak_roles = list(payload.get("realm_access", {}).get("roles", []))
-    
-    # Extract client roles from resource_access
-    res_access = payload.get("resource_access", {})
-    if isinstance(res_access, dict):
-        for client_cfg in res_access.values():
-            if isinstance(client_cfg, dict) and "roles" in client_cfg:
-                keycloak_roles.extend(client_cfg["roles"])
-
-    GROUP_TO_ROLE_MAP = {
-        "super_admins": "super_admin",
-        "super_admin": "super_admin",
-        "school_admins": "school_admin",
-        "school_admin": "school_admin",
-        "admins": "school_admin",
-        "admin": "school_admin",
-        "administrators": "school_admin",
-        "administrator": "school_admin",
-        "managers": "manager",
-        "manager": "manager",
-        "teachers": "teacher",
-        "teacher": "teacher",
-        "parents": "parent",
-        "parent": "parent",
-        "students": "student",
-        "student": "student",
-    }
-
-    # Extract groups from groups claim
-    groups = payload.get("groups", [])
-    if isinstance(groups, list):
-        for g in groups:
-            clean_g = g.lstrip("/").lower().replace(" ", "_")
-            mapped_role = GROUP_TO_ROLE_MAP.get(clean_g, clean_g)
-            if mapped_role in VALID_ROLES:
-                keycloak_roles.append(mapped_role)
-
-
-    single_role = payload.get("role")
+    # Keycloak is strictly for Authentication (AuthN). We DO NOT extract authorization roles from Keycloak tokens.
+    # We only check for roles if they were embedded by our own local AuthService.
+    if is_keycloak:
+        single_role = None
+        payload_roles = []
+    else:
+        single_role = payload.get("role")
+        payload_roles = payload.get("roles", [])
     
     role = None
     if single_role:
@@ -255,19 +222,13 @@ async def get_current_user(
             role = "school_admin"
         elif clean_sr in VALID_ROLES:
             role = clean_sr
-    
+            
     if not role:
-        for p_role in PRIMARY_ROLE_ORDER:
-            if p_role in keycloak_roles:
-                role = "school_admin" if p_role in ("admin", "administrator") else p_role
-                break
-    
-    if not role:
-        extracted = [r for r in keycloak_roles if r in VALID_ROLES]
-        role = extracted[0] if extracted else "pending"
+        role = "pending"
 
-    extracted_roles = set(r for r in keycloak_roles if r in VALID_ROLES)
+    extracted_roles = set(r for r in payload_roles if r in VALID_ROLES)
     extracted_roles.add(role)
+
     if role == "school_admin" or "school_admin" in extracted_roles:
         extracted_roles.add("admin")
     elif role == "admin" or "admin" in extracted_roles:
@@ -383,7 +344,7 @@ async def get_current_user(
 
 
     # Resolve local database user ID, dynamic roles, and custom permissions for school roles
-    if role != "super_admin" and email:
+    if email:
         try:
             from app.core.database import get_db_pool
             pool = await get_db_pool(tenant_id)
@@ -401,16 +362,27 @@ async def get_current_user(
                 if user_row:
                     user_id = str(user_row["id"])
                     db_role = user_row.get("role")
-                    if db_role and db_role in VALID_ROLES:
-                        extracted_roles.add(db_role)
-                        if not role or role in ("student", "pending"):
-                            role = db_role
-                    for r in (user_row.get("roles") or []):
-                        if r and r in VALID_ROLES:
-                            extracted_roles.add(r)
-                    for p in (user_row.get("permissions") or []):
-                        if p:
-                            extracted_roles.add(p)
+                    if db_role in ("pending", "none", "unassigned"):
+                        role = db_role
+                        extracted_roles = {"pending"}
+                    else:
+                        if db_role and db_role in VALID_ROLES:
+                            extracted_roles.add(db_role)
+                            if not role or role in ("student", "pending"):
+                                role = db_role
+                                
+                        db_roles = user_row.get("roles") or []
+                        for r in db_roles:
+                            if r and r in VALID_ROLES and r not in ("pending", "none", "unassigned"):
+                                extracted_roles.add(r)
+                                
+                        # Prevent Keycloak's default 'student' role from bleeding into other roles (like parent/teacher)
+                        if "student" in extracted_roles and db_role != "student" and "student" not in db_roles:
+                            extracted_roles.remove("student")
+                            
+                        for p in (user_row.get("permissions") or []):
+                            if p:
+                                extracted_roles.add(p)
                 else:
                     # JIT Auto-provision missing Keycloak user locally
                     local_id = await conn.fetchval(

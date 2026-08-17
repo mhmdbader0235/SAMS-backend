@@ -411,6 +411,44 @@ async def update_user_permissions(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+@router.get("/users/pending", summary="Get all pending users (admin only)")
+async def get_pending_users(
+    request: Request,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> list[dict]:
+    if not (current_user.has_any_role("school_admin", "super_admin", "admin")):
+        raise HTTPException(status_code=403, detail="Only school administrators can view pending users")
+    
+    tenant_id = (request.headers.get("x-tenant-id") or current_user.tenant_id or "tenant_a").strip().lower()
+    try:
+        users = await AuthService.get_pending_users(tenant_id)
+        return users
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+from app.core.schemas import UserRoleUpdateRequest
+
+@router.patch("/users/{email}/role", summary="Assign role to pending user (admin only)")
+async def assign_user_role(
+    email: str,
+    payload: UserRoleUpdateRequest,
+    request: Request,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    if not (current_user.has_any_role("school_admin", "super_admin", "admin")):
+        raise HTTPException(status_code=403, detail="Only school administrators can assign roles")
+    
+    tenant_id = (request.headers.get("x-tenant-id") or current_user.tenant_id or "tenant_a").strip().lower()
+    try:
+        res = await AuthService.assign_user_role(tenant_id, email, payload.role)
+        return res
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 @router.get("/roles-catalog", summary="Get comprehensive roles & permissions catalog")
 async def get_roles_catalog(
     current_user: CurrentUser = Depends(get_current_user),
@@ -418,6 +456,7 @@ async def get_roles_catalog(
     from app.core.dependencies import COMPOSITE_ROLE_PERMISSIONS
     
     COMPOSITE_ROLES = [
+        {"id": "super_admin", "label": "Super Administrator", "description": "Full platform administration across all tenants and schemas."},
         {"id": "school_admin", "label": "School Administrator", "description": "Full school-level management, staffing, and settings."},
         {"id": "manager", "label": "Operations Manager", "description": "Event proposal review, pricing, publishing, and budget approvals."},
         {"id": "teacher", "label": "Teacher / Class Lead", "description": "Draft event creation, resource requests, and student approvals."},
@@ -425,6 +464,7 @@ async def get_roles_catalog(
         {"id": "student", "label": "Student", "description": "Browse class events and submit enrollment requests."},
         {"id": "finance", "label": "Finance Officer", "description": "Resource unit pricing and trip budget management."},
         {"id": "event_teacher", "label": "Event Lead Teacher", "description": "Designated lead for event execution."},
+        {"id": "pending", "label": "Pending / Unassigned", "description": "Awaiting role verification and access approval."},
     ]
     
     CATEGORIES = {

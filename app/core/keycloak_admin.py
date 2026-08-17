@@ -109,135 +109,72 @@ def sync_user_to_keycloak(email: str, password: str, role: str, tenant_id: str |
             except Exception as e:
                 logger.warning(f"Could not update attributes for user {email}: {e}")
 
-        # 4. Map role to user in Keycloak if user ID exists
-        if kc_user_id and role:
-            role_url = f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/roles/{urllib.parse.quote(role)}"
-            req = urllib.request.Request(role_url, headers=headers, method="GET")
-            try:
-                with urllib.request.urlopen(req, timeout=3) as resp:
-                    role_obj = json.loads(resp.read().decode())
-                    if role_obj and "id" in role_obj:
-                        assign_url = f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/users/{kc_user_id}/role-mappings/realm"
-                        req_assign = urllib.request.Request(
-                            assign_url,
-                            data=json.dumps([role_obj]).encode(),
-                            headers=headers,
-                            method="POST",
-                        )
-                        with urllib.request.urlopen(req_assign, timeout=3):
-                            pass
-            except Exception as e:
-                logger.warning(f"Could not assign role {role} in Keycloak for {email}: {e}")
-
-            # Assign user to matching Keycloak Group if group exists
-            group_name_map = {
-                "super_admin": "Super Admins",
-                "school_admin": "School Admins",
-                "manager": "Managers",
-                "teacher": "Teachers",
-                "parent": "Parents",
-                "student": "Students",
-            }
-            group_name = group_name_map.get(role)
-            if group_name:
-                try:
-                    groups_url = f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/groups?search={urllib.parse.quote(group_name)}"
-                    req_grp = urllib.request.Request(groups_url, headers=headers, method="GET")
-                    with urllib.request.urlopen(req_grp, timeout=3) as resp:
-                        grps = json.loads(resp.read().decode())
-                        if grps and len(grps) > 0:
-                            grp_id = grps[0]["id"]
-                            join_grp_url = f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/users/{kc_user_id}/groups/{grp_id}"
-                            req_join = urllib.request.Request(join_grp_url, headers=headers, method="PUT")
-                            with urllib.request.urlopen(req_join, timeout=3):
-                                pass
-                except Exception as e:
-                    logger.warning(f"Could not assign group {group_name} in Keycloak for {email}: {e}")
-
-
-        # 5. Add user to Organization
-        if kc_user_id and tenant_id:
-            org_search_url = f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/organizations?search={urllib.parse.quote(tenant_id)}"
-            req = urllib.request.Request(org_search_url, headers=headers, method="GET")
-            org_id = None
-            try:
-                with urllib.request.urlopen(req, timeout=3) as resp:
-                    orgs = json.loads(resp.read().decode())
-                    if orgs and isinstance(orgs, list) and len(orgs) > 0:
-                        # Find matching org by alias or name
-                        for org in orgs:
-                            alias_val = (org.get("alias") or "").lower()
-                            name_val = (org.get("name") or "").lower()
-                            tid_val = tenant_id.lower()
-                            if alias_val == tid_val or name_val == tid_val or tid_val in alias_val or tid_val in name_val:
-                                org_id = org["id"]
-                                break
-            except Exception as e:
-                logger.warning(f"Could not fetch organizations in Keycloak: {e}")
-
-            if not org_id:
-                # Search all organizations without filter to match alias or name
-                all_orgs_url = f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/organizations"
-                req_all = urllib.request.Request(all_orgs_url, headers=headers, method="GET")
-                try:
-                    with urllib.request.urlopen(req_all, timeout=3) as resp:
-                        orgs_all = json.loads(resp.read().decode())
-                        if orgs_all and isinstance(orgs_all, list):
-                            for org in orgs_all:
-                                alias_val = (org.get("alias") or "").lower()
-                                name_val = (org.get("name") or "").lower()
-                                tid_val = tenant_id.lower()
-                                if alias_val == tid_val or name_val == tid_val or tid_val in alias_val or tid_val in name_val:
-                                    org_id = org["id"]
-                                    break
-                except Exception as e:
-                    logger.warning(f"Could not fetch all organizations in Keycloak: {e}")
-
-            if not org_id:
-                # Create Organization in Keycloak
-                create_org_url = f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/organizations"
-                org_name = f"Organization {tenant_id.replace('tenant_', '').upper()}"
-                domain_name = f"school{tenant_id.replace('tenant_', '').upper()}.com"
-                org_payload = {
-                    "name": org_name,
-                    "alias": tenant_id,
-                    "enabled": True,
-                    "domains": [
-                        {"name": domain_name, "verified": True}
-                    ]
-                }
-                req = urllib.request.Request(create_org_url, data=json.dumps(org_payload).encode(), headers=headers, method="POST")
-                try:
-                    with urllib.request.urlopen(req, timeout=3) as resp:
-                        loc = resp.headers.get("Location")
-                        if loc:
-                            org_id = loc.split("/")[-1]
-                except Exception as e:
-                    logger.warning(f"Could not create organization {tenant_id}: {e}")
-
-            if org_id:
-                # Assign user to organization in Keycloak (Keycloak 26 requires JSON string of kc_user_id)
-                add_member_url = f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/organizations/{org_id}/members"
-                req = urllib.request.Request(
-                    add_member_url,
-                    data=json.dumps(kc_user_id).encode(),
-                    headers=headers,
-                    method="POST"
-                )
-                try:
-                    with urllib.request.urlopen(req, timeout=3):
-                        logger.info(f"Successfully added user {email} ({kc_user_id}) to Keycloak Organization {tenant_id} ({org_id})")
-                except urllib.error.HTTPError as e:
-                    if e.code in (409, 204):
-                        pass # User already in org
-                    else:
-                        logger.warning(f"Could not add user {email} to organization {tenant_id} (HTTP {e.code}): {e}")
-                except Exception as e:
-                    logger.warning(f"Could not add user {email} to organization {tenant_id}: {e}")
-
         return True
     except Exception as exc:
         logger.warning(f"Keycloak user sync skipped for {email}: {exc}")
+        return False
+
+
+def update_user_role_in_keycloak(email: str, new_role: str, tenant_id: str) -> bool:
+    """Update an existing user's role and tenant_id in Keycloak."""
+    try:
+        # 1. Obtain Keycloak Admin Access Token
+        token_url = f"{KEYCLOAK_URL}/realms/master/protocol/openid-connect/token"
+        data = urllib.parse.urlencode({
+            "client_id": "admin-cli",
+            "username": KEYCLOAK_ADMIN,
+            "password": KEYCLOAK_ADMIN_PASSWORD,
+            "grant_type": "password"
+        }).encode()
+        req = urllib.request.Request(token_url, data=data, method="POST")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            token_res = json.loads(resp.read().decode())
+            admin_token = token_res["access_token"]
+
+        headers = {
+            "Authorization": f"Bearer {admin_token}",
+            "Content-Type": "application/json"
+        }
+
+        # 2. Search for user by email in Keycloak
+        search_url = f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/users?email={urllib.parse.quote(email)}"
+        req = urllib.request.Request(search_url, headers=headers, method="GET")
+        kc_user_id = None
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            users = json.loads(resp.read().decode())
+            if users and isinstance(users, list) and len(users) > 0:
+                kc_user_id = users[0]["id"]
+                user_obj = users[0]
+
+        if not kc_user_id:
+            logger.warning(f"Cannot update role: User {email} not found in Keycloak.")
+            return False
+
+        # 3. Update user attributes
+        update_url = f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/users/{kc_user_id}"
+        update_payload = {
+            "email": email,
+            "firstName": user_obj.get("firstName", ""),
+            "lastName": user_obj.get("lastName", ""),
+            "attributes": {
+                "tenant_id": [tenant_id],
+                "role": [new_role]
+            }
+        }
+        req_up = urllib.request.Request(
+            update_url,
+            data=json.dumps(update_payload).encode(),
+            headers=headers,
+            method="PUT"
+        )
+        with urllib.request.urlopen(req_up, timeout=3):
+            pass
+
+        # 4. Map new role
+        return True
+    except Exception as exc:
+        logger.warning(f"Keycloak role update failed for {email}: {exc}")
+        return False
         return False
 
 

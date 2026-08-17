@@ -3,7 +3,6 @@
   "realm": "SAMS",
   "displayName": "SAMS",
   "enabled": true,
-  "organizationsEnabled": true,
   "registrationAllowed": true,
   "resetPasswordAllowed": true,
   "loginWithEmailAllowed": true,
@@ -12,466 +11,10 @@
   "accessTokenLifespan": 86400,
   "ssoSessionMaxLifespan": 86400,
   "roles": {
-    "realm": [
-      {
-        "name": "system:write",
-        "description": "Role: system:write",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "system:read",
-        "description": "Role: system:read",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "tenant:manage",
-        "description": "Role: tenant:manage",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "tenant:view",
-        "description": "Role: tenant:view",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "school:write",
-        "description": "Role: school:write",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "school:read",
-        "description": "Role: school:read",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "academic:direct",
-        "description": "Role: academic:direct",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "academic:view",
-        "description": "Role: academic:view",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "user:invite",
-        "description": "Role: user:invite",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "user:delete",
-        "description": "Role: user:delete",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "user:link",
-        "description": "Role: user:link",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "user:view",
-        "description": "Role: user:view",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "event:create",
-        "description": "Role: event:create",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "event:edit",
-        "description": "Role: event:edit",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "event:delete",
-        "description": "Role: event:delete",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "event:propose",
-        "description": "Role: event:propose",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "event:review",
-        "description": "Role: event:review",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "event:publish",
-        "description": "Role: event:publish",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "event:clone",
-        "description": "Role: event:clone",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "event:view_draft",
-        "description": "Role: event:view_draft",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "resource:create",
-        "description": "Role: resource:create",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "resource:price",
-        "description": "Role: resource:price",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "resource:view",
-        "description": "Role: resource:view",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "teacher:write",
-        "description": "Role: teacher:write",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "teacher:read",
-        "description": "Role: teacher:read",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "enrollment:request",
-        "description": "Role: enrollment:request",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "enrollment:parent_approve",
-        "description": "Role: enrollment:parent_approve",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "enrollment:teacher_approve",
-        "description": "Role: enrollment:teacher_approve",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "enrollment:cancel",
-        "description": "Role: enrollment:cancel",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "enrollment:view_roster",
-        "description": "Role: enrollment:view_roster",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "billing:invoice",
-        "description": "Role: billing:invoice",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "billing:pay",
-        "description": "Role: billing:pay",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "billing:refund",
-        "description": "Role: billing:refund",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "billing:audit",
-        "description": "Role: billing:audit",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "content:create",
-        "description": "Role: content:create",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "content:publish",
-        "description": "Role: content:publish",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "announcement:manage",
-        "description": "Role: announcement:manage",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "school_admin",
-        "description": "Role: school_admin",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "teacher",
-        "description": "Role: teacher",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "event_teacher",
-        "description": "Role: event_teacher",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "manager",
-        "description": "Role: manager",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "finance",
-        "description": "Role: finance",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "parent",
-        "description": "Role: parent",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "student",
-        "description": "Role: student",
-        "composite": false,
-        "clientRole": false
-      },
-      {
-        "name": "super_admin",
-        "description": "Role: super_admin",
-        "composite": false,
-        "clientRole": false
-      }
-    ]
+    "realm": [],
+    "client": {}
   },
-  "groups": [
-    {
-      "name": "super_admins",
-      "path": "/super_admins",
-      "realmRoles": [
-        "system:write",
-        "system:read",
-        "tenant:manage",
-        "tenant:view",
-        "school:write",
-        "school:read",
-        "academic:direct",
-        "academic:view",
-        "user:invite",
-        "user:delete",
-        "user:link",
-        "user:view",
-        "event:create",
-        "event:edit",
-        "event:delete",
-        "event:propose",
-        "event:review",
-        "event:publish",
-        "event:clone",
-        "event:view_draft",
-        "resource:create",
-        "resource:price",
-        "resource:view",
-        "teacher:write",
-        "teacher:read",
-        "enrollment:request",
-        "enrollment:parent_approve",
-        "enrollment:teacher_approve",
-        "enrollment:cancel",
-        "enrollment:view_roster",
-        "billing:invoice",
-        "billing:pay",
-        "billing:refund",
-        "billing:audit",
-        "content:create",
-        "content:publish",
-        "announcement:manage",
-        "school_admin",
-        "teacher",
-        "event_teacher",
-        "manager",
-        "finance",
-        "parent",
-        "student",
-        "super_admin"
-      ],
-      "subGroups": []
-    },
-    {
-      "name": "school_admins",
-      "path": "/school_admins",
-      "realmRoles": [
-        "school_admin",
-        "school:write",
-        "school:read",
-        "user:invite",
-        "user:delete",
-        "user:link",
-        "user:view",
-        "event:review",
-        "event:publish",
-        "teacher:read",
-        "enrollment:cancel",
-        "enrollment:view_roster",
-        "billing:audit",
-        "announcement:manage"
-      ],
-      "subGroups": []
-    },
-    {
-      "name": "managers",
-      "path": "/managers",
-      "realmRoles": [
-        "manager",
-        "school:read",
-        "event:review",
-        "event:publish",
-        "event:view_draft",
-        "resource:view",
-        "enrollment:view_roster"
-      ],
-      "subGroups": []
-    },
-    {
-      "name": "teachers",
-      "path": "/teachers",
-      "realmRoles": [
-        "teacher",
-        "school:read",
-        "user:view",
-        "event:create",
-        "event:edit",
-        "event:delete",
-        "event:propose",
-        "event:clone",
-        "teacher:write",
-        "teacher:read",
-        "enrollment:teacher_approve",
-        "enrollment:view_roster"
-      ],
-      "subGroups": []
-    },
-    {
-      "name": "event_organizers",
-      "path": "/event_organizers",
-      "realmRoles": [
-        "event_teacher",
-        "school:read",
-        "event:create",
-        "event:edit",
-        "event:delete",
-        "event:propose",
-        "event:clone",
-        "event:view_draft",
-        "resource:create",
-        "resource:view",
-        "enrollment:view_roster"
-      ],
-      "subGroups": []
-    },
-    {
-      "name": "finance_officers",
-      "path": "/finance_officers",
-      "realmRoles": [
-        "finance",
-        "school:read",
-        "resource:price",
-        "resource:view",
-        "billing:invoice",
-        "billing:pay",
-        "billing:refund",
-        "billing:audit"
-      ],
-      "subGroups": []
-    },
-    {
-      "name": "parents",
-      "path": "/parents",
-      "realmRoles": [
-        "parent",
-        "school:read",
-        "enrollment:parent_approve",
-        "enrollment:cancel",
-        "billing:pay"
-      ],
-      "subGroups": []
-    },
-    {
-      "name": "students",
-      "path": "/students",
-      "realmRoles": [
-        "student",
-        "school:read",
-        "enrollment:request"
-      ],
-      "subGroups": []
-    }
-  ],
-  "organizations": [
-    {
-      "name": "Organization A",
-      "alias": "tenant_a",
-      "enabled": true,
-      "domains": [
-        {
-          "name": "schoolA.com",
-          "verified": true
-        }
-      ]
-    },
-    {
-      "name": "Organization B",
-      "alias": "tenant_b",
-      "enabled": true,
-      "domains": [
-        {
-          "name": "schoolB.com",
-          "verified": true
-        }
-      ]
-    }
-  ],
+  "groups": [],
   "users": [
     {
       "username": "sa@desk.com",
@@ -484,20 +27,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"KdEsUs640WPSle+QKWCer5er1vzCHjy8rmBmvX85A/w=\", \"salt\": \"4z+swNwU324qs8X6CqT6YQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"4gvzYenP7qNrZSktZgEk1f3CgzUj8U4BhP3orxEp3IM=\", \"salt\": \"pBgtH9a7suSXQ96EI4C8mw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"dELZ0in8JonTQFsN2yTnnuviTPKozoySh0/fk4vJblU=\", \"salt\": \"d+o3KAy7SUCoV997+kpl9w==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"7NHKxIUt8I9rAOyOq67eeVQkWOfLNIevjCd0mK+SPcY=\", \"salt\": \"WY8C3ohCybqyDMxVzwsldQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/super_admins"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "super_admin"
@@ -518,20 +59,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"hKrBhXOaCwPFNYAeHtuqedlsUvQWqlp1CTJ+0vwJViY=\", \"salt\": \"++GRKnJjw5yzAZQ6YH7sFA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"HG4qhwdu8vPX7e0LnNwaZ122RgWECf0WVjnst1/0XTs=\", \"salt\": \"VNtccjI/E9uCoVPLybBEHQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"sU+Ao7IZsF44aFQCttOKIhsoLVKn/OT2sHOpsVe+H/w=\", \"salt\": \"dk2UNxPGCjVIdwDnCGlWLw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"GF4O0nGCJDt6F7yvYxqNJiz2boah4r9noizQ+V2XMPg=\", \"salt\": \"3r572QQrIDVDj/zNNWZTwQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/school_admins"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "school_admin"
@@ -552,20 +91,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"DluGuS0jvZDwlT+P3lrE5luyU/7U2Lmaav5xqOwE7LI=\", \"salt\": \"n3FIPXgkc4Q/FANOnbbBSw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"s/Won8wIW5KXfDWwoc26XLVwZbv3D5xAsE4hHQGJTf8=\", \"salt\": \"/LVYLbfg78PA6e4DbyPOXg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"hDkc4ZEDZ0h3/e46+jQRcgV+xMaTX3bUvVJNglqFnmI=\", \"salt\": \"CcNDzDBcS/gqnTFetyMJEQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"xiSva3PVkeKwhrF1tnz9ClZfBOM7C4gVW/axBJdtMjc=\", \"salt\": \"inv2pELxb/QLUmwsGejqMw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/managers"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "manager"
@@ -586,20 +123,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"3MUiVZ8yvXX0f363csaRoIFbm0sID5Skh54b1lrnbrY=\", \"salt\": \"GN5nrUqXryFPrWtCTdCyMQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"IaSFVlBW/IQX7o0mrxt+X+aSyGWwDi8dco9bb6b+IIY=\", \"salt\": \"9VTFzopN2IeAX6Ohjk+mmA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"dZLUJ4GP89tO7V4iQEEb9blLJoaTfPUxL/S4HKgri2o=\", \"salt\": \"pYPO/Efu0twpv0C406rMhA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"1a9sIbOEnRKL8nuZ3M4GlFe7EErO3doMzA7RGOB1mDk=\", \"salt\": \"3eQjRpawK9SdfyrwiTQYkw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/school_admins"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "school_admin"
@@ -620,20 +155,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"GQafevJ0JQu3cnTYC0tHjmYtLnXnbAmFIKk3i6JbN5M=\", \"salt\": \"7fXSQPzTLlFtujymLosAyg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"3DNT0deMiuMFN2YxBXDJdo1uD5vof41zE8i6qwuq8zM=\", \"salt\": \"K61eyrMjsNYiF1sreTtXzw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"lb2vYIxwV9NrmFjyzec1T+7annMtn5Bq+PpmQtOz0wg=\", \"salt\": \"h91ETQ9jQAeM5YymDqAMEQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"Zmlpi9x7QxJs9wZC2k5rEFkesNr5MhH5ajj/+uSs5wc=\", \"salt\": \"2kTh09WWL/UVj/LYu2+BzQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/managers"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "manager"
@@ -654,20 +187,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"XZgdV2IF8t8B1QWr4h3B4MgttDfv43FcV1Tielk0F+Y=\", \"salt\": \"jvm4E3gEwQLR/3zleeVGKA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"wpv7UC/urkkQ7AzTRTGBfY1bD4PzgGWAQ/mIo2z4p9w=\", \"salt\": \"DeYP+a3KIZwd2Rm5ftwCMA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"Yb5vCsgqrV6zUng1HgE+sFBNCHud16H4hP0E7zgs/to=\", \"salt\": \"kj7vh6Y5zV9KwbPHiXHPSQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"aIfW6yjaEB5zewCakNWI6mDxGGKZYU9GXNAMq/KFFpA=\", \"salt\": \"pNLp7RKnkvxyGZwbb6w4WQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/teachers"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "teacher"
@@ -688,20 +219,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"pT0dTlM3kxeOZU+r+eygv63sh4PB1xKbrYF+gm9lBlo=\", \"salt\": \"G6WA6rd+gVVne/Dl3ErzWQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"FxtdwA7hlw/tbCru0zaZi2dC8R1wWSWNksvl+V1rJUA=\", \"salt\": \"tZN1O57o20ag1h4cYGlm4A==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"C4X5Kw5+VBCm2yT5b4anesSBNa9ZRsnPP37bwBoPIx0=\", \"salt\": \"sBsxlbYaLTk1HrpWmy1SPg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"LC8+9o/fOqrKEpJPApuOeq+qFBe/SyHg5BWy60EZqLI=\", \"salt\": \"exWhrq3o+yp+lMw+febo/A==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/teachers"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "teacher"
@@ -722,20 +251,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"xPQF16u5py9GfuWC0jts+uCi6mEyIhqM1xJ+abp4Xww=\", \"salt\": \"TYtx+w5g7RoGl5ssHkVvtg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"Enmk9vO4M02trePMxGKR+DbdOQ35URt3Ys0vs/H0qhM=\", \"salt\": \"y9aFIrHypEKSEWP7Rogpow==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"lglyYx75lKx2va2a/X1ua44q/bItUQMsKB1eib1cJs8=\", \"salt\": \"IPewQ+CVU0BaiiRJUuyFbA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"iYIgc3E8HXLnl++jjWYultxQCXy3zdp2dJodVXp7Gxk=\", \"salt\": \"2Ymp6GcZxGFBE3gQTfgyJQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/teachers"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "teacher"
@@ -756,20 +283,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"5irKx/JlZ42/u8y+ZU7DSxvrkYYUS9PkjrLuk9g80VI=\", \"salt\": \"7Zkfp3shjojtlkJSQbaksg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"ASwksWv2ek71MuwJv7GivCdrl6bXzQcDIXeLHjAzhQI=\", \"salt\": \"HUGD3QTaSx54JouEp1LLzw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"3wboW7xtSAJN8VNab/uOqtIqgWokR8bQAAgke5kz33I=\", \"salt\": \"aobnuU6br+GAj2La216cLg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"LGg8vboCqXV71bgtkJDICd1bzzx9LXolhBmJebLy5Bw=\", \"salt\": \"D4KRLCRGvzRGoSX3Cth5Sg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/teachers"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "teacher"
@@ -790,20 +315,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"+QSEt90xvRA8hNAh03EgP+II+ZRkJtuJI1hilBF1YnU=\", \"salt\": \"v04mFIZzv/W+I6GUPmCjEQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"vD4sDTEkkq7/fgpmgoIjTVkVJLsyd/qmaJIAA+P9VNU=\", \"salt\": \"agElqI8mK9tcuknsyABUcw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"rSVd6VlFu63RJfLsoVurIf8tkc6iJyYecTrItzF6FEI=\", \"salt\": \"WrovnxfntB5ljsFTu6aOpg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"8jBtkVRVXShX13VpGrglajxXIVZUhSTc4e/ehmfO6Ys=\", \"salt\": \"b73YQ2eu2KbEPEhq1LZFcg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/teachers"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "teacher"
@@ -824,20 +347,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"ZD1uszwvSqXl8/cweQ7medzyXSglx93JiXQc80W704A=\", \"salt\": \"TeuipoJRCMR0tjLS5QLeTg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"f5XykV1M1udMPrcbS4FX6cYrK4GIS+Bv6Ewx5aEpvJk=\", \"salt\": \"2sYv/ytHUpEOWsEH3JCFjw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"i9C6Jw8mi05D+LsNBKZaNK+uoAMo/zNc06E2/j2r87w=\", \"salt\": \"RDv7paw+0HsA/vy47bFucw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"JkqHqPtm8GfknhGBw/zpI0YHMFISdJPe6SO131pa2ns=\", \"salt\": \"Oqfp3oaI4jkDI2y8vXMadg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/teachers"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "teacher"
@@ -858,20 +379,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"v+cVdJf9evPqve6JC0tJmcAmFQoVunZsMOHH6qbbesY=\", \"salt\": \"22NOFXo9XHK7SlZtsOwvFw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"MKstj7X+/he93Yb2c2NlWEuh6ZDp/6LDChgdirRwmg0=\", \"salt\": \"VH9cAJ4WZueUbVMxWkgbjQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"9/Erg+FrIO5fQfHxRs+/7KXTPjSHq5PRqszkOXV7RBQ=\", \"salt\": \"CTFPTI9iEjnpe3Fho44yuA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"GChmno485pJTCk4VkLD0Pr86mZ+cMxYaLAEzUjjb7u0=\", \"salt\": \"6PRz2K/4t3jqoBDjpkGH4w==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/parents"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "parent"
@@ -892,20 +411,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"DSCxubsMcJfD2FSkPCm+MwfBtJqyeLain5osUL+5PU8=\", \"salt\": \"ORX9ILpxtYF0fbqHoEtffQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"3w64KkhVR+rebCMqlbq4jFOOFlZ2ZQauuUZGfmLENv8=\", \"salt\": \"9J0X4Bt0T5U3U6TDgf/reg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"DJ4d+CjltnPlWO3YYg2L8liy75SNinBWBXJlR3gFr8w=\", \"salt\": \"YujkD8CMXR1+pSijVFPNrg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"DiLPj2XbPimSvrG1YS5eM72PKQQMn0wfPfjTaXU3fkE=\", \"salt\": \"HEDVOUVCKpE/FYhzhxpV5Q==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/parents"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "parent"
@@ -926,20 +443,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"DUJZuWTQ78kvGYIQ0IadBUJSoKnOb2nvJ9fite1XtEI=\", \"salt\": \"mBtTi7/EmbxFgUgNHdJP0A==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"H0RGrDUl+INvMhI6fr7yI+DLzoMBcyGx6HwNkKGJjfM=\", \"salt\": \"Kg9tkU77eXnPdH7iOs85CQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"IbR5qurGzqRWalNXuaxzsNLaR7xsxub4oF7iWPsLICQ=\", \"salt\": \"fK+MgXQnWGAB1MmU0i5I+Q==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"IaiSV1MgmHLKbP+LvuQHA2RN5nXPtusz703g74nbBII=\", \"salt\": \"EWoY7A0t/rR5SWIRFv9TMw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/parents"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "parent"
@@ -960,20 +475,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"iX0/XUfXhyR8vGIzV6FzXAeDMiWx1Us0MF/E5TUXv/k=\", \"salt\": \"yHgt8jVCGkVYbYF/+PUYsQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"IRSUlhjEh/U1qelxIdxyESG7W0S8a+a/YahT1a3sgrA=\", \"salt\": \"BlI4R8Dhxyn1ojfs6FGr4Q==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"JpIc0O18AqQhOG+L7gTbFPgaTJWPMwV9HWny5azu0SI=\", \"salt\": \"E6yVBIXJYIcaQ8VT/LmHyw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"mARmJ2NtS/D3EMcEH6Hdg2/brPg47CCiqipbYJx4kGY=\", \"salt\": \"LNOuaoOdTmbtOdMpRI99MA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/parents"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "parent"
@@ -994,20 +507,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"crhrAyHLpmFmezwX2d1mRQMcjAsJnlkq52BpOqSPmBI=\", \"salt\": \"36T0m21dA1A9pn4rKNXXYw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"zt+YpPZ25xbzL3m1lKGEnazWhL0n1bsKYdfDTQX52kA=\", \"salt\": \"hm2RVmAIDZiw3mmFKDaVqA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"7iqkyjjPwYN9GIKPC5kQ0VNSIcAHB5DnJB0W4nASExI=\", \"salt\": \"0ffvFzgevxPsQrHkcl0hfA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"wCsAOtZRja5l1d+VKAJaWgxSx507PoCjtm34bRqwTCk=\", \"salt\": \"9gSHFgASoZDaB8mT6tW4JA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/parents"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "parent"
@@ -1028,20 +539,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"nbnl+YGFI5XmwTG65PI4UeFax8jH+IRhuSiyArTfBlQ=\", \"salt\": \"fKIrzdMxv7wSP0kRw+Qi4A==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"lwduKFByGss1FK320G1FbrIWHA7PsEnENebWackA/DY=\", \"salt\": \"D9Tm/V2eFpJHW0wJw1vSPw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"qh6+lHAD+4zskjUue3PBjVXln+f56Qm1xGjQEDetI2M=\", \"salt\": \"taPkKInsQnSSToGEXKv6bA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"J3NoigZnEB2lEIrkXWcW/GaU57mgqdBBv3uxclxb3hE=\", \"salt\": \"0HtzIEqLKgdrFUUC12cGNw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/parents"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "parent"
@@ -1062,20 +571,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"/aQFJ/xpPwooUyU3P1qGPYj3XGYwci4EDRhmyC7eeXw=\", \"salt\": \"vEW+mc7N6IqcSiS+ozhbkQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"+fAXAqgLmAFE0uKe8e0u9pY3qxguF/LJXuzyd148+Hc=\", \"salt\": \"nzzPXTCAxFuhiw/rqYiREw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"7phHj2F4gtSbK1AansIBwOqO06GdEg/1EO7LDKiG1OI=\", \"salt\": \"6QI7wBclGYuRYfqmWw4dmA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"M7ADsao2mc07AnkhOQsSA7188Yvd84163X1ezJHd1s8=\", \"salt\": \"QU2HJCtS1lxC4WmHRILTvg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -1096,20 +603,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"DNash0yeqbTjssNljcCMNOXeOfOAHoIMPw538NGaB8E=\", \"salt\": \"h9/WA5gCm5ScypVZm8XV/Q==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"rg7UEuLON8LtLLhWnZox4urC/NFv9FoNAXhzyJl4YUU=\", \"salt\": \"mKFdvVeyI5HFDRVrTSTf2g==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"+2Xf//B47NAKeBhvFjhqFs/6bAjCDGzsRgfI6f/7wXk=\", \"salt\": \"J5Id85SnfylgEAI/yHVN3A==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"BjzdT0glxsSaqri32BIM2aTMAbW8Pt5NRlp7gmbidUk=\", \"salt\": \"89ANtby0HvTqnR9l16IZoA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -1130,20 +635,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"gOoABxkVkom9fy5rCwN/qD4YdpMzSOMeMozVqFGsW/g=\", \"salt\": \"6SDiJfKOSKanWyNqPvcbPw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"aogOLjJ1mKv43CFceW08+tTY3JAyMo5B7bG42nNS9Ak=\", \"salt\": \"ae8UOx/baeC/m57F0/L+dw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"bhVT9rtkYLyDIH2mCix48pA/PRNMNssMJe+vzgabkFU=\", \"salt\": \"OGbQ70m0ulD1hYXWl3//eg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"Q5BcEeWZLcn8pgDPzel2nMghLXS3K7e8UrM1rO0OlRE=\", \"salt\": \"2gFTHMwpT6fbpeH9un4Ftg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -1164,20 +667,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"rtFOmOUqK5k4r2YUQF8p50U3iP/6JPovwFt4rRQuhvI=\", \"salt\": \"wvsfslSK6bbzQ/ScshvzGg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"e/Il7fmtwB8kPBDCmOYGOKDdFq4YWnFocjKfb/MNcC8=\", \"salt\": \"mjByQkAedNRPw9Rjw2BL3Q==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"3pg80sBbgUAI6KPeJIUZUGBGy7pniwtk4Z7XI1LU0LQ=\", \"salt\": \"LVSxI9SbfDuZyvUlWqybSQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"PflhOvoZCpWywjs0SefPaZYZ7WT3WdwXm225QEefNKg=\", \"salt\": \"agC7E3dHHoH5LELlulEOnw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -1198,20 +699,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"yytzAmzeyLc8gS6vqjInVRcA6qL80dQTOIyiwu/vufA=\", \"salt\": \"HK6RuVw0kTK1LYge1dosbg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"bGongGwzHj40N2mDoy2UvG8tupthc5QokCUc3l85b8Q=\", \"salt\": \"g+fXR5ZJ9BipYTv+8dbezQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"KwuI9xLaNe2eKrskTf0QCHVBUcSZm/IMeJVOMRo7/6Y=\", \"salt\": \"KlPnpd5gCab75hy0fGr0Mw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"7qJogIiDPLOVdsbOB/Li6vm630Jvs6SdpujWQ9T5dow=\", \"salt\": \"Q7j6e6oeX8omAdX3PJZYXQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -1232,20 +731,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"dDlwsXiavOBu3EJSzVgA+LqMXHvNyKwf8aVnmicUAz8=\", \"salt\": \"9wn4GF/8b3ikYW96kHGxIw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"t7sbSYW5V+xCFbhQsue3P1yWkwjSm8O+XsOytmXpu6c=\", \"salt\": \"X8+6iX/s4nmxbB9zS8MI5A==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"mWJkL1SsqMpxe0tKuccLCslCqcpqt1D0A1j2x1cWgps=\", \"salt\": \"deBbVK6CDr5yvLosG+fW7g==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"iO/GOfO3+Uu0IEFjQ1R4Sh1knqVU03icQHvF5hzy9mM=\", \"salt\": \"kssJbHSFg+cimWREVQm++g==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -1266,20 +763,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"H6TEBDOXeNDcek+r+6mmuSM5St0k3FC6CyzxCxdWkGg=\", \"salt\": \"cBJ6pRdJTjxqWdnYnvi9Vg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"kPqVKL9JR1T9olLDILWSEhYoSAfE+UdZJByd+7bQ5lg=\", \"salt\": \"s25iBKt84HlheishIVQAvg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"arKS053X3kL4x/GjbL6AFt3kLQ87AvERqTHDydStWzc=\", \"salt\": \"pEn8FElkQbaX9OmBoiEsVQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"/+b0GQQyGkbn4BXGjIUbw1VTOD40YzO+GmMq1nh0Eow=\", \"salt\": \"9kDiUnChLZKMRW2lhZH2Eg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -1300,20 +795,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"VXmSacqmqwynjSxz4VrvYzpTo3xa9jsA1opF0inmFJc=\", \"salt\": \"0jtmvDV2UUvwnBkOuwy/Sw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"wpc/EczIqE1k5fmBxznOo55ausub5MhHiLKfRtPDE6w=\", \"salt\": \"Dpg9iThHLzqhvSbtHUwk3w==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"N2C0g+tVX9HVEi8yx8NqvNpPKUZlmw2eHyeYcbTIrGg=\", \"salt\": \"Fk1lvN/MnbA/nyg/mnU7Xg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"9KAVcqrHWRllhblVX1qMwWCIKm/OTmuXXlMG+WF6ad4=\", \"salt\": \"r5OS93f1N47WyTloFVTUeQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -1334,20 +827,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"mbMVz4MGfIa8XTUJO8YgcJqz7+O0Wj79oqzIMo5crhA=\", \"salt\": \"qPnj/ml4X2Acuicq2Uf0fg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"r1z2dCM0lcLExmrJS/1AmyFVuV0CDShMv+A7DdDYrng=\", \"salt\": \"78aV6dzdnVWuCk1xcLmcvA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"BJjNE5tPMdCMBCpJGll0q5OLBgGC/pPN//sAcELEGog=\", \"salt\": \"Jy3za/qIw0zEd2qJH6mZAQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"XC+SHjRkhi3l/mS+OZuwJujc6Bo0iQbxWwYPpvHq4p4=\", \"salt\": \"kiXWIY4YFdNDqiOPPV7/UQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -1368,20 +859,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"+2vJnmHmu9TPdfD84kzPt2pHp3yLCQLqYueHH7eCjsM=\", \"salt\": \"k1ejUKyhhf9hE0+zI3L13w==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"Q6KPIQHmgkcMNHwVYgF56TXpS45x8g3xAXpnT5KxQpA=\", \"salt\": \"QoAGKg0FhJGwqDkPmZhMsA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"d42guyITIpvwZyes37KV5efAvTxOpnqkm2WMmUMn8Cc=\", \"salt\": \"PFw81tqafAHBW1KDbvgoTg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"0Z72UzUQQVAD93AOa0e+Un1sBJipAzSvpHbhNQecKNo=\", \"salt\": \"slpFHD4zM0dflirLeplOmw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -1402,20 +891,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"HsgQy0jSqT7h/aUd4vhaCcJ6l8yLIBpbu4nXca189AA=\", \"salt\": \"ZVFSqczhP1K1slmaxHuqMg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"B30g8B8BhBC+CfUQx9/CxkxKTVLQS7QTq5q0QcYiq2M=\", \"salt\": \"6sWuGQKB6zbGBP1/jQ4nbA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"gt/fXWRn4xIuDr+v6+v5SCJQPFWilb0SUTXJVqjO308=\", \"salt\": \"Egb92sCpYkjnkf1IT/gzSw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"IjMyWSpK62Pr0hMFFfB/VZ6jU2/tPtY63SB1vcifNEc=\", \"salt\": \"K6s8EBnNqdylMUI0r/tnPg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -1436,20 +923,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"oH2Q4XDPq/gNaii3+6ybToZH5EKqGphZslX5kXYrW6o=\", \"salt\": \"tSqX46qDjoW2sfUVK5YGfg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"hG8FKl8bEpOiezbZGTQDMPenvFv4k1fJbWDOuAAZnDM=\", \"salt\": \"AaSxldVEQPgCfHCvDEOQQg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"CPI6+M8Xd6J8e5qCuTx+qD+wtXIhYfaM7Gejcv33FE8=\", \"salt\": \"epcddLdnAYaMkvrtAmaHDw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"xKe7PKSxD4naSzHBd7rdaGldkE+etJKC+tnKsMsfpIU=\", \"salt\": \"3SHC38fT/uHYNDcWZ2gmRg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -1470,20 +955,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"HPMChTd2rrE/1L47qOV/HhGbv2G+8HPA3Fn/bJkjttU=\", \"salt\": \"un5KlUAJS35B3PtbwHGAgg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"rCyZ5Gss7r6riWDHW3ITLKCuMFevpp8T+C2bxyYrjj4=\", \"salt\": \"8nIIeSXGj//ZcxyuzZjTlw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"buWOwy9csZJkObq8nisC1jdWm5s63/JOm3Pmo0c40Xo=\", \"salt\": \"mSJkx7h3zpXQu5c23x/DtQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"y2c7OTVZQdFIIPMo7bRFCrMHUolGCs0M3kBzxP0gBFs=\", \"salt\": \"b/jN/KgdFDQBfRmBd9DMIA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -1504,20 +987,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"5jElrmbUpHnb+EImyctWQi/lulwDoXjrz/j1ytP8Xjg=\", \"salt\": \"+AXGjx7hFP/U0/4ZVOklCg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"yCeUVQIxFjOmZ0LHPesB6hw4kzNhvMvmonhfs2M/dwo=\", \"salt\": \"OoyffF7jb8sr123yeKL3pQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"VjUbm+dw5727eaoGNwGvzT/UjAYnG7NIKZCOZng7yxE=\", \"salt\": \"DiOP6pt/uGl/CWvmEiyrVw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"f0FuNLb/ogSR0Iw0h0j1qHD/XuxEMbak/iLUewGCqDg=\", \"salt\": \"v3Ha1KSTg06rW1EYYiAbYg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -1538,20 +1019,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"rpgtrug+3/lh5YQU5kgM4xIjudvEobi8xk1WNgRDlWo=\", \"salt\": \"BxPOE9yacT6L6X1+exxdyg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"GB2vcXeDSlqABtJx1xbHESIKmSEaXGLxQ3Dma+gg4QI=\", \"salt\": \"saGTyLfj1lq97hetN6ZeaQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"ogOgTKWtIf6GsR9oOn9u9hdGUQC0tIAE5c1zPC0gagk=\", \"salt\": \"lfDCcIIvG7anoO0r/WuKxg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"4Lsl1k2aVa3IXfECNwi33RJk3ywgxUGCJ/WhgCmDL4s=\", \"salt\": \"FS0E7p1tLphrFY5foyRXHw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -1572,20 +1051,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"sTRQ762cmjVigJ84K/k51nB2xQ/bxViiie1OLfB74Gw=\", \"salt\": \"VVyIaAg+YdoPvmqjipmfOA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"96GwF8TJ/MtZMuIDDQFnZUkncRlQR3Yhak+kk3HEmO4=\", \"salt\": \"raDKQS30Ko7s9QmFSHNAEA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"kLJg80sBYqqh6ir5soNVohLYiGKYckgnPUhRpex+3SI=\", \"salt\": \"uAQ1TrBQtOBKpFiQlW/ZQA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"sOaKmKUznLxM7X81L/FUM2CMibxWJbAapTdfFumTqVk=\", \"salt\": \"PCJ6wVpx9MzW4ruuuuF+6w==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -1606,20 +1083,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"lZU/7Utuo2lM/NnYhazs/OZ56qhqwXxg9F/1NN2KUXs=\", \"salt\": \"UkCA+FI19EDhdMTf04xo5w==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"kCO+8BCaKpizEbc4Bk+C2vlCAxVm0vPgLH2ToG1wj8U=\", \"salt\": \"DNmUI5w9GXu0Fu+SP7O5NA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"RZUjSx8ryOzmaV46eJ15qnpb/sJ5j67tzJZDooWM8zI=\", \"salt\": \"kymvfzcu8kd5y00XTFiP5w==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"XAuUU5gHNoWjjhlltUyfVRB9PovN27RCPKnQL0eLQxY=\", \"salt\": \"NPpBA6yPxrSSePXooh+rFA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -1640,20 +1115,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"y4tdVG5BzDPRT4x5rTO347AD1K8BgU5gMDQl3evXWfo=\", \"salt\": \"UZpMv91quK9il2g5ejae7A==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"RyMpOZ2YktLgIGLLFWlnLagSxfi3G8/tfbcSyIwFdz4=\", \"salt\": \"3kGlVoSdUBUmi5cwsXgF+A==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"f342fvIz6eaFr0mC+rPu4Fh0dW+qE98dGWSXn2Ed+i4=\", \"salt\": \"FWqfR/iO71CEF8TlGGzFbw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"C6E1bV4MMP6z8buEiYfh7ef943XzMeswZb3vxVdEqqU=\", \"salt\": \"81V+gRRySo+GSJQ5Qw4I4Q==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -1674,20 +1147,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"vGqjY+yScCr/GHwEKLHZFogn8eLuv717NSYq4qgB1hg=\", \"salt\": \"MVk1rhGiBDU55pxhws/FOQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"8uI3pSZewXnl/aYXSa4CTtBqhgE1BjiBlPR+WX9I9Ww=\", \"salt\": \"T+MQJAcKT1P1Lau9S/wVHQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"1n3SU4UFvDg93a3BSUAcRhjftaaDiJ+0efehufkhzM0=\", \"salt\": \"T4RT+bdXrRhL2BgSdyd6Wg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"SSi72bpAGTQqRanmBLR6wP3PA13PRhefo5vOHBAH39A=\", \"salt\": \"2UI8nMTcffGzli+OOunOgA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/school_admins"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "school_admin"
@@ -1708,20 +1179,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"9X73hg3K09a8k7NeKnvDm4kBBaq8Ijr5Cal/uqEgSg4=\", \"salt\": \"Z2rxoFQeO6XQW9yrEOGW5w==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"+pZfu1msJiHzWiIgJP+OysMwdBRqiOc682urZY1H0FU=\", \"salt\": \"nQWWkq9wAz1vN1gy1+TGYg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"YTOTP8PsqChey2qS63oXpnrKjRaPwUmqahQHyp63Fhs=\", \"salt\": \"CU57KRWG7HFR8hk8KyR05Q==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"8rQYiwHnDhr4cmO16cYO63di6uDdG7ZdNrcLs8+EkKI=\", \"salt\": \"DRc3N5Wjb+x/+19274yNIA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/managers"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "manager"
@@ -1742,20 +1211,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"1uh5f0vobTVb1aMVKRRPZPm5vd6l2JPn+YyIpNGQwuc=\", \"salt\": \"+/TDdaAdJ2y+hAyb/maFzg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"GFEaA3yO2lKYSc40TVeROSNBcrTWKqdRTDCyh1k1A6A=\", \"salt\": \"/ZLEnUU9rFRSe+hZ+1ZA8w==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"GSZXwgsoYpHeHDQ911dJbfIsMSHCa2sjQhoPswvZtPg=\", \"salt\": \"R0dYW47lE1PrF9No2aZ0tQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"XuKpAWAlXTODKTLLAKj4v8ujfxn5TiTtAulZxe21Zr4=\", \"salt\": \"FBByfd8mfZJ6h+gJylrf6w==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/teachers"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "teacher"
@@ -1776,20 +1243,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"bODaE5hW4aQM93/yxlvXEtFqhWgqjpmNi9xIO+OPl+c=\", \"salt\": \"G7Lc7YJwaZ13yiBNfxyg/w==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"GNfYBlgcOjLnoJ5KUqzITATa4NelPu9Xv6qMpBrflEQ=\", \"salt\": \"aphuIcHDVjVVL9fMOTdfRw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"DhPERsh3EkeOLvVqdvQrxjHsKshCKqwYdvnO7YE/KBw=\", \"salt\": \"09aUyg9ZSnb13UbpNft9MA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"GDwaLp45L9cubtJGmEtFGyhzl4c4bHev6wn8ojis74E=\", \"salt\": \"ZF95S9TjHlmwNDvnwZ9Z6A==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/teachers"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "teacher"
@@ -1810,20 +1275,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"j5IKnCH641bZ5LpztzwoZ0XfmANaiB/Q47vehqTyL6w=\", \"salt\": \"/pWym5XQ81jC2FQomxkzaw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"LUpcdOcr8Gys8bbkp6vbKWj+5LO7aLJwxXGhU7r+4jY=\", \"salt\": \"PevuL9Hg0IXZd5alB95WYA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"gTWm+vToG3IbnfkrdS1s0q6s2zO/HaVItmpgkLrGNTg=\", \"salt\": \"a0MeyE0uo2x7tqrFc1JEZQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"gDKOXqaVsfInVz6KisYCkmbtqXCZUpyDM4w06lBlNl8=\", \"salt\": \"i9qMCfwjPRAbeWsH66iqEg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/teachers"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "teacher"
@@ -1844,20 +1307,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"qZWdSt2oqJVuawCWcvfWC/Nyer9MODTeI941xI8Inkc=\", \"salt\": \"dUqvIsFtqa96AWJOidJQpQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"DMGjMtHXLrd4fb8i6M2yZfXsTfiliRXflCmYRaZhqQA=\", \"salt\": \"iNr9s6KAOJRlGi/f4vM0cg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"TApRRPvr+WL6AoJ0QIoUCWE0uKk4JaFBLymhvTbr/u0=\", \"salt\": \"znHl1YI2HMPGJtck89dNAA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"lSPEUykjKzBkgPsDIpi/joZyAcaCsea2oc0lSlitK+8=\", \"salt\": \"FHhNMMDA3BUU/h4kvTikJQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/teachers"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "teacher"
@@ -1878,20 +1339,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"p+fGYMJPl/U09xtdsrLTZiy2iHZVHN4gDkaAjx2w1F0=\", \"salt\": \"XtJfbmBOH/Ac+fQ/X6PhrQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"ZatTkjChhPzASJe/XSYNsn4cMAVCcQ2WwUtbFjZrmB0=\", \"salt\": \"7KHnyWSoV/Wu/ae3Z8FkJw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"/Wyr9otbj32X/JE1xD941T9cPXbFNr+N0cAGRWfTjJA=\", \"salt\": \"RLGXi99F2uVWTcMHhh4yyQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"cB2AgNUAI3qNMrWvyNk0Fe3Ej3z7AbvTSP3tSAAryqY=\", \"salt\": \"nRRvyzTmZlO87uAVi0mBBw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/teachers"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "teacher"
@@ -1912,20 +1371,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"s5J1NwlaUSPWHAilGKj1ELJE+WrE7FU+c1IYhzxI3AQ=\", \"salt\": \"Fb/PDtPdXGnTrpskhvJPMw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"T6QxZNPpmLNdUUXqwY069E/pM7HT9j0yTouCeoc3ExA=\", \"salt\": \"Bk8yJJ1trVqD8U20br+vTA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"pZYazs8+PefANX9rlzMLkcyEBxlPQI0oL+OrQX9SuOc=\", \"salt\": \"+M/R0GfzxOWNgX7Q9/uHYw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"WhBAUlfgdUNATwvpTpFhXzu7YZtuk4v0KJE6u+xAY7k=\", \"salt\": \"ySYGbz72e4xNG0lC6ypFkw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/teachers"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "teacher"
@@ -1946,20 +1403,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"/YzAATJZyxpNUHRoKzdRFfybuLA5r/X8FLcjjrbLQu0=\", \"salt\": \"zURv43dd+xoXF9mArUrPuQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"z5yIgQ/wmtjSxnoJ0RQ+cOahuH1GfJLiGYcHPyQqVQE=\", \"salt\": \"qmh48SSFqLrKWnaura7jeA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"8qIjYrGvbx41AwK2/Er6Xccj5TPoVX5Z/9qj26sTG7s=\", \"salt\": \"wGz0e4FlJRlyryQ7U2W4Xg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"wdjRA/dBSrG/D9tSQya4qFNsze/Auf5ObFQI/53UHWM=\", \"salt\": \"tc/wO86es8F/oUh57vxcOg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/parents"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "parent"
@@ -1980,20 +1435,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"dg71YqQNCddpWKfdiSp07iXARbvWtMh3MIqOlWVylN0=\", \"salt\": \"GGX6mar4961MN7XUKFQTlg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"KkJvHN95HL35e8aA7x1Ok4konbgqcF3mh5cxxP47YHE=\", \"salt\": \"ifaKsnhYJdgHkEtY87DYMg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"D6mXQPve/2hC1toWllaTA52WgRu1Zln4SGjFbDH3cdM=\", \"salt\": \"CLcP00E+vEFiGb/eQ7SEsg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"vA4EhRb9xjp+BjADl+iml3VWNUs/2/V9mvTK3CInMbo=\", \"salt\": \"tBdrUGAwf72nZeg3ngRr1Q==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/parents"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "parent"
@@ -2014,20 +1467,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"WF0c5YnbN+8BskQyo2z02W6W7Z7Qw0ecEauDhWQ7dg8=\", \"salt\": \"8nO1RsWxw59x1oEj0eDY8w==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"qBm/PO9IerYmS/+hlUmy3oYiVnFl1KUOUxGCeS9JfnA=\", \"salt\": \"afWrfEnkXIHoV4iFCgb3Rg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"8zuXcwWvefwEfOy1Xl6BYLdqjBEmpbyjuh+lC2awn10=\", \"salt\": \"KP1mbEB0IHz7AoIWUQDTVQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"VQIrwLpoOsGPLn3qaBZ2BWxPij32tgKyleBLiHT4fSY=\", \"salt\": \"NoHOEZ4gA9Odkhvi5qsvnA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/parents"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "parent"
@@ -2048,20 +1499,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"OZ84AHnCecYRhtss/gmj2/gNfOdbf05GP/3IQIT6xmI=\", \"salt\": \"9iAIcWsq5uH42h3gjv9BHQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"pAO4vx1gMEVSQnSRkaLYsBk2tROJbxOaVTzouxROgOA=\", \"salt\": \"bs1Fe6slNZX1T0GKPQxm3Q==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"WKI/nlWeoV2zABELqqT4+0WBKM+caCJgc9tya1pIjAw=\", \"salt\": \"SVNlasV44tXGlM2Qjpe8nA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"k2lQNpLwpaztCz9f/x2yC9VuNbTgXZk93gjZGFtwFgg=\", \"salt\": \"XLo15qmO7QNbANppfcv0zg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/parents"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "parent"
@@ -2082,20 +1531,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"Z1dsdniljzk9e7RtNHhzGNFiSx85BgXzUrEOJt2imeY=\", \"salt\": \"Xe5hakI3Bd7l7yoz232TxA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"Phu1PbXfAHF25ADwA0aj28HtpdTVDQ0ofp/seZQzhxs=\", \"salt\": \"ilqNPL1K0RJ9+bxjRjBBHA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"3SBT6Fs2YubhDNG5LtM/356g2mefcaqeEJ324f8xHOA=\", \"salt\": \"zeM4Bw89cpn7jTkwjqjX8A==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"NNzIhji4BkDkL538PjTNSqneyk8bkwL6xxX2EzgGpc4=\", \"salt\": \"/OeCFXghZvkTyVgCw22NPA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/parents"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "parent"
@@ -2116,20 +1563,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"iDM1ThPXCHy2gUOe1A+BPGXB7DsL7tXSLE8UCDmfnSk=\", \"salt\": \"9s+LDOD3/hvmYDU6a8jEZg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"+ZCNwjeQbCgd/NxA21UwKDO+/KuiGvL5k58ALMh7qVM=\", \"salt\": \"gYntNL/kg5gP40EFBn19eA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"RcTK9Go7eFvWFWvMFbhGEvL+wOLXZRdrb6ues57BT1M=\", \"salt\": \"VpVt3xdQS9tey2htojs+6Q==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"qLfbp1nJYp/8z4cHbqf06SM+MH3NswEsz2rGGGSlPAM=\", \"salt\": \"P9Jx3dHThNaNZmUbd1tyAw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/parents"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "parent"
@@ -2150,20 +1595,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"G+dYfpr3WLf4L0KZiy0FwauvXw8c8xjGzDluIZKpGM0=\", \"salt\": \"rJYBMY02UFL84fpISVHHUg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"bF+F8S/pkkHFHuS8TQnK2DTf/WYXI/gQab1eQsQNj24=\", \"salt\": \"03n8GkLVRl4H9mVtws+z/g==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"0BRwLgUcnS8VCN68ryJA7nPPgDp2nmy6dfjWRMv+NMQ=\", \"salt\": \"+MLjDs0kcrxvU3oquFQZ1Q==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"AMqiCalSdPKDciMPhhsFNXbxxpW58XkR/X/oFNIHbHo=\", \"salt\": \"QawQ2WqxE6+KqdQx4YRXBA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -2184,20 +1627,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"Q0Owa3/TDbJIp9nOdP0Q7z1WoSIV1UKpvInBzOYve4Q=\", \"salt\": \"hJwOtEEWHVOs9gwX8fyhqg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"MefLejvun4PZCH747NK5bIHvcbq7JwGhRDSKlkD9uV4=\", \"salt\": \"rYnSbG3DjPzmv1ZVvduYLQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"txezH33LSINt58nCu28rX6rjTaNgUxl465ANDNv29wk=\", \"salt\": \"5YrSNoKvBI5KWXMTzisJ/g==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"fLqbh2zW/R42k/g4y+ML/LEnQX18ompVoc17lHAp0i0=\", \"salt\": \"63chnLYAulADHS/K1Wb2tA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -2218,20 +1659,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"UBryN9b7PAwWs3GpGZ6CA1cZcK9vBHzl7bBm6fmk5VQ=\", \"salt\": \"2jWatXRPg9zfU9m+2OgwLw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"ZuRmqz0QP6bKZ+xx/6rLv5ToSTzCznF0hnIpA4eRLr0=\", \"salt\": \"qCn2XQzECeFZLAxpUuAHgg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"CRLVjS/8ZQKXDAjQJ/xztEmEs32iDtm3D5U4hYUB230=\", \"salt\": \"x2FAn6XycYdlfz5xZKeiYw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"tNUJ/LwNWOMt1Z1Q52/SoiQsQkFudhHqj6j5irif9uI=\", \"salt\": \"H1gRgMcmc0Und6OnKVozOQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -2252,20 +1691,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"BY2/ChUFOHpl5C9JP/LuKkKMZKoyVbZFvbK3Qno+IdQ=\", \"salt\": \"PRyD1rO5aK4oUFrfRXRsFw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"Wr+wDOHy8qUxVqynPOH05b+jWJ+yjm83Gj/j+im+SkA=\", \"salt\": \"arYF3/Hs4owGC8rqBL1isg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"7Awgkvq4DrPMD3HNxZzKNSxta/cdSIh+UuWeJCIsmuI=\", \"salt\": \"da/3+g6M1x6hca4rhPDKQQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"TEkkuIFxqngKnJK6R6MHyoiNDphJqbCap5sHXZHj2Rs=\", \"salt\": \"Ih9rXP/fH8MHODgDxqeb0w==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -2286,20 +1723,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"dMsoTqn7vB+MEYj+QRhG3AVy15ITa1TtB5m+YEZcxb4=\", \"salt\": \"+29wS12mFd8ts7CPe2hRVw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"tJ+gTCWMhOMhcus/RC5SqA9e6FCfhmBmZekKt/OY078=\", \"salt\": \"b48HDuGKlQdZZw9z6JAtUQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"MFn6vs/IrBaVXOUEljdJ6Wyri6TLLyxWdCBXsb0urOg=\", \"salt\": \"UgRnvSoAEkyQCipAbrRWOg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"1Pij4NGvdUgnr3fvQxcdsWVuLjLeIie0W0oOlp2JPvA=\", \"salt\": \"250Am1oeznxr6oHrlNds1w==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -2320,20 +1755,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"WVFkAV/rXa9fl/6XzHw1ACIZsjJC6l11sCVW5rw3zsY=\", \"salt\": \"2HIn3abLApeQpSfRVSqYaw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"uoTjohTPbwkdMDhvAGzxbY59mLm1g7KAaU/K5ONbrL0=\", \"salt\": \"IRpOnaBCz78egJ+XjDa8UQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"e24+klhfhQrWWT2731eWPyGcqHHhQSnS4HXpwnZ9FI8=\", \"salt\": \"xcD5R8ZC8LYUZmlPk2L2lA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"bOO6pORXGs1SASja7oSk7wQtpT5XiXpedn5DsB596IA=\", \"salt\": \"IGxDFUEGLlLL/D578ho0fQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -2354,20 +1787,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"/GjsYykgvKOqZIa9v1ZozRbSkOhv7qzX3oUMGWH+Gxw=\", \"salt\": \"GPbPZEGQdO0jzWUGdJCiUw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"WlVAmfBA4u6CWHaZiJKj3AVxV2zKOFGP3ouhfkJz5dM=\", \"salt\": \"XT2QyLxsB/qqsV02mGKqcA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"J5v1Xo34Dyivay9GNnjhA4BZiy0z2PeFVX4fPhvvAzA=\", \"salt\": \"HZHJaGfl/1zC+Z5yDc/5MA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"4BQtOLyOYOJuaBJu64mXzGLBBHA0WUg8iQyMGYy+8xg=\", \"salt\": \"73Fad02IzQT9I8MSkjPLEg==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -2388,20 +1819,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"6CO0qTizbyi/fC3gySL81bs8Myt6o25pp2fCrz411nI=\", \"salt\": \"ufdN1y5qVsgej3n+yJF36Q==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"ygbFouX47bHgBPClvQb+gyjSVOomBKxo+usJAfeJigM=\", \"salt\": \"c9L3X4GTnnI34aa2i8JSGQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"3d/XRoWyeD6yBCATxN90jHGx6dbDsNf2GhxpKsGi/18=\", \"salt\": \"T8v7GTZBgRROZRb9LLFDXQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"X3nFB0vi0mrk3qA1jcJWqy+f3RhmFBhDBrUfcgyX5kM=\", \"salt\": \"YhukFO2YKOCi6LDTd4or+Q==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -2422,20 +1851,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"/fF5gZ5dhIz/dtpa1oczEOR70LSv5K5GAoEvBR0jmj8=\", \"salt\": \"K2Is1PVRoemjp89jbHgWxQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"z1bGe4FgfY3onw7n1IwQOvJDXljSxgPbEfRUupiYGIM=\", \"salt\": \"7op3ndGiWYcNbk46C7CU7w==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"RZr+Dz036pXvxP+k+/LYqP9cGwUtj4V9oslB5bNq9MY=\", \"salt\": \"1Ltf6O8tqfzRuJ4XszUvBQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"aEs1wHoUXYdrwtMmiGWleUHHwY4xR1BY6WUYX5cC67w=\", \"salt\": \"n8gEORyGUBnVI6G1Bv7Nnw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -2456,20 +1883,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"QDATVNHoeJ5g2vVPhl6Vm7wXAw5IPJgdfnW8S3yY5f8=\", \"salt\": \"G9C91rboySyCEmVELkiJIw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"dp2/Xgqd/Ei1C+xUkqh2GklbIRvRH27igyZBt3rPAT0=\", \"salt\": \"KcgZ5Y+IjAyBOLAMrWKPtA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"IWKpdaZBhMoH7G56YhM9dm24DPR6MMt1fE5ico+VRLs=\", \"salt\": \"bSJBkU9CtlU+3rgI7fuFiA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"XML6m4n/ql3R83+CTqpyJZ2+o9gHNjn2KbYX4zANTCs=\", \"salt\": \"V1iDwbI9V/SoNj6BM+6YAA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -2490,20 +1915,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"/rEfoXk/xMVYhRHXuR75znqMn+7AMLKC21v5OsiZf2k=\", \"salt\": \"k+RzY1kbOrRqaP4Qx2HJgw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"AIfSvyNcvnwhQVufgR6eJZemQxMnsnRbA+6+1vziKlk=\", \"salt\": \"6FQrPslxI5/CCuz7pH25Dw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"x1JWt7eiSAUYfNIbTG+Cbd1atm8K7uo+1BlvcMAxeMY=\", \"salt\": \"GtEgeWPItk7k/AJh9Ui6iQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"+WwNkbdXpIlnpueg29OowL5MRxYdJGBPyL4Fj8CkHCM=\", \"salt\": \"xykAgbe5Hickvnu55nTxBw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -2524,20 +1947,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"9CbLOl0HPCb3mAEWDXG3wUulJlUzHp6y8Lxg/jLRbC0=\", \"salt\": \"JAXu0rMZkKsrIXCof8uCSA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"AghZvc0IR/jsiuMROG0ywdE9fB1yQ7vDBo5m46exsK4=\", \"salt\": \"kKUt5C+uKfjQrCgg3DQxlA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"TxCs9316fyGI3dfpKoniDOzIq8l6dmm7Gw9oG/wt9vo=\", \"salt\": \"lxIwmPprCcuLNsSidvVPJA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"JCLhtUhCFYmmzKa3++sgZWcdgSrXLIcfgCjGoZcjblg=\", \"salt\": \"qdkDJiahzzXd94ybU5OCBA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -2558,20 +1979,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"QL+vwYQImTN0EZvzMjQ0xBbPx9FzKlMLMO2gur0Kh7U=\", \"salt\": \"VNtlTQg8doyA92M68BxQaQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"A3L7Yr0sQ5BeREjRSz0e+4E89lLe4oz2z1E4AXxoHdY=\", \"salt\": \"gIVB4jzYKIc3agvIuTc/JA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"9RA2krT+3OlkC61iwvrpTBxnZW8j+x+Qbg+E6kZfzfc=\", \"salt\": \"Tlr1ARWbojw1bS26xIL7Xg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"uCWgZMbJC5xQYG9H+xxZm2NhamvthPOvu1PQRycndXw=\", \"salt\": \"WxeF7sqrG4BCVA+InYbjxw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -2592,20 +2011,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"tOjjftnSN9XiM6TmotgNlO5nWpiFVlTGjHF+QVo2MRI=\", \"salt\": \"HdfLtm13boAPwlAMXO7zGQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"H+EOTdFFwT9WzlZVJv5ZGb7toQdNzjPIp3cxLruS4RU=\", \"salt\": \"QoUXb+5DdU5ARsNqAf9BAw==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"FuamA7ZniFkglu2YvrY3/DPL5BsaUzppQZDT9MqxLBo=\", \"salt\": \"stW8pFihdayLyXtYiaiqog==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"lg91wrEg0kLT7vB4/8UJVb/LN42YtcC8QjzuzMnN1bU=\", \"salt\": \"fupiCWdmFlMve0pGiPpr/A==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -2626,20 +2043,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"4SzUpHqrbARHocRytRYmvWpdgxUuSMbsuJATwNuS8jM=\", \"salt\": \"6Vr32QaaY44IusWU+vCnjQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"oHk/WJvdYSnFlK0iOV1tH5q3OCOME4yq0j2whsdE2j4=\", \"salt\": \"EBAt1wPKPxnJqtCByb09og==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"0YAjj5GMyKe9qltBeYzffYx+v1budjz4Opzq2ISJpbI=\", \"salt\": \"VgYIxJbMh414HkLOAgUegw==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"fHlCKePy9BQL94QTFBAUREbD1LWApkRlRP5SsIYwt94=\", \"salt\": \"j9mLORxDloKTLm5vVA9oNA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -2660,20 +2075,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"1jS0si7RsH+sNCqqbHhfmEiTg68Kht1ccTmFUbOBLjA=\", \"salt\": \"LtDRmc2LObDdDF70uIW9PQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"TUY6YaRlO3G3saSbpJZDWrQxQnNJS5B8jx858Vej0NY=\", \"salt\": \"RwhlhMKQrZvFZaoYEovS/Q==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"KrtExO56i22Y9qDeS+hI8v1pwCnYanQMeB42C5iFFwo=\", \"salt\": \"0tl7WmmdmqgqPQixTnCYlg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"hu/AN9oqPc0s6EkwhFo1hKI5GzyERHuV/d4XbXSKqx8=\", \"salt\": \"moxiXvcKLcmUKyHQa9rOsQ==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -2694,20 +2107,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"YYjM6VnsGFVgzzVRVDqqCqIj+Ofp7BMW/IuOti8UHwM=\", \"salt\": \"ECw1QZ4v64RodyElCueOSQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"JppAk9JE358nzW7VHIAXdbZMoSRgowJwIWes1O9fttA=\", \"salt\": \"ibO3d5cH1ouNGyQYAz8x4w==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"HUVV3zKadrWIWssWVKwpLaTp+VZBvd+jOMvpu5dUGtk=\", \"salt\": \"41OOZq+aiUBR2crrUzzngg==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"gbwHPE+dKeIUMrMlNVGH/zZqO2hpgPm5LnwJyeLoaq8=\", \"salt\": \"ArpTQq6O0zQ8FzgG1rb2OA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -2728,20 +2139,18 @@
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"Auj5ln30j4ypajKzFrVdU3oJCeTg8w0eTHi51BEX8mo=\", \"salt\": \"tjQji7ZsTYuPEpSyWOq0NQ==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"/xl7wuZrX1GgSpQNLMwiKmWTyoLeXNXvoNMv96GEDSc=\", \"salt\": \"xbj+8liyzEkYAzCMEM//PA==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         },
         {
           "type": "password",
           "temporary": false,
-          "secretData": "{\"value\": \"WJ4oqlF/pCJjcQqewUFBjb8Nxzs4P/Vxm0ZwNZOMZzw=\", \"salt\": \"v/gqqqP41dnTPqVPkQnMQA==\", \"additionalParameters\": {}}",
+          "secretData": "{\"value\": \"PGn1olH1Nr6aiKS5dx6SgPO9J9MVJq/wHEl+0zlMrkI=\", \"salt\": \"V/TbWqzYa+UB1YGV1h7x5w==\", \"additionalParameters\": {}}",
           "credentialData": "{\"hashIterations\": 27500, \"algorithm\": \"pbkdf2-sha256\", \"additionalParameters\": {}}"
         }
       ],
       "realmRoles": [],
-      "groups": [
-        "/students"
-      ],
+      "groups": [],
       "attributes": {
         "role": [
           "student"
@@ -2777,18 +2186,18 @@
         "http://localhost:3000",
         "http://localhost:3000/",
         "http://localhost:3000/*",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:3000/",
-        "http://127.0.0.1:3000/*",
         "http://localhost:9080",
         "http://localhost:9080/",
         "http://localhost:9080/*",
-        "http://127.0.0.1:9080",
-        "http://127.0.0.1:9080/",
-        "http://127.0.0.1:9080/*",
         "http://localhost:8000",
         "http://localhost:8000/",
         "http://localhost:8000/*",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:3000/",
+        "http://127.0.0.1:3000/*",
+        "http://127.0.0.1:9080",
+        "http://127.0.0.1:9080/",
+        "http://127.0.0.1:9080/*",
         "http://127.0.0.1:8000",
         "http://127.0.0.1:8000/",
         "http://127.0.0.1:8000/*",
