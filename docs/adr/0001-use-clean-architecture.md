@@ -1,8 +1,35 @@
 # ADR 0001 — Use Clean Architecture (Router → Service → Repository)
 
-**Status:** Accepted  
+**Status:** Accepted, **partially superseded** — see *Amendment (2026-08-18)* below  
 **Date:** 2026-07-09  
 **Deciders:** Architecture team
+
+---
+
+## ⚠️ Amendment (2026-08-18) — reconciled against the implementation
+
+The layering decision below (Router → Service → Repository) still stands. Two parts of
+this ADR no longer describe the system as built:
+
+1. **File organisation is domain-first, not layer-first.** There is no `app/routers/`,
+   `app/services/`, or `app/repositories/`. Files are grouped by business domain:
+   `app/domains/<feature>/{router,service,repository}.py`, with `app/core/` for shared
+   infrastructure. See `.agents/AGENTS.md` §1 and
+   `back/.agents/skills/domain-driven-architecture/SKILL.md`, which are authoritative.
+   Rule 4 below ("no cross-layer imports") should be read as **"no cross-domain imports
+   at the Router level"** — cross-domain reuse is permitted at Service/Repository level.
+
+2. **Tenancy is schema-per-tenant, not database-per-tenant.** The "Multi-Tenant Strategy"
+   section below records the opposite of what was implemented. All tenants share one
+   PostgreSQL database and are isolated by `SET search_path TO "<tenant_id>", public`.
+   `app/core/database.py` explicitly forces every tenant config back to the control-plane
+   database name (see the `# Force database name to use control plane database` comment).
+   The per-tenant `db_host`/`db_port`/`db_name` columns on the control-plane `tenants`
+   table and the `TENANT_*_DB_NAME` env vars are unused remnants of this original plan.
+
+Known deviations from the layering rules in the current code are catalogued in
+`.agents/AGENTS.md` §1 ("Known deviations") — notably `domains/events/` calling
+`TenantService`/`TenantRepository` directly from its router.
 
 ---
 

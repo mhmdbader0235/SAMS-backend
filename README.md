@@ -75,13 +75,11 @@ pytest tests/ --cov=app --cov-report=html
 | POST | `/api/v1/auth/register` | None | Register user |
 | POST | `/api/v1/auth/login` | None | Login, get JWT |
 | GET | `/api/v1/auth/me` | Bearer | Current user info |
-| GET | `/api/v1/notes` | Bearer | List all events |
-| POST | `/api/v1/notes` | Bearer (teacher) | Create event |
-| PUT | `/api/v1/notes/{id}` | Bearer (teacher) | Update event |
-| DELETE | `/api/v1/notes/{id}` | Bearer (teacher) | Delete event |
-| POST | `/api/v1/notes/{id}/comments` | Bearer | Add comment |
-| POST | `/api/v1/notes/{id}/enroll` | Bearer (parent) | Enroll student |
-| DELETE | `/api/v1/notes/{id}/enroll` | Bearer (parent) | Cancel enrollment |
+| GET/POST | `/api/v1/events` | Bearer | List / create events |
+| PUT/PATCH/DELETE | `/api/v1/events/{id}` | Bearer (teacher) | Update / patch / delete event |
+| POST | `/api/v1/events/{id}/feedbacks` | Bearer | Add feedback |
+| POST | `/api/v1/students/enrollments` | Bearer (parent/student) | Enroll student |
+| DELETE | `/api/v1/students/enrollments/{id}` | Bearer (parent) | Cancel enrollment |
 
 ## Linting
 

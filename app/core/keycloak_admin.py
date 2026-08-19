@@ -175,6 +175,52 @@ def update_user_role_in_keycloak(email: str, new_role: str, tenant_id: str) -> b
     except Exception as exc:
         logger.warning(f"Keycloak role update failed for {email}: {exc}")
         return False
+
+
+def delete_user_from_keycloak(email: str) -> bool:
+    """Delete a user's Keycloak account by email, best-effort.
+
+    Called when a tenant admin hard-deletes a user, so the account can't
+    silently reappear via Keycloak SSO's JIT re-provisioning on next login.
+    Returns False (never raises) on any failure — callers treat this as
+    non-blocking, matching sync_user_to_keycloak's existing convention.
+    """
+    try:
+        token_url = f"{KEYCLOAK_URL}/realms/master/protocol/openid-connect/token"
+        data = urllib.parse.urlencode({
+            "client_id": "admin-cli",
+            "username": KEYCLOAK_ADMIN,
+            "password": KEYCLOAK_ADMIN_PASSWORD,
+            "grant_type": "password"
+        }).encode()
+        req = urllib.request.Request(token_url, data=data, method="POST")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            token_res = json.loads(resp.read().decode())
+            admin_token = token_res["access_token"]
+
+        headers = {
+            "Authorization": f"Bearer {admin_token}",
+            "Content-Type": "application/json"
+        }
+
+        search_url = f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/users?email={urllib.parse.quote(email)}"
+        req = urllib.request.Request(search_url, headers=headers, method="GET")
+        kc_user_id = None
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            users = json.loads(resp.read().decode())
+            if users and isinstance(users, list) and len(users) > 0:
+                kc_user_id = users[0]["id"]
+
+        if not kc_user_id:
+            return False
+
+        delete_url = f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/users/{kc_user_id}"
+        req_del = urllib.request.Request(delete_url, headers=headers, method="DELETE")
+        with urllib.request.urlopen(req_del, timeout=3):
+            pass
+        return True
+    except Exception as exc:
+        logger.warning(f"Keycloak user deletion failed for {email}: {exc}")
         return False
 
 

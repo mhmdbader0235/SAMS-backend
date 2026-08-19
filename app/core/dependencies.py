@@ -331,8 +331,14 @@ async def get_current_user(
         except Exception as _e:
             print(f"[get_current_user] Warning: could not resolve tenant from control plane for '{email}': {_e}")
 
-    # Allow X-Tenant-ID header or ?tenant_id= query param override (useful for super_admin switching tenants)
-    if request:
+    # X-Tenant-ID header / ?tenant_id= query param override — super_admin ONLY.
+    # This lets a platform operator switch which tenant they're inspecting; it
+    # must NEVER apply to an ordinary school_admin/teacher/parent/student,
+    # since a client fully controls its own request headers — trusting this
+    # for anyone else would let any authenticated user read or write any
+    # other tenant's data just by sending a header.
+    is_super_admin = role == "super_admin" or "super_admin" in extracted_roles
+    if request and is_super_admin:
         req_tenant = request.headers.get("x-tenant-id") or request.query_params.get("tenant_id")
         if req_tenant and req_tenant.strip():
             tenant_id = req_tenant.strip().lower()
@@ -487,3 +493,51 @@ async def get_current_user(
         email=email,
         roles=final_roles_list if final_roles_list else [role],
     )
+
+
+async def require_tenant_live(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:
+    """Hard gate: block every tenant-scoped action until the school has finished
+    Day-1 setup (see app/domains/school/). Applied at the router level to every
+    domain except the school setup endpoints themselves and the auth essentials
+    (register/login/me), so a tenant stuck in "setup" cannot create users, send
+    invitations, create events, or write to any other domain object over the
+    API — regardless of what the frontend renders.
+
+    super_admin is exempt: a platform operator must be able to reach a tenant
+    regardless of its onboarding state, consistent with super_admin bypassing
+    every other workflow/role check in this codebase.
+    """
+    if current_user.has_role("super_admin"):
+        return current_user
+    if not current_user.tenant_id:
+        return current_user
+
+    try:
+        from app.core.database import get_db_pool
+        pool = await get_db_pool(current_user.tenant_id)
+        activated_at = await pool.fetchval(
+            "SELECT activated_at FROM school_profile ORDER BY id ASC LIMIT 1"
+        )
+
+        if activated_at is None:
+            # Legacy-tenant grandfathering, performed inline rather than only
+            # via GET /school/setup-state: a tenant that already has a real
+            # academic structure predates this feature and must never be
+            # locked out just because this happens to be the first endpoint
+            # it hits after a deploy.
+            from app.domains.tenant.tenant_repository import TenantRepository
+            structure = await TenantRepository(pool).get_academic_structure()
+            if structure.get("has_structure"):
+                from app.domains.school.repository import SchoolRepository
+                await SchoolRepository(pool).grandfather_activate_if_missing()
+                activated_at = True
+    except Exception as exc:
+        # Fail open on infra errors (e.g. transient connection issue) rather than
+        # locking every tenant out — the table is created as part of the same
+        # tenant provisioning that already ran earlier in this request.
+        print(f"[require_tenant_live] Warning: could not resolve school_profile for tenant '{current_user.tenant_id}': {exc}")
+        return current_user
+
+    if activated_at is None:
+        raise HTTPException(status_code=403, detail="Complete school setup before performing this action")
+    return current_user

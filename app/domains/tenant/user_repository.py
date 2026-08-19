@@ -296,4 +296,48 @@ class UserRepository:
                 parsed,
             )
 
+    async def delete_user(self, user_id) -> dict | None:
+        """Hard-delete a tenant user row and return the deleted record, or
+        None if it didn't exist.
+
+        Most dependent records (teachers, parenets, students, event_feedback,
+        notifications, student_health_and_records) cascade automatically via
+        their own FK definitions. Event manager/finance review references are
+        nullable, so they're cleared here first rather than blocking the
+        delete. Resource authorship (resources.added_by_user_id,
+        resource_cost.set_by_user_id) is intentionally NOT nullable — deleting
+        a user who priced or added event resources raises ValueError, so the
+        caller gets a clear "reassign these records first" message rather
+        than the raw DB error, and that audit trail is never silently lost.
+        """
+        parsed = parse_id(user_id)
+        if not isinstance(parsed, (int, UUID)):
+            return None
+
+        async with self.pool.acquire() as conn:
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    """
+                    SELECT id, email, role,
+                           COALESCE(roles, ARRAY[]::TEXT[]) as roles,
+                           COALESCE(permissions, ARRAY[]::TEXT[]) as permissions
+                    FROM users
+                    WHERE id = $1
+                    """,
+                    parsed,
+                )
+                if not row:
+                    return None
+
+                await conn.execute("UPDATE event SET manager_reviewer_id = NULL WHERE manager_reviewer_id = $1", parsed)
+                await conn.execute("UPDATE event SET finance_reviewer_id = NULL WHERE finance_reviewer_id = $1", parsed)
+                try:
+                    await conn.execute("DELETE FROM users WHERE id = $1", parsed)
+                except asyncpg.exceptions.ForeignKeyViolationError as exc:
+                    raise ValueError(
+                        "This user has added or priced event resources and cannot be deleted "
+                        "until those records are reassigned to another staff member."
+                    ) from exc
+                return dict(row)
+
 

@@ -357,6 +357,84 @@ VALUES
     ('Adult Meal',        'meals',     false, NULL, true)
 ON CONFLICT DO NOTHING;
 
+-- Table 18: school_profile / school_campus / school_contact (Day-1 onboarding)
+CREATE TABLE IF NOT EXISTS tenant_a.school_profile (
+    id                      BIGSERIAL   PRIMARY KEY,
+    legal_name              TEXT        DEFAULT NULL,
+    display_name            TEXT        DEFAULT NULL,
+    school_code             TEXT        DEFAULT NULL,
+    school_type             TEXT        DEFAULT NULL,
+    regulator               TEXT        DEFAULT NULL,
+    licence_number          TEXT        DEFAULT NULL,
+    licence_expiry          DATE        DEFAULT NULL,
+    tax_registration        TEXT        DEFAULT NULL,
+    country                 TEXT        DEFAULT NULL,
+    timezone                TEXT        DEFAULT NULL,
+    hemisphere              TEXT        DEFAULT NULL,
+    default_language        TEXT        DEFAULT NULL,
+    additional_languages    TEXT[]      NOT NULL DEFAULT '{}',
+    currency                TEXT        NOT NULL DEFAULT 'JOD',
+    logo_url                TEXT        DEFAULT NULL,
+    logo_dark_url           TEXT        DEFAULT NULL,
+    primary_color           TEXT        DEFAULT NULL,
+    website                 TEXT        DEFAULT NULL,
+    profile_committed_at    TIMESTAMPTZ DEFAULT NULL,
+    structure_committed_at  TIMESTAMPTZ DEFAULT NULL,
+    curriculum_locked_at    TIMESTAMPTZ DEFAULT NULL,
+    activated_at            TIMESTAMPTZ DEFAULT NULL,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS tenant_a.school_campus (
+    id                      BIGSERIAL     PRIMARY KEY,
+    name                    TEXT          NOT NULL,
+    address_line1           TEXT          DEFAULT NULL,
+    area                    TEXT          DEFAULT NULL,
+    city                    TEXT          DEFAULT NULL,
+    state_region            TEXT          DEFAULT NULL,
+    country                 TEXT          DEFAULT NULL,
+    po_box                  TEXT          DEFAULT NULL,
+    postal_code             TEXT          DEFAULT NULL,
+    latitude                NUMERIC(10,7) DEFAULT NULL,
+    longitude               NUMERIC(10,7) DEFAULT NULL,
+    day_start               TEXT          DEFAULT NULL,
+    day_end                 TEXT          DEFAULT NULL,
+    access_notes            TEXT          DEFAULT NULL,
+    accessibility_notes     TEXT          DEFAULT NULL,
+    is_primary              BOOLEAN       NOT NULL DEFAULT TRUE,
+    created_at              TIMESTAMPTZ   NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS tenant_a.school_contact (
+    id                      BIGSERIAL   PRIMARY KEY,
+    role_title              TEXT        NOT NULL,
+    name                    TEXT        NOT NULL,
+    phone                   TEXT        DEFAULT NULL,
+    email                   TEXT        DEFAULT NULL,
+    is_emergency_contact    BOOLEAN     NOT NULL DEFAULT FALSE,
+    escalation_order        INTEGER     DEFAULT NULL,
+    visible_to              TEXT[]      NOT NULL DEFAULT '{staff}',
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- tenant_a is a pre-existing demo/seeded school (see seed_data.py) — treat it
+-- as already onboarded so it never gets dropped into the setup wizard.
+-- curriculum_locked_at is deliberately left NULL: this seed predates the
+-- Curriculum Wizard's real system/level data (seed_data.py inserts levels
+-- directly, bypassing academic_settings), so locking here would reject the
+-- very first real save against a fabricated "system" default.
+INSERT INTO tenant_a.school_profile (
+    legal_name, display_name, school_code, country, timezone, hemisphere,
+    default_language, currency, profile_committed_at, structure_committed_at,
+    activated_at
+)
+SELECT
+    'School A', 'School A', 'SCHOOLA', 'Jordan', 'Asia/Amman', 'Northern',
+    'en', 'JOD', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM tenant_a.school_profile);
+
 
 -- =============================================================================
 -- 3. TENANT SCHEMA: tenant_b (isolated logical schema)
@@ -600,4 +678,79 @@ VALUES
     ('Kids Meal',         'meals',     false, NULL, true),
     ('Adult Meal',        'meals',     false, NULL, true)
 ON CONFLICT DO NOTHING;
+
+-- Table 18: school_profile / school_campus / school_contact (Day-1 onboarding)
+CREATE TABLE IF NOT EXISTS tenant_b.school_profile (
+    id                      BIGSERIAL   PRIMARY KEY,
+    legal_name              TEXT        DEFAULT NULL,
+    display_name            TEXT        DEFAULT NULL,
+    school_code             TEXT        DEFAULT NULL,
+    school_type             TEXT        DEFAULT NULL,
+    regulator               TEXT        DEFAULT NULL,
+    licence_number          TEXT        DEFAULT NULL,
+    licence_expiry          DATE        DEFAULT NULL,
+    tax_registration        TEXT        DEFAULT NULL,
+    country                 TEXT        DEFAULT NULL,
+    timezone                TEXT        DEFAULT NULL,
+    hemisphere              TEXT        DEFAULT NULL,
+    default_language        TEXT        DEFAULT NULL,
+    additional_languages    TEXT[]      NOT NULL DEFAULT '{}',
+    currency                TEXT        NOT NULL DEFAULT 'JOD',
+    logo_url                TEXT        DEFAULT NULL,
+    logo_dark_url           TEXT        DEFAULT NULL,
+    primary_color           TEXT        DEFAULT NULL,
+    website                 TEXT        DEFAULT NULL,
+    profile_committed_at    TIMESTAMPTZ DEFAULT NULL,
+    structure_committed_at  TIMESTAMPTZ DEFAULT NULL,
+    curriculum_locked_at    TIMESTAMPTZ DEFAULT NULL,
+    activated_at            TIMESTAMPTZ DEFAULT NULL,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS tenant_b.school_campus (
+    id                      BIGSERIAL     PRIMARY KEY,
+    name                    TEXT          NOT NULL,
+    address_line1           TEXT          DEFAULT NULL,
+    area                    TEXT          DEFAULT NULL,
+    city                    TEXT          DEFAULT NULL,
+    state_region            TEXT          DEFAULT NULL,
+    country                 TEXT          DEFAULT NULL,
+    po_box                  TEXT          DEFAULT NULL,
+    postal_code             TEXT          DEFAULT NULL,
+    latitude                NUMERIC(10,7) DEFAULT NULL,
+    longitude               NUMERIC(10,7) DEFAULT NULL,
+    day_start               TEXT          DEFAULT NULL,
+    day_end                 TEXT          DEFAULT NULL,
+    access_notes            TEXT          DEFAULT NULL,
+    accessibility_notes     TEXT          DEFAULT NULL,
+    is_primary              BOOLEAN       NOT NULL DEFAULT TRUE,
+    created_at              TIMESTAMPTZ   NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS tenant_b.school_contact (
+    id                      BIGSERIAL   PRIMARY KEY,
+    role_title              TEXT        NOT NULL,
+    name                    TEXT        NOT NULL,
+    phone                   TEXT        DEFAULT NULL,
+    email                   TEXT        DEFAULT NULL,
+    is_emergency_contact    BOOLEAN     NOT NULL DEFAULT FALSE,
+    escalation_order        INTEGER     DEFAULT NULL,
+    visible_to              TEXT[]      NOT NULL DEFAULT '{staff}',
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- tenant_b is a pre-existing demo/seeded school — treat it as already
+-- onboarded so it never gets dropped into the setup wizard. curriculum_locked_at
+-- is deliberately left NULL — see the tenant_a seed comment above.
+INSERT INTO tenant_b.school_profile (
+    legal_name, display_name, school_code, country, timezone, hemisphere,
+    default_language, currency, profile_committed_at, structure_committed_at,
+    activated_at
+)
+SELECT
+    'School B', 'School B', 'SCHOOLB', 'Jordan', 'Asia/Amman', 'Northern',
+    'en', 'JOD', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
+    CURRENT_TIMESTAMP
+WHERE NOT EXISTS (SELECT 1 FROM tenant_b.school_profile);
 

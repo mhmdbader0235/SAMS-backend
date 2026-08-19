@@ -6,10 +6,10 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
-from app.core.dependencies import CurrentUser, get_current_user
+from app.core.dependencies import CurrentUser, get_current_user, require_tenant_live
 from app.domains.tenant.service import TenantService
 
-router = APIRouter(prefix="/api/v1/notifications", tags=["notifications"])
+router = APIRouter(prefix="/api/v1/notifications", tags=["notifications"], dependencies=[Depends(require_tenant_live)])
 
 
 class NotificationResponse(BaseModel):

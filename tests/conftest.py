@@ -68,7 +68,8 @@ async def db_pool():
                 event_grade_level_targets, event_class_targets, event_student_targets, notifications,
                 student_health_and_records,                parents, super_admins, tenants, parent_child_links, parent_tenant_links, invitations, user_tenant_map, user_invitations,
                 levels, class, teachers, parenets, cost_budget, event, event_class_map, enrollment,
-                payments, event_feedback, resource_types, resources, resource_cost
+                payments, event_feedback, resource_types, resources, resource_cost,
+                school_profile, school_campus, school_contact
             CASCADE;
             """
         )

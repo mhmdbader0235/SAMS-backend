@@ -9,11 +9,11 @@ Must contain ZERO business logic, Keycloak calls, or raw SQL queries.
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.database import get_control_plane_pool
-from app.core.dependencies import CurrentUser, get_current_user
+from app.core.dependencies import CurrentUser, get_current_user, require_tenant_live
 from app.domains.invitations.service import InvitationService
 from app.schemas.invitation import InvitationCreateRequest, InvitationResponse
 
-router = APIRouter(prefix="/api/v1/invitations", tags=["invitations"])
+router = APIRouter(prefix="/api/v1/invitations", tags=["invitations"], dependencies=[Depends(require_tenant_live)])
 
 
 @router.post(

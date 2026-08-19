@@ -2,10 +2,10 @@
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.core.dependencies import CurrentUser, get_current_user
+from app.core.dependencies import CurrentUser, get_current_user, require_tenant_live
 from app.domains.analytics.service import AnalyticsService
 
-router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"])
+router = APIRouter(prefix="/api/v1/analytics", tags=["analytics"], dependencies=[Depends(require_tenant_live)])
 
 
 @router.get("/platform", summary="Get platform-wide aggregated analytics (super_admin only)")

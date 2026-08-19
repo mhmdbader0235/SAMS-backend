@@ -5,6 +5,7 @@ import pytest
 from httpx import AsyncClient
 
 from app.domains.tenant.tenant_repository import TenantRepository
+from tests.integration._helpers import register_school_admin
 
 
 @pytest.mark.asyncio
@@ -38,16 +39,8 @@ async def test_event_cloning_flow(test_client: AsyncClient, db_pool: asyncpg.Poo
     assert r_cls.status_code == 200
     class_id = r_cls.json()["id"]
 
-    # 2.5. Register school_admin
-    r_admin = await test_client.post("/api/v1/auth/register", json={
-        "email": "cloner_admin@school.com",
-        "password": "password123",
-        "tenant_id": "tenant_a",
-        "role": "school_admin",
-        "invite_code": "SCHOOL-STAFF-2026"
-    })
-    assert r_admin.status_code == 200
-    a_token = r_admin.json()["access_token"]
+    # 2.5. Register school_admin (via a real invitation)
+    a_token = await register_school_admin(test_client, "cloner_admin@school.com")
     a_headers = {"Authorization": f"Bearer {a_token}"}
 
     # 3. Create initial event

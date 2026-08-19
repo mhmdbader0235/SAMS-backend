@@ -6,6 +6,7 @@ import asyncpg
 from httpx import AsyncClient
 
 from app.domains.tenant.tenant_repository import TenantRepository
+from tests.integration._helpers import register_school_admin
 
 
 # =============================================================================
@@ -871,16 +872,9 @@ class TestEventUpdateRouter:
         cls_resp = await test_client.post("/api/v1/students/classes", json=cls_payload, headers=t_headers)
         class_id = cls_resp.json()["id"]
 
-        # Setup school_admin
-        a_payload = {
-            "email": "admin@updateevent.com",
-            "password": "pass",
-            "role": "school_admin",
-            "tenant_id": "tenant_a",
-            "invite_code": TEACHER_INVITE_CODE
-        }
-        a_reg = await test_client.post("/api/v1/auth/register", json=a_payload)
-        a_headers = {"Authorization": f"Bearer {a_reg.json()['access_token']}"}
+        # Setup school_admin (via a real invitation)
+        a_token = await register_school_admin(test_client, "admin@updateevent.com")
+        a_headers = {"Authorization": f"Bearer {a_token}"}
 
         # Create Event
         event_payload = {
@@ -960,16 +954,9 @@ class TestEventUpdateRouter:
 
 class TestAdminStaffCreation:
     async def test_admin_creates_manager_and_finance(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
-        # 1. Register a school_admin
-        admin_payload = {
-            "email": "school_admin@test.com",
-            "password": "pass",
-            "role": "school_admin",
-            "tenant_id": "tenant_a",
-            "invite_code": "regester123"
-        }
-        admin_reg = await test_client.post("/api/v1/auth/register", json=admin_payload)
-        admin_headers = {"Authorization": f"Bearer {admin_reg.json()['access_token']}"}
+        # 1. Register a school_admin (via a real invitation)
+        admin_token = await register_school_admin(test_client, "school_admin@test.com")
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
         # 2. Register a manager (admin only)
         mgr_resp = await test_client.post(

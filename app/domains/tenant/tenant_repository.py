@@ -281,7 +281,10 @@ class TenantRepository:
                 "sections": sections
             })
 
-        has_structure = (len(levels) > 0 and any(len(l["sections"]) > 0 for l in levels)) or settings_row is not None
+        # A saved calendar alone (settings_row) does not mean the school has a
+        # real academic structure — it must have at least one active level
+        # with at least one class section under it.
+        has_structure = len(levels) > 0 and any(len(l["sections"]) > 0 for l in levels)
         return {
             "has_structure": has_structure,
             "system": system,

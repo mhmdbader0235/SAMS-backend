@@ -529,6 +529,82 @@ async def _initialize_tenant_tables(pool: asyncpg.Pool, tenant_id: str = "tenant
             """
         )
 
+        # 22. School setup domain (Day-1 onboarding): profile, campus, contacts
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS school_profile (
+                id                      BIGSERIAL   PRIMARY KEY,
+                legal_name              TEXT        DEFAULT NULL,
+                display_name            TEXT        DEFAULT NULL,
+                school_code             TEXT        DEFAULT NULL,
+                school_type             TEXT        DEFAULT NULL,
+                regulator               TEXT        DEFAULT NULL,
+                licence_number          TEXT        DEFAULT NULL,
+                licence_expiry          DATE        DEFAULT NULL,
+                tax_registration        TEXT        DEFAULT NULL,
+                country                 TEXT        DEFAULT NULL,
+                timezone                TEXT        DEFAULT NULL,
+                hemisphere              TEXT        DEFAULT NULL,
+                default_language        TEXT        DEFAULT NULL,
+                additional_languages    TEXT[]      NOT NULL DEFAULT '{}',
+                currency                TEXT        NOT NULL DEFAULT 'JOD',
+                logo_url                TEXT        DEFAULT NULL,
+                logo_dark_url           TEXT        DEFAULT NULL,
+                primary_color           TEXT        DEFAULT NULL,
+                website                 TEXT        DEFAULT NULL,
+                profile_committed_at    TIMESTAMPTZ DEFAULT NULL,
+                structure_committed_at  TIMESTAMPTZ DEFAULT NULL,
+                curriculum_locked_at    TIMESTAMPTZ DEFAULT NULL,
+                activated_at            TIMESTAMPTZ DEFAULT NULL,
+                created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS school_campus (
+                id                      BIGSERIAL     PRIMARY KEY,
+                name                    TEXT          NOT NULL,
+                address_line1           TEXT          DEFAULT NULL,
+                area                    TEXT          DEFAULT NULL,
+                city                    TEXT          DEFAULT NULL,
+                state_region            TEXT          DEFAULT NULL,
+                country                 TEXT          DEFAULT NULL,
+                po_box                  TEXT          DEFAULT NULL,
+                postal_code             TEXT          DEFAULT NULL,
+                latitude                NUMERIC(10,7) DEFAULT NULL,
+                longitude               NUMERIC(10,7) DEFAULT NULL,
+                day_start               TEXT          DEFAULT NULL,
+                day_end                 TEXT          DEFAULT NULL,
+                access_notes            TEXT          DEFAULT NULL,
+                accessibility_notes     TEXT          DEFAULT NULL,
+                is_primary              BOOLEAN       NOT NULL DEFAULT TRUE,
+                created_at              TIMESTAMPTZ   NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+
+            CREATE TABLE IF NOT EXISTS school_contact (
+                id                      BIGSERIAL   PRIMARY KEY,
+                role_title              TEXT        NOT NULL,
+                name                    TEXT        NOT NULL,
+                phone                   TEXT        DEFAULT NULL,
+                email                   TEXT        DEFAULT NULL,
+                is_emergency_contact    BOOLEAN     NOT NULL DEFAULT FALSE,
+                escalation_order        INTEGER     DEFAULT NULL,
+                visible_to              TEXT[]      NOT NULL DEFAULT '{staff}',
+                created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
+        # Guarantee exactly one profile row always exists. A brand-new tenant
+        # starts un-activated (status "setup") until the onboarding wizard
+        # completes; a tenant that already ships an activated row via init.sql
+        # (tenant_a / tenant_b demo schemas) is left untouched by this no-op.
+        await conn.execute(
+            """
+            INSERT INTO school_profile (currency)
+            SELECT 'JOD'
+            WHERE NOT EXISTS (SELECT 1 FROM school_profile)
+            """
+        )
+
         # 20. Seed resource types if not present
         has_system_types = await conn.fetchval("SELECT EXISTS(SELECT 1 FROM resource_types WHERE is_custom = false)")
         if not has_system_types:

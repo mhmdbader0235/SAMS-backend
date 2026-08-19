@@ -228,6 +228,18 @@ class AuthService:
             if not tenant_id:
                 raise ValueError("Tenant ID is required for school users")
 
+            # school_admin is deliberately NOT covered by the generic fallback
+            # passphrases below — granting tenant-admin access must always
+            # come from a real, targeted invitation (see AuthService.create_invitation),
+            # never a shared/guessable code. Without this, anyone who knows a
+            # fallback passphrase could self-appoint as admin of any tenant_id
+            # they submit, including tenants they have no relationship to.
+            if role == "school_admin" and not invitation:
+                raise PermissionError(
+                    "A school_admin account can only be created from a real invitation issued by "
+                    "a super_admin or an existing school_admin for this tenant."
+                )
+
             if not invitation and role in ("teacher", "manager", "finance", "event_teacher"):
                 from app.core.config import TEACHER_INVITE_CODE
                 valid_codes = {TEACHER_INVITE_CODE, "regester123", "register123", "SCHOOL-STAFF-2026"}

@@ -3,7 +3,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.core.database import get_db_pool
-from app.core.dependencies import CurrentUser, get_current_user
+from app.core.dependencies import CurrentUser, get_current_user, require_tenant_live
 from app.core.schemas import (
     EventCreateRequest,
     EventResponse,
@@ -24,7 +24,7 @@ from app.core.schemas import (
 from app.domains.tenant.service import TenantService
 from app.domains.tenant.tenant_repository import TenantRepository, parse_id
 
-router = APIRouter(prefix="/api/v1/events", tags=["events"])
+router = APIRouter(prefix="/api/v1/events", tags=["events"], dependencies=[Depends(require_tenant_live)])
 
 
 @router.get("", response_model=EventsListResponse, summary="List all events targeted at user")
@@ -633,48 +633,6 @@ async def get_audience_prediction(
         ids_list = [int(x.strip()) for x in class_ids.split(",") if x.strip().isdigit()]
         predicted = await TenantService.get_predicted_attendance(current_user.tenant_id, ids_list)
         return {"predicted_attendance": predicted}
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
-
-
-@router.get("/resource-types", response_model=list[ResourceTypeResponse], summary="List active resource types")
-async def list_resource_types(
-    category: str | None = None,
-    current_user: CurrentUser = Depends(get_current_user),
-) -> list[ResourceTypeResponse]:
-    if not current_user.tenant_id:
-        raise HTTPException(status_code=400, detail="Tenant context required")
-    try:
-        pool = await get_db_pool(current_user.tenant_id)
-        repo = TenantRepository(pool)
-        types = await repo.get_all_resource_types(category)
-        return [ResourceTypeResponse(**t) for t in types]
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
-
-
-@router.post("/resource-types", response_model=ResourceTypeResponse, status_code=201, summary="Create a custom resource type")
-async def create_custom_resource_type(
-    payload: ResourceTypeCreateRequest,
-    current_user: CurrentUser = Depends(get_current_user),
-) -> ResourceTypeResponse:
-    if not current_user.tenant_id:
-        raise HTTPException(status_code=400, detail="Tenant context required")
-    if not current_user.has_any_role("teacher", "school_admin", "manager"):
-        raise HTTPException(status_code=403, detail="Only teachers, admins, and managers can create custom resource types")
-        
-    try:
-        rt_id = await TenantService.create_resource_type(
-            tenant_id=current_user.tenant_id,
-            name=payload.name,
-            category=payload.category,
-            is_custom=True,
-            created_by_user_id=current_user.id,
-        )
-        pool = await get_db_pool(current_user.tenant_id)
-        repo = TenantRepository(pool)
-        rt = await repo.get_resource_type_by_id(rt_id)
-        return ResourceTypeResponse(**rt)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 

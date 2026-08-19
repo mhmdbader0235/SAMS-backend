@@ -1,11 +1,12 @@
+import os
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPBearer
 from pydantic import BaseModel
 
 
 from app.core.database import get_control_plane_pool, get_db_pool
-from app.core.dependencies import CurrentUser, get_current_user
+from app.core.dependencies import CurrentUser, get_current_user, require_tenant_live
 from app.core.schemas import TokenResponse, UserLoginRequest, UserRegisterRequest
 from app.domains.auth.service import AuthService
 from app.domains.tenant.control_plane_repository import ControlPlaneRepository
@@ -13,6 +14,11 @@ from app.domains.tenant.tenant_repository import TenantRepository
 from app.domains.tenant.user_repository import UserRepository
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+# Tenant-mutating admin actions (invitations, role/permission changes, tenant
+# creation) are off-limits until Day-1 setup is complete. Login, register,
+# /me, the public tenant list, invitation-code verification, and
+# self-service profile reads stay reachable so auth itself never breaks.
+router_gated = APIRouter(prefix="/api/v1/auth", tags=["auth"], dependencies=[Depends(require_tenant_live)])
 _security = HTTPBearer(auto_error=False)
 
 
@@ -39,7 +45,7 @@ async def list_tenants() -> dict:
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.post("/tenants", summary="Create a new tenant and generate schema (Super Admin)")
+@router_gated.post("/tenants", summary="Create a new tenant and generate schema (Super Admin)")
 async def create_tenant(
     payload: CreateTenantRequest,
     current_user: CurrentUser = Depends(get_current_user),
@@ -54,7 +60,7 @@ async def create_tenant(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.post("/invitations", summary="Create a role- & tenant-scoped invitation token")
+@router_gated.post("/invitations", summary="Create a role- & tenant-scoped invitation token")
 async def create_invitation(
     payload: CreateInvitationRequest,
     current_user: CurrentUser = Depends(get_current_user),
@@ -95,7 +101,11 @@ async def create_invitation(
         )
         frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
         target_em = inv.get("target_email") or ""
-        reg_link = f"{frontend_url}/auth?invite_code={inv['code']}&auto_google=true&email={target_em}"
+        # No auto_google=true here: this Keycloak realm has no Google/external
+        # IdP configured, so forcing that redirect sends a brand-new invitee
+        # to a dead-end Keycloak login screen instead of the app's own
+        # invite-aware registration form (which is what actually works).
+        reg_link = f"{frontend_url}/auth?invite_code={inv['code']}&email={target_em}"
         return {
             "code": inv["code"],
             "tenant_id": inv["tenant_id"],
@@ -286,7 +296,7 @@ async def get_profile(current_user: CurrentUser = Depends(get_current_user)) -> 
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.post("/profile", summary="Update user profile")
+@router_gated.post("/profile", summary="Update user profile")
 async def update_profile(
     payload: ProfileUpdateRequest,
     current_user: CurrentUser = Depends(get_current_user)
@@ -311,7 +321,7 @@ async def update_profile(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.get("/parent-profile", response_model=ProfileResponse, summary="Get parent profile by email")
+@router_gated.get("/parent-profile", response_model=ProfileResponse, summary="Get parent profile by email")
 async def get_parent_profile_by_email(
     email: str,
     current_user: CurrentUser = Depends(get_current_user)
@@ -362,15 +372,18 @@ class UserPermissionsUpdateRequest(BaseModel):
     permissions: list[str] = []
 
 
-@router.get("/users-permissions", response_model=list[UserPermissionsResponse], summary="List all users and permissions (admin only)")
+@router_gated.get("/users-permissions", response_model=list[UserPermissionsResponse], summary="List all users and permissions (admin only)")
 async def list_users_permissions(
-    request: Request,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[UserPermissionsResponse]:
     if not (current_user.has_any_role("school_admin", "super_admin", "admin") or current_user.has_role("user:view")):
         raise HTTPException(status_code=403, detail="Only school administrators can access user permissions")
     
-    tenant_id = (request.headers.get("x-tenant-id") or current_user.tenant_id or "tenant_a").strip().lower()
+    # current_user.tenant_id is already the security-checked value (only
+    # super_admin can influence it via X-Tenant-ID -- see get_current_user) --
+    # re-reading the raw header here would let ANY caller silently retarget
+    # this action at a different tenant than the one their own token grants.
+    tenant_id = (current_user.tenant_id or "tenant_a").strip().lower()
     try:
         from app.domains.tenant.service import TenantService
         users = await TenantService.get_tenant_users_permissions(tenant_id, current_user.roles)
@@ -381,17 +394,20 @@ async def list_users_permissions(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.put("/users/{user_id}/permissions", response_model=UserPermissionsResponse, summary="Update user roles and permissions (admin only)")
+@router_gated.put("/users/{user_id}/permissions", response_model=UserPermissionsResponse, summary="Update user roles and permissions (admin only)")
 async def update_user_permissions(
     user_id: int | str,
     payload: UserPermissionsUpdateRequest,
-    request: Request,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> UserPermissionsResponse:
     if not (current_user.has_any_role("school_admin", "super_admin", "admin") or current_user.has_role("user:invite")):
         raise HTTPException(status_code=403, detail="Only school administrators can modify user roles and permissions")
     
-    tenant_id = (request.headers.get("x-tenant-id") or current_user.tenant_id or "tenant_a").strip().lower()
+    # current_user.tenant_id is already the security-checked value (only
+    # super_admin can influence it via X-Tenant-ID -- see get_current_user) --
+    # re-reading the raw header here would let ANY caller silently retarget
+    # this action at a different tenant than the one their own token grants.
+    tenant_id = (current_user.tenant_id or "tenant_a").strip().lower()
     try:
         from app.domains.tenant.service import TenantService
         updated = await TenantService.update_tenant_user_permissions(
@@ -411,15 +427,49 @@ async def update_user_permissions(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.get("/users/pending", summary="Get all pending users (admin only)")
+@router_gated.delete("/users/{user_id}", summary="Permanently delete a user (admin only)")
+async def delete_user(
+    user_id: int | str,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    if not (current_user.has_any_role("school_admin", "super_admin", "admin") or current_user.has_role("user:delete")):
+        raise HTTPException(status_code=403, detail="Only school administrators can delete users")
+
+    # current_user.tenant_id is already the security-checked value (only
+    # super_admin can influence it via X-Tenant-ID -- see get_current_user) --
+    # re-reading the raw header here would let ANY caller silently retarget
+    # this action at a different tenant than the one their own token grants.
+    tenant_id = (current_user.tenant_id or "tenant_a").strip().lower()
+    try:
+        from app.domains.tenant.service import TenantService
+        deleted = await TenantService.delete_tenant_user(
+            tenant_id=tenant_id,
+            target_user_id=user_id,
+            requesting_user_id=current_user.id,
+            user_role=current_user.roles,
+        )
+        return {"status": "ok", "deleted_user_id": deleted.get("id"), "email": deleted.get("email")}
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        status_code = 404 if "not found" in str(exc).lower() else 409
+        raise HTTPException(status_code=status_code, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router_gated.get("/users/pending", summary="Get all pending users (admin only)")
 async def get_pending_users(
-    request: Request,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[dict]:
     if not (current_user.has_any_role("school_admin", "super_admin", "admin")):
         raise HTTPException(status_code=403, detail="Only school administrators can view pending users")
     
-    tenant_id = (request.headers.get("x-tenant-id") or current_user.tenant_id or "tenant_a").strip().lower()
+    # current_user.tenant_id is already the security-checked value (only
+    # super_admin can influence it via X-Tenant-ID -- see get_current_user) --
+    # re-reading the raw header here would let ANY caller silently retarget
+    # this action at a different tenant than the one their own token grants.
+    tenant_id = (current_user.tenant_id or "tenant_a").strip().lower()
     try:
         users = await AuthService.get_pending_users(tenant_id)
         return users
@@ -429,17 +479,20 @@ async def get_pending_users(
 
 from app.core.schemas import UserRoleUpdateRequest
 
-@router.patch("/users/{email}/role", summary="Assign role to pending user (admin only)")
+@router_gated.patch("/users/{email}/role", summary="Assign role to pending user (admin only)")
 async def assign_user_role(
     email: str,
     payload: UserRoleUpdateRequest,
-    request: Request,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
     if not (current_user.has_any_role("school_admin", "super_admin", "admin")):
         raise HTTPException(status_code=403, detail="Only school administrators can assign roles")
     
-    tenant_id = (request.headers.get("x-tenant-id") or current_user.tenant_id or "tenant_a").strip().lower()
+    # current_user.tenant_id is already the security-checked value (only
+    # super_admin can influence it via X-Tenant-ID -- see get_current_user) --
+    # re-reading the raw header here would let ANY caller silently retarget
+    # this action at a different tenant than the one their own token grants.
+    tenant_id = (current_user.tenant_id or "tenant_a").strip().lower()
     try:
         res = await AuthService.assign_user_role(tenant_id, email, payload.role)
         return res

@@ -12,11 +12,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.database import db_manager, get_control_plane_pool
 from app.domains.analytics.router import router as analytics_router
-from app.domains.auth.router import router as auth_router
+from app.domains.auth.router import router as auth_router, router_gated as auth_gated_router
 from app.domains.events.router import router as events_router
-from app.domains.notes.router import router as notes_router
 from app.domains.notifications.router import router as notifications_router
-from app.domains.students.router import router as students_router
+from app.domains.school.router import router as school_router
+from app.domains.students.router import router as students_router, router_gated as students_gated_router
 from app.domains.invitations.router import router as invitation_router
 
 
@@ -93,12 +93,14 @@ app.add_middleware(
 
 # ─── Routers ─────────────────────────────────────────────────────────────────
 app.include_router(auth_router)
+app.include_router(auth_gated_router)
 app.include_router(events_router)
 app.include_router(students_router)
+app.include_router(students_gated_router)
 app.include_router(analytics_router)
-app.include_router(notes_router)
 app.include_router(notifications_router)
 app.include_router(invitation_router)
+app.include_router(school_router)
 
 
 @app.get("/health", tags=["health"])

@@ -1,16 +1,22 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "SchoolDesk Enterprise Keycloak Roles & Permissions Catalog",
-  "version": "2.0.0",
-  "description": "Comprehensive role-based access control (RBAC) and fine-grained permission catalog ready for Keycloak realm import and FastAPI authorization enforcement.",
+  "version": "2.1.0",
+  "description": "Comprehensive role-based access control (RBAC) and fine-grained permission catalog ready for Keycloak realm import and FastAPI authorization enforcement. NOTE: each role carries a 'phase' field. Only phase 1 roles are active and supported; phase 2 roles are planned and must not be built on. See .agents/AGENTS.md section 4 for the real state of each phase 2 role in the codebase.",
+  "phases": {
+    "1": "Active and supported.",
+    "2": "Planned, NOT in scope. May be partially scaffolded in code, but scaffolding is not a working feature."
+  },
   "composite_roles": [
     {
       "name": "super_admin",
+      "phase": 1,
       "description": "Global Platform Super Administrator with unrestricted access across all school tenants.",
       "permissions": ["*"]
     },
     {
       "name": "school_admin",
+      "phase": 1,
       "description": "School Tenant Administrator managing school structure, staff invitations, and publishing policies.",
       "permissions": [
         "school:write", "school:read", "user:invite", "user:delete", "user:link", "user:view",
@@ -22,6 +28,7 @@
     },
     {
       "name": "manager",
+      "phase": 1,
       "description": "School Operations & Event Review Manager responsible for approving event proposals and budgets.",
       "permissions": [
         "school:read", "event:review", "event:publish", "event:view_draft", "resource:view",
@@ -31,6 +38,7 @@
     },
     {
       "name": "teacher",
+      "phase": 1,
       "description": "Class Teacher / Trip Organizer capable of creating events, requesting resources, and managing student rosters.",
       "permissions": [
         "school:read", "user:view", "event:create", "event:edit", "event:delete", "event:propose",
@@ -40,6 +48,7 @@
     },
     {
       "name": "event_teacher",
+      "phase": 2,
       "description": "Assigned Event Head Teacher with temporary elevated editing rights for a specific trip.",
       "permissions": [
         "school:read", "event:edit", "event:propose", "resource:create", "resource:view",
@@ -48,6 +57,7 @@
     },
     {
       "name": "finance",
+      "phase": 2,
       "description": "School Financial Officer in charge of unit pricing, subsidy calculations, invoicing, and refunds.",
       "permissions": [
         "school:read", "resource:price", "resource:view", "billing:invoice", "billing:pay",
@@ -56,6 +66,7 @@
     },
     {
       "name": "parent",
+      "phase": 1,
       "description": "Parent / Guardian capable of viewing published trips, approving child enrollments, and paying trip fees.",
       "permissions": [
         "school:read", "enrollment:parent_approve", "enrollment:cancel", "billing:pay",
@@ -64,6 +75,7 @@
     },
     {
       "name": "student",
+      "phase": 1,
       "description": "Enrolled Student able to browse published trips, submit enrollment requests, and leave feedback.",
       "permissions": [
         "school:read", "enrollment:request", "feedback:create"
@@ -71,6 +83,7 @@
     },
     {
       "name": "school_nurse",
+      "phase": 2,
       "description": "School Medical / Health Staff managing student medical records and trip safety plans.",
       "permissions": [
         "school:read", "health:view", "health:manage", "safety:manage", "enrollment:view_roster"
@@ -78,6 +91,7 @@
     },
     {
       "name": "auditor",
+      "phase": 2,
       "description": "Read-Only Compliance & Financial Auditor for legal and regulatory verification.",
       "permissions": [
         "school:read", "billing:audit", "audit:view", "event:view_draft", "resource:view"

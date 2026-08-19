@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.database import get_db_pool
-from app.core.dependencies import CurrentUser, get_current_user
+from app.core.dependencies import CurrentUser, get_current_user, require_tenant_live
 from app.core.schemas import (
     ClassCreateRequest,
     ClassResponse,
@@ -31,12 +31,17 @@ from app.domains.tenant.tenant_repository import TenantRepository, parse_id
 from app.domains.tenant.user_repository import UserRepository
 
 router = APIRouter(prefix="/api/v1/students", tags=["students"])
+# Everything except the structure endpoints below is off-limits until the
+# tenant has completed Day-1 setup (see app/domains/school/) -- those two
+# endpoints ARE the mechanism by which setup gets completed, so they must
+# stay reachable while the tenant is still in "setup" status.
+router_gated = APIRouter(prefix="/api/v1/students", tags=["students"], dependencies=[Depends(require_tenant_live)])
 
 
 # =============================================================================
 # Levels
 # =============================================================================
-@router.post("/levels", response_model=LevelResponse, summary="Create a school level (staff only)")
+@router_gated.post("/levels", response_model=LevelResponse, summary="Create a school level (staff only)")
 async def create_level(
     payload: LevelCreateRequest,
     current_user: CurrentUser = Depends(get_current_user),
@@ -62,7 +67,7 @@ async def create_level(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.get("/levels", response_model=list[LevelResponse], summary="List all school levels")
+@router_gated.get("/levels", response_model=list[LevelResponse], summary="List all school levels")
 async def list_levels(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[LevelResponse]:
@@ -75,7 +80,7 @@ async def list_levels(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.put("/levels/{level_id}", response_model=LevelResponse, summary="Update level details")
+@router_gated.put("/levels/{level_id}", response_model=LevelResponse, summary="Update level details")
 async def update_level(
     level_id: int,
     payload: LevelUpdateRequest,
@@ -100,7 +105,7 @@ async def update_level(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.delete("/levels/{level_id}", summary="Delete school level")
+@router_gated.delete("/levels/{level_id}", summary="Delete school level")
 async def delete_level(
     level_id: int,
     current_user: CurrentUser = Depends(get_current_user),
@@ -159,7 +164,7 @@ async def setup_academic_structure(
 # =============================================================================
 # Teachers / Parents List
 # =============================================================================
-@router.post("/teachers", response_model=TeacherResponse, summary="Create a teacher profile (staff only)")
+@router_gated.post("/teachers", response_model=TeacherResponse, summary="Create a teacher profile (staff only)")
 async def create_teacher(
     payload: TeacherCreateRequest,
     current_user: CurrentUser = Depends(get_current_user),
@@ -198,7 +203,7 @@ class StaffUserResponse(BaseModel):
     role: str
 
 
-@router.post("/managers", response_model=StaffUserResponse, summary="Create a manager user (admin only)")
+@router_gated.post("/managers", response_model=StaffUserResponse, summary="Create a manager user (admin only)")
 async def create_manager(
     payload: StaffUserCreateRequest,
     current_user: CurrentUser = Depends(get_current_user),
@@ -222,7 +227,7 @@ async def create_manager(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.post("/finance", response_model=StaffUserResponse, summary="Create a finance user (admin only)")
+@router_gated.post("/finance", response_model=StaffUserResponse, summary="Create a finance user (admin only)")
 async def create_finance(
     payload: StaffUserCreateRequest,
     current_user: CurrentUser = Depends(get_current_user),
@@ -246,7 +251,7 @@ async def create_finance(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.get("/teachers", response_model=list[TeacherResponse], summary="List all teachers")
+@router_gated.get("/teachers", response_model=list[TeacherResponse], summary="List all teachers")
 async def list_teachers(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[TeacherResponse]:
@@ -259,7 +264,7 @@ async def list_teachers(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.get("/parents", response_model=list[ParentResponse], summary="List all parents")
+@router_gated.get("/parents", response_model=list[ParentResponse], summary="List all parents")
 async def list_parents(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[ParentResponse]:
@@ -275,7 +280,7 @@ async def list_parents(
 # =============================================================================
 # Student Profiles
 # =============================================================================
-@router.post("", response_model=StudentResponse, summary="Create a student profile (staff only)")
+@router_gated.post("", response_model=StudentResponse, summary="Create a student profile (staff only)")
 async def create_student(
     payload: StudentCreateRequest,
     current_user: CurrentUser = Depends(get_current_user),
@@ -300,7 +305,7 @@ async def create_student(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.get("", response_model=list[StudentResponse], summary="List all students")
+@router_gated.get("", response_model=list[StudentResponse], summary="List all students")
 async def list_students(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[StudentResponse]:
@@ -313,7 +318,7 @@ async def list_students(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.post("/link-parent", summary="Link parent and student (staff only)")
+@router_gated.post("/link-parent", summary="Link parent and student (staff only)")
 async def link_parent_student(
     payload: StudentParentLinkRequest,
     current_user: CurrentUser = Depends(get_current_user),
@@ -333,7 +338,7 @@ async def link_parent_student(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.get("/linked", response_model=list[StudentResponse], summary="List linked students for current parent")
+@router_gated.get("/linked", response_model=list[StudentResponse], summary="List linked students for current parent")
 async def list_linked_students(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[StudentResponse]:
@@ -356,7 +361,7 @@ async def list_linked_students(
 # =============================================================================
 # Classes
 # =============================================================================
-@router.post("/classes", response_model=ClassResponse, summary="Create a class (staff only)")
+@router_gated.post("/classes", response_model=ClassResponse, summary="Create a class (staff only)")
 async def create_class(
     payload: ClassCreateRequest,
     current_user: CurrentUser = Depends(get_current_user),
@@ -380,7 +385,7 @@ async def create_class(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.get("/classes", response_model=list[ClassResponse], summary="List all classes")
+@router_gated.get("/classes", response_model=list[ClassResponse], summary="List all classes")
 async def list_classes(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[ClassResponse]:
@@ -393,7 +398,7 @@ async def list_classes(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.put("/classes/{class_id}", response_model=ClassResponse, summary="Update class details")
+@router_gated.put("/classes/{class_id}", response_model=ClassResponse, summary="Update class details")
 async def update_class(
     class_id: int,
     payload: ClassUpdateRequest,
@@ -418,7 +423,7 @@ async def update_class(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.delete("/classes/{class_id}", summary="Delete a class")
+@router_gated.delete("/classes/{class_id}", summary="Delete a class")
 async def delete_class(
     class_id: int,
     current_user: CurrentUser = Depends(get_current_user),
@@ -436,7 +441,7 @@ async def delete_class(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.get("/classes/{class_id}/students", summary="List students in a class")
+@router_gated.get("/classes/{class_id}/students", summary="List students in a class")
 async def get_class_students(
     class_id: int,
     current_user: CurrentUser = Depends(get_current_user),
@@ -447,7 +452,7 @@ async def get_class_students(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.put("/students/{student_id}/class", summary="Reassign student to class")
+@router_gated.put("/students/{student_id}/class", summary="Reassign student to class")
 async def reassign_student_class(
     student_id: int,
     payload: StudentReassignClassRequest,
@@ -467,7 +472,7 @@ async def reassign_student_class(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.post("/students/bulk-enroll", summary="Bulk enroll/reassign students to a class section")
+@router_gated.post("/students/bulk-enroll", summary="Bulk enroll/reassign students to a class section")
 async def bulk_reassign_students(
     payload: StudentBulkEnrollRequest,
     current_user: CurrentUser = Depends(get_current_user),
@@ -489,7 +494,7 @@ async def bulk_reassign_students(
 # =============================================================================
 # Enrollments
 # =============================================================================
-@router.post("/enrollments", response_model=EnrollmentResponse, summary="Enroll student in event class map")
+@router_gated.post("/enrollments", response_model=EnrollmentResponse, summary="Enroll student in event class map")
 async def enroll_student(
     payload: EnrollmentCreateRequest,
     current_user: CurrentUser = Depends(get_current_user),
@@ -535,7 +540,7 @@ async def enroll_student(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.get("/enrollments", response_model=list[EnrollmentResponse], summary="Get enrollments for current user")
+@router_gated.get("/enrollments", response_model=list[EnrollmentResponse], summary="Get enrollments for current user")
 async def get_enrollments(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[EnrollmentResponse]:
@@ -548,7 +553,7 @@ async def get_enrollments(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.post("/enrollments/{enrollment_id}/approve", response_model=EnrollmentResponse, summary="Approve/Reject enrollment")
+@router_gated.post("/enrollments/{enrollment_id}/approve", response_model=EnrollmentResponse, summary="Approve/Reject enrollment")
 async def update_enrollment_approval(
     enrollment_id: int,
     payload: EnrollmentStateUpdateRequest,
@@ -620,7 +625,7 @@ async def update_enrollment_approval(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.delete("/enrollments/{enrollment_id}", summary="Cancel/Unenroll an enrollment")
+@router_gated.delete("/enrollments/{enrollment_id}", summary="Cancel/Unenroll an enrollment")
 async def cancel_enrollment(
     enrollment_id: int,
     current_user: CurrentUser = Depends(get_current_user),
@@ -647,7 +652,7 @@ async def cancel_enrollment(
 # =============================================================================
 # PII Student Health & Records
 # =============================================================================
-@router.post("/{student_id}/health", summary="Create or update student health records (staff only)")
+@router_gated.post("/{student_id}/health", summary="Create or update student health records (staff only)")
 async def create_or_update_health(
     student_id: int,
     payload: StudentHealthCreateRequest,
@@ -670,7 +675,7 @@ async def create_or_update_health(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router.get("/{student_id}/health", response_model=StudentHealthResponse, summary="Get student health records (staff only)")
+@router_gated.get("/{student_id}/health", response_model=StudentHealthResponse, summary="Get student health records (staff only)")
 async def get_health(
     student_id: int,
     elevated_clearance: bool = Query(False, description="school_admin elevated clearance check"),

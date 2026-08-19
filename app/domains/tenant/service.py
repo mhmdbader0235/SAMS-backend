@@ -987,9 +987,24 @@ class TenantService:
     async def save_academic_structure(tenant_id: str, payload: dict, user_role: str | list[str]) -> None:
         if not TenantService._has_intersection(user_role, {"school_admin", "super_admin", "admin", "level:manage", "level:create", "school:write"}):
             raise PermissionError("Insufficient permissions to manage structure.")
-        
+
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
+
+        # Curriculum system is locked permanently once the school activates
+        # (see domains/school/) — grades and class sections stay fully
+        # editable, only the UK/International/Custom choice itself is frozen.
+        from app.domains.school.repository import SchoolRepository
+        school_profile = await SchoolRepository(pool).get_profile_row()
+        if school_profile and school_profile.get("curriculum_locked_at"):
+            current_structure = await repo.get_academic_structure()
+            incoming_system = payload.get("system")
+            if incoming_system and incoming_system != current_structure.get("system"):
+                raise PermissionError(
+                    "The curriculum system is locked after school activation and cannot be changed. "
+                    "Grades and class sections can still be edited."
+                )
+
         await repo.save_academic_structure(payload)
 
     @staticmethod
@@ -1082,11 +1097,14 @@ class TenantService:
         repo = TenantRepository(pool)
         
         resources = await repo.get_resources_for_event(event_id)
-        
+
+        from app.domains.school.repository import SchoolRepository
+        school_profile = await SchoolRepository(pool).get_profile_row()
+        currency = (school_profile or {}).get("currency") or "JOD"
+
         lines = []
         cost_sum = 0.0
-        currency = "JOD"
-        
+
         for r in resources:
             cost_info = await repo.get_resource_cost_by_resource_id(r["id"])
             if cost_info:
@@ -1203,15 +1221,18 @@ class TenantService:
             ("draft", "submit_to_manager"): ("proposed", "teacher"),
             ("draft", "submit_to_event_teacher"): ("proposed", "teacher"),
 
-            # Step 2: Manager approves event proposal (proposed -> approved OR direct publish)
+            # Step 2: Manager accepts or rejects the proposal (proposed -> approved | draft)
+            # NOTE: there is deliberately NO proposed -> published shortcut. Publishing
+            # must go through 'approved' so that published_at is stamped and the
+            # student/parent notification fan-out actually runs (both live in the
+            # approved -> published branch below).
             ("proposed", "manager_approve"): ("approved", "manager"),
             ("proposed", "approve"): ("approved", "manager"),
-            ("proposed", "manager_publish"): ("published", "manager"),
-            ("proposed", "publish"): ("published", "manager"),
             ("proposed", "manager_reject"): ("draft", "manager"),
             ("proposed", "reject"): ("draft", "manager"),
 
             # Step 3: Teacher publishes approved event to students & parents (approved -> published)
+            # Manager retains a publish override on an already-approved event.
             ("approved", "teacher_publish"): ("published", "teacher"),
             ("approved", "publish"): ("published", "teacher"),
             ("approved", "submit"): ("published", "teacher"),
@@ -1513,5 +1534,67 @@ class TenantService:
 
         _log_audit(user_id, f"UPDATE_PERMISSIONS: role={primary_role}, roles={roles}, perms_count={len(permissions)}")
         return updated
+
+    @staticmethod
+    async def delete_tenant_user(
+        tenant_id: str,
+        target_user_id: int | str,
+        requesting_user_id,
+        user_role: str | list[str],
+    ) -> dict:
+        """Hard-delete a user from a tenant's users table.
+
+        school_admin may delete any user in their OWN tenant except one whose
+        role is super_admin. super_admin may delete anyone, in any tenant
+        they're scoped to (see require_tenant_live / the X-Tenant-ID guard,
+        which is itself restricted to super_admin). Deleting your own account
+        through this endpoint is always blocked.
+        """
+        roles = set(user_role) if isinstance(user_role, (list, tuple, set)) else ({user_role} if user_role else set())
+        is_super = "super_admin" in roles
+        is_school_admin = bool(roles.intersection({"school_admin", "admin"}))
+
+        if not (is_super or is_school_admin):
+            raise PermissionError("Only school_admin or super_admin can delete users")
+
+        pool = await get_db_pool(tenant_id)
+        user_repo = UserRepository(pool)
+
+        target = await user_repo.get_user_by_id(target_user_id)
+        if not target:
+            raise ValueError("User not found")
+
+        if str(target.get("id")) == str(requesting_user_id):
+            raise PermissionError("You cannot delete your own account")
+
+        target_roles = set(target.get("roles") or [])
+        if target.get("role"):
+            target_roles.add(target["role"])
+
+        if not is_super and "super_admin" in target_roles:
+            raise PermissionError("school_admin cannot delete a super_admin account")
+
+        deleted = await user_repo.delete_user(target_user_id)
+        if not deleted:
+            raise ValueError("User not found")
+
+        # Best-effort cleanup so the account can't silently reappear via
+        # Keycloak SSO's JIT re-provisioning or a stale tenant mapping.
+        user_email = deleted.get("email")
+        if user_email:
+            try:
+                cp_pool = await get_control_plane_pool()
+                cp_repo = ControlPlaneRepository(cp_pool)
+                await cp_repo.remove_user_tenant_map(user_email, tenant_id)
+            except Exception as _e:
+                print(f"[delete_tenant_user] Warning user_tenant_map cleanup for {user_email}: {_e}")
+            try:
+                from app.core.keycloak_admin import delete_user_from_keycloak
+                delete_user_from_keycloak(user_email)
+            except Exception as _e:
+                print(f"[delete_tenant_user] Warning Keycloak cleanup for {user_email}: {_e}")
+
+        _log_audit(requesting_user_id, f"DELETE_USER: target_id={target_user_id}, target_email={user_email}")
+        return deleted
 
 

@@ -111,11 +111,23 @@ class TestAudienceAndPricingCalculations:
 # 4. Event Lifecycle State Machine Validation
 # =============================================================================
 class TestEventLifecycleStateMachine:
+    """Mirrors the canonical lifecycle enforced by TenantService.transition_event:
+
+        draft --submit--> proposed --manager_approve--> approved --teacher_publish--> published
+                              |
+                              +--manager_reject (reason required)--> draft
+
+    There is deliberately no proposed -> published shortcut: publishing must pass
+    through 'approved' so published_at is stamped and the student/parent
+    notification fan-out runs.
+    """
+
     VALID_TRANSITIONS = {
         ("draft", "submit"): "proposed",
-        ("proposed", "manager_approve"): "published",
+        ("proposed", "manager_approve"): "approved",
         ("proposed", "manager_reject"): "draft",
-        ("published", "archive"): "archived",
+        ("approved", "teacher_publish"): "published",
+        ("approved", "manager_publish"): "published",
     }
 
     def _apply_transition(self, current_status: str, action: str, reason: str | None = None) -> str:
@@ -130,8 +142,16 @@ class TestEventLifecycleStateMachine:
         new_status = self._apply_transition("draft", "submit")
         assert new_status == "proposed"
 
-    def test_valid_proposed_to_published(self):
+    def test_valid_proposed_to_approved(self):
         new_status = self._apply_transition("proposed", "manager_approve")
+        assert new_status == "approved"
+
+    def test_valid_approved_to_published_by_teacher(self):
+        new_status = self._apply_transition("approved", "teacher_publish")
+        assert new_status == "published"
+
+    def test_manager_retains_publish_override_on_approved(self):
+        new_status = self._apply_transition("approved", "manager_publish")
         assert new_status == "published"
 
     def test_valid_proposed_to_draft_with_reason(self):
@@ -149,6 +169,12 @@ class TestEventLifecycleStateMachine:
     def test_invalid_transition_published_to_proposed_fails(self):
         with pytest.raises(ValueError, match="Invalid transition"):
             self._apply_transition("published", "submit")
+
+    def test_manager_cannot_publish_directly_from_proposed(self):
+        """The removed shortcut: skipping 'approved' left published_at unset and
+        sent zero notifications, so it must be rejected outright."""
+        with pytest.raises(ValueError, match="Invalid transition"):
+            self._apply_transition("proposed", "manager_publish")
 
 
 # =============================================================================

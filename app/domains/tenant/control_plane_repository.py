@@ -288,3 +288,13 @@ class ControlPlaneRepository:
             tenant_id,
             role,
         )
+
+    async def remove_user_tenant_map(self, email: str, tenant_id: str) -> None:
+        """Remove an email -> tenant mapping, scoped to the specific tenant it
+        pointed at, so deleting a user doesn't clobber a mapping that was
+        re-pointed elsewhere in the meantime."""
+        await self.pool.execute(
+            "DELETE FROM user_tenant_map WHERE email = $1 AND tenant_id = $2",
+            email.strip().lower(),
+            tenant_id,
+        )

@@ -1,6 +1,6 @@
 """Pydantic schemas — request bodies and response models."""
 
-from datetime import datetime
+from datetime import date, datetime
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr
@@ -95,6 +95,8 @@ class StudentCreateRequest(BaseModel):
     password: str
     name: str
     class_id: int | None = None
+    gender: str | None = None
+    birth_data: str | None = None
 
 class StudentReassignClassRequest(BaseModel):
     class_id: int | None = None
@@ -389,4 +391,93 @@ class StructureSetupRequest(BaseModel):
     levels: list[SpineLevelSchema]
     calendar: AcademicSettingsSchema
     blackout_dates: list[BlackoutDateSchema]
+
+
+# =============================================================================
+# School Setup (Day-1 Onboarding) Schemas
+# =============================================================================
+class SchoolCampusSchema(BaseModel):
+    id: int | None = None
+    name: str | None = None
+    address_line1: str | None = None
+    area: str | None = None
+    city: str | None = None
+    state_region: str | None = None
+    country: str | None = None
+    po_box: str | None = None
+    postal_code: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    day_start: str | None = None
+    day_end: str | None = None
+    access_notes: str | None = None
+    accessibility_notes: str | None = None
+    is_primary: bool = True
+
+
+class SchoolContactSchema(BaseModel):
+    id: int | None = None
+    role_title: str
+    name: str
+    phone: str | None = None
+    email: str | None = None
+    is_emergency_contact: bool = False
+    escalation_order: int | None = None
+    visible_to: list[str] = ["staff"]
+
+
+class SchoolProfileUpdateRequest(BaseModel):
+    legal_name: str | None = None
+    display_name: str | None = None
+    school_code: str | None = None
+    school_type: str | None = None
+    regulator: str | None = None
+    licence_number: str | None = None
+    licence_expiry: date | None = None
+    tax_registration: str | None = None
+    country: str | None = None
+    timezone: str | None = None
+    hemisphere: str | None = None
+    default_language: str | None = None
+    additional_languages: list[str] | None = None
+    currency: str | None = None
+    logo_url: str | None = None
+    logo_dark_url: str | None = None
+    primary_color: str | None = None
+    website: str | None = None
+
+
+class SchoolProfileResponse(BaseModel):
+    legal_name: str | None = None
+    display_name: str | None = None
+    school_code: str | None = None
+    school_type: str | None = None
+    regulator: str | None = None
+    licence_number: str | None = None
+    licence_expiry: date | None = None
+    tax_registration: str | None = None
+    country: str | None = None
+    timezone: str | None = None
+    hemisphere: str | None = None
+    default_language: str | None = None
+    additional_languages: list[str] = []
+    currency: str = "JOD"
+    logo_url: str | None = None
+    logo_dark_url: str | None = None
+    primary_color: str | None = None
+    website: str | None = None
+    profile_committed_at: datetime | None = None
+    structure_committed_at: datetime | None = None
+    curriculum_locked_at: datetime | None = None
+    activated_at: datetime | None = None
+    campuses: list[SchoolCampusSchema] = []
+    contacts: list[SchoolContactSchema] = []
+
+
+class SchoolSetupStateResponse(BaseModel):
+    status: str
+    steps: dict
+    blocking: list[str] = []
+    warnings: list[str] = []
+    activated_at: datetime | None = None
 

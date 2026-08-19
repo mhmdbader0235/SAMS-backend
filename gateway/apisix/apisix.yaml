@@ -8,6 +8,6 @@ routes:
         rejected_code: 429
     upstream:
       nodes:
-        "host.docker.internal:8001": 1
+        "host.docker.internal:8002": 1
       type: roundrobin
 #END

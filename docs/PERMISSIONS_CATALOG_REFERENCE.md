@@ -23,18 +23,32 @@ All permission objects defined here are enforced by:
 
 High-level roles represent traditional job functions. Assigning a composite role to a user automatically grants them all associated granular permissions.
 
+> ⚠️ **Phase scoping.** Only the 6 roles marked **Phase 1** below are active and supported.
+> The 4 marked **Phase 2** are planned and **must not be built on** — see
+> `.agents/AGENTS.md` §4 for the exact current state of each in the codebase.
+> This catalog documents the *intended* permission design for all 10, not what is live.
+
+### Phase 1 — active
+
 | Composite Role | Target Persona | Key Granted Permissions |
 | :--- | :--- | :--- |
 | **`super_admin`** | Platform Admin | Unrestricted access across all tenant schemas (`*`). |
 | **`school_admin`** | Principal / School Admin | `school:*`, `user:*`, `event:*`, `enrollment:cancel`, `billing:audit`, `announcement:manage` |
 | **`manager`** | Operations Manager | `event:review`, `event:publish`, `event:view_draft`, `resource:price`, `billing:*`, `enrollment:view_roster` |
 | **`teacher`** | Class Teacher / Trip Head | `event:create`, `event:edit`, `event:delete`, `event:propose`, `event:clone`, `resource:create`, `enrollment:teacher_approve`, `enrollment:view_roster` |
-| **`event_teacher`** | Assigned Trip Leader | `event:edit`, `event:propose`, `resource:create`, `enrollment:teacher_approve`, `enrollment:view_roster` |
-| **`finance`** | School Bursar / Accountant | `resource:price`, `billing:invoice`, `billing:pay`, `billing:refund`, `billing:audit`, `subsidy:manage` |
 | **`parent`** | Parent / Guardian | `enrollment:parent_approve`, `enrollment:cancel`, `billing:pay`, `student:view_linked`, `health:manage_child` |
 | **`student`** | Enrolled Student | `enrollment:request`, `feedback:create`, `school:read` |
-| **`school_nurse`** | Medical Officer | `health:view`, `health:manage`, `safety:manage`, `enrollment:view_roster` |
-| **`auditor`** | External Compliance Auditor | Read-only access to `billing:audit`, `audit:view`, `event:view_draft`, `resource:view` |
+
+`admin` / `administrator` are aliases for `school_admin`.
+
+### Phase 2 — planned, NOT in scope
+
+| Composite Role | Target Persona | Intended Permissions | Current real state |
+| :--- | :--- | :--- | :--- |
+| **`event_teacher`** | Assigned Trip Leader | `event:edit`, `event:propose`, `resource:create`, `enrollment:teacher_approve`, `enrollment:view_roster` | Partially scaffolded; **no OPA policy, no `COMPOSITE_ROLE_PERMISSIONS` entry** on either side — grants nothing today. Treated as `teacher` by the state machine. |
+| **`finance`** | School Bursar / Accountant | `resource:price`, `billing:invoice`, `billing:pay`, `billing:refund`, `billing:audit`, `subsidy:manage` | Deeply scaffolded (DDL, OPA policy, router guards) but **no `COMPOSITE_ROLE_PERMISSIONS` entry**; its workflow endpoints always return HTTP 400 and `/finance-queue` is structurally always empty. |
+| **`school_nurse`** | Medical Officer | `health:view`, `health:manage`, `safety:manage`, `enrollment:view_roster` | **Documentation only** — no executable code anywhere. |
+| **`auditor`** | External Compliance Auditor | Read-only access to `billing:audit`, `audit:view`, `event:view_draft`, `resource:view` | **Documentation only** — no executable code anywhere. |
 
 ---
 
