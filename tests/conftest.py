@@ -25,6 +25,20 @@ if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 from app.main import app
+import app.utils.email as email_module
+
+
+# ─── Never let a test hit real SMTP ──────────────────────────────────────────
+# register_school_admin() (tests/integration/_helpers.py) and several tests
+# call POST /api/v1/auth/invitations with a real target_email — that route
+# calls app.utils.email.send_invitation_email with zero test-side mocking,
+# which sends a REAL message via smtplib.SMTP_SSL using whatever
+# GMAIL_SMTP_USER/PASSWORD happen to be set in the environment. Autouse so
+# every test gets this without opting in — nothing in this suite should ever
+# depend on an email actually leaving the machine.
+@pytest.fixture(autouse=True)
+def _never_send_real_email(monkeypatch):
+    monkeypatch.setattr(email_module, "_send_email_sync", lambda *a, **k: None)
 
 # ─── Test database settings ──────────────────────────────────────────────────
 TEST_DB = {
