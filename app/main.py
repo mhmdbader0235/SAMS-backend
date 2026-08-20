@@ -52,16 +52,20 @@ async def lifespan(application: FastAPI):  # noqa: ARG001
     await start_jwks_refresh_loop()
     print("[startup] Keycloak JWKS fetch/refresh loop started.")
 
-    # Start the event reminders scheduler in the background
-    scheduler_task = asyncio.create_task(event_reminders_scheduler())
+    # event_reminders_scheduler() is disabled: TenantService.check_and_send_reminders()
+    # is an unimplemented no-op, so running the loop was just polling every 10
+    # seconds for nothing. Re-enable this once reminder-sending is actually
+    # implemented (see app/domains/tenant/service.py::check_and_send_reminders).
+    scheduler_task = None
 
     yield
 
-    scheduler_task.cancel()
-    try:
-        await scheduler_task
-    except asyncio.CancelledError:
-        pass
+    if scheduler_task is not None:
+        scheduler_task.cancel()
+        try:
+            await scheduler_task
+        except asyncio.CancelledError:
+            pass
 
     await stop_jwks_refresh_loop()
     await db_manager.disconnect_all()
