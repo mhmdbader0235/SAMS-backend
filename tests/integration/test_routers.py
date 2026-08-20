@@ -731,6 +731,74 @@ class TestStudentsAndClassesRouter:
         assert enroll_c2.status_code == 400
         assert "not in the class" in enroll_c2.json()["detail"].lower()
 
+    async def test_reassign_and_bulk_enroll_use_undoubled_paths(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
+        """Regression test: these two routes used to be registered at
+        /api/v1/students/students/... (doubled segment, since router_gated
+        already carries the /api/v1/students prefix) and were unreachable at
+        their documented, non-doubled paths."""
+        from app.core.config import TEACHER_INVITE_CODE
+
+        t_payload = {
+            "email": "teacher_paths@class.com",
+            "password": "pass",
+            "role": "teacher",
+            "tenant_id": "tenant_a",
+            "invite_code": TEACHER_INVITE_CODE
+        }
+        t_reg = await test_client.post("/api/v1/auth/register", json=t_payload)
+        t_headers = {"Authorization": f"Bearer {t_reg.json()['access_token']}"}
+
+        lvl_resp = await test_client.post("/api/v1/students/levels", json={"name": "Grade 4"}, headers=t_headers)
+        lvl_id = lvl_resp.json()["level_id"]
+        teachers_list = await test_client.get("/api/v1/students/teachers", headers=t_headers)
+        t_id = teachers_list.json()[0]["id"]
+
+        cls_a = await test_client.post("/api/v1/students/classes", json={"name": "Path A", "level_id": lvl_id, "head_teacher_id": t_id}, headers=t_headers)
+        class_a_id = cls_a.json()["id"]
+        cls_b = await test_client.post("/api/v1/students/classes", json={"name": "Path B", "level_id": lvl_id, "head_teacher_id": t_id}, headers=t_headers)
+        class_b_id = cls_b.json()["id"]
+
+        s_payload = {
+            "email": "student_paths@class.com",
+            "password": "pass",
+            "role": "student",
+            "tenant_id": "tenant_a",
+            "invite_code": "regester123"
+        }
+        s_reg = await test_client.post("/api/v1/auth/register", json=s_payload)
+        s_me = await test_client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {s_reg.json()['access_token']}"})
+        student_id = int(s_me.json()["user_id"])
+
+        repo = TenantRepository(db_pool)
+        await repo.create_student(student_id, "Path Test Student", class_a_id)
+
+        # The correct, non-doubled path must work.
+        reassign_resp = await test_client.put(
+            f"/api/v1/students/{student_id}/class", json={"class_id": class_b_id}, headers=t_headers
+        )
+        assert reassign_resp.status_code == 200
+
+        bulk_resp = await test_client.post(
+            "/api/v1/students/bulk-enroll",
+            json={"student_ids": [student_id], "class_id": class_a_id},
+            headers=t_headers
+        )
+        assert bulk_resp.status_code == 200
+        assert bulk_resp.json()["enrolled_count"] == 1
+
+        # The old, doubled path must no longer resolve to anything.
+        stale_reassign_resp = await test_client.put(
+            f"/api/v1/students/students/{student_id}/class", json={"class_id": class_a_id}, headers=t_headers
+        )
+        assert stale_reassign_resp.status_code == 404
+
+        stale_bulk_resp = await test_client.post(
+            "/api/v1/students/students/bulk-enroll",
+            json={"student_ids": [student_id], "class_id": class_a_id},
+            headers=t_headers
+        )
+        assert stale_bulk_resp.status_code == 404
+
 
 
 

@@ -477,7 +477,7 @@ async def get_class_students(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router_gated.put("/students/{student_id}/class", summary="Reassign student to class")
+@router_gated.put("/{student_id}/class", summary="Reassign student to class")
 async def reassign_student_class(
     student_id: int,
     payload: StudentReassignClassRequest,
@@ -498,7 +498,7 @@ async def reassign_student_class(
 
 
 @router_gated.post(
-    "/students/bulk-enroll", summary="Bulk enroll/reassign students to a class section"
+    "/bulk-enroll", summary="Bulk enroll/reassign students to a class section"
 )
 async def bulk_reassign_students(
     payload: StudentBulkEnrollRequest,
