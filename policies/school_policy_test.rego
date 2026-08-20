@@ -331,6 +331,43 @@ test_teacher_edit_missing_status_allowed_fallback if {
     }
 }
 
+# A resource that omits tenant_id entirely must fail CLOSED (denied), not
+# fall through as if tenant-agnostic. Regression guard for the gap where
+# `valid_tenant if { not input.resource.tenant_id }` made an omitted
+# tenant_id skip the cross-tenant check entirely.
+test_missing_resource_tenant_id_denied_for_school_admin if {
+    not authz.allow with input as {
+        "user": {"id": "admin_a", "tenant_id": "tenant_a", "roles": ["school_admin"]},
+        "action": "class:create",
+        "resource": {}
+    }
+}
+
+test_missing_resource_object_denied_for_teacher if {
+    not authz.allow with input as {
+        "user": {"id": "t1", "tenant_id": "tenant_a", "roles": ["teacher"]},
+        "action": "event:create"
+    }
+}
+
+test_missing_resource_tenant_id_denied_for_direct_permission if {
+    not authz.allow with input as {
+        "user": {"id": "u1", "tenant_id": "tenant_a", "roles": ["student", "event:create"]},
+        "action": "event:create",
+        "resource": {"status": "draft"}
+    }
+}
+
+# super_admin's bypass short-circuits before valid_tenant is ever
+# evaluated, so a missing tenant_id must not affect it either way.
+test_missing_resource_tenant_id_super_admin_still_bypasses if {
+    authz.allow with input as {
+        "user": {"id": "sa_1", "tenant_id": "tenant_a", "roles": ["super_admin"]},
+        "action": "class:create",
+        "resource": {}
+    }
+}
+
 # =============================================================================
 # 7. ROUTE & VERB PROTECTION FOR STUDENTS & PARENTS
 # =============================================================================
@@ -612,6 +649,17 @@ test_finance_role_resource_price_allowed if {
     authz.allow with input as {
         "user": {"id": "f1", "tenant_id": "tenant_a", "roles": ["finance"]},
         "action": "resource:price",
+        "resource": {"tenant_id": "tenant_a"}
+    }
+}
+
+# Test 21b: Teacher can manage (write) student health records — teachers are
+# staff who write health records today (TenantService.create_or_update_health_record);
+# this closes the gap where the policy only granted health:view to teachers.
+test_teacher_health_manage_allowed if {
+    authz.allow with input as {
+        "user": {"id": "t1", "tenant_id": "tenant_a", "roles": ["teacher"]},
+        "action": "health:manage",
         "resource": {"tenant_id": "tenant_a"}
     }
 }

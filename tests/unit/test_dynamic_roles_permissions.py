@@ -126,20 +126,20 @@ class TestDynamicRolesAndPermissions:
         assert user.has_role("event:review") is True
         assert user.has_role("resource:create") is True
 
-    # 8. Finance role capabilities
-    def test_finance_role_permissions_set(self):
+    # 8. Manager role now owns pricing/billing capabilities (finance retired)
+    def test_manager_role_pricing_and_billing_permissions_set(self):
         user = CurrentUser(
-            user_id="usr_finance_1",
+            user_id="usr_manager_1",
             tenant_id="tenant_a",
-            role="finance",
-            roles=["finance", "resource:price", "resource:set_cost", "billing:invoice", "billing:audit", "billing:refund"]
+            role="manager",
+            roles=["manager", "resource:price", "resource:set_cost", "billing:invoice", "billing:audit", "billing:refund"]
         )
-        assert user.has_role("finance") is True
+        assert user.has_role("manager") is True
         assert user.has_role("resource:price") is True
         assert user.has_role("billing:audit") is True
         assert user.has_role("billing:refund") is True
         assert user.has_role("class:create") is False
-        assert user.has_role("event:review") is False
+        assert user.has_role("finance") is False
 
     # 9. Super Admin universal bypass on all permission checks
     def test_super_admin_bypasses_all_permissions(self):
@@ -237,9 +237,11 @@ class TestDynamicRolesAndPermissions:
             allowed = await user.can("billing:refund", {"tenant_id": "tenant_a"})
             assert allowed is False
 
-    # 16. CurrentUser.can() fallback to local role evaluation on OPA connection exception
+    # 16. CurrentUser.can() fallback to local role evaluation when OPA is unreachable
     @pytest.mark.asyncio
     async def test_current_user_can_fallback_on_opa_exception(self):
+        from app.core.opa import OPAUnavailableError
+
         user = CurrentUser(
             user_id="usr_teacher_2",
             tenant_id="tenant_a",
@@ -247,7 +249,10 @@ class TestDynamicRolesAndPermissions:
             roles=["teacher"]
         )
         with patch("app.core.opa.verify_opa_authorization", new_callable=AsyncMock) as mock_opa:
-            mock_opa.side_effect = Exception("OPA service unreachable")
+            # Only OPAUnavailableError triggers the local fallback — see
+            # test_current_user_can_real_deny_not_masked_by_fallback below for
+            # the contrast: a reachable OPA's explicit deny must NOT fall back.
+            mock_opa.side_effect = OPAUnavailableError("OPA service unreachable")
             # Local fallback evaluates teacher permissions for "event:create" -> True
             allowed = await user.can("event:create")
             assert allowed is True
@@ -255,6 +260,23 @@ class TestDynamicRolesAndPermissions:
             # Local fallback evaluates teacher permissions for "billing:refund" -> False
             allowed_denied = await user.can("billing:refund")
             assert allowed_denied is False
+
+    # 16b. A reachable OPA's explicit deny is final — NOT masked by has_role() fallback
+    @pytest.mark.asyncio
+    async def test_current_user_can_real_deny_not_masked_by_fallback(self):
+        user = CurrentUser(
+            user_id="usr_teacher_3",
+            tenant_id="tenant_a",
+            role="teacher",
+            roles=["teacher"]
+        )
+        # has_role("event:create") is True for a teacher (COMPOSITE_ROLE_PERMISSIONS),
+        # but OPA — reachable, no exception — explicitly denies. The deny must win.
+        assert user.has_role("event:create") is True
+        with patch("app.core.opa.verify_opa_authorization", new_callable=AsyncMock) as mock_opa:
+            mock_opa.return_value = False
+            allowed = await user.can("event:create")
+            assert allowed is False
 
     # 17. Permission revocation immediately removes access
     def test_permission_revocation(self):

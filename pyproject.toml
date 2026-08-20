@@ -38,3 +38,9 @@ python_classes = ["Test*"]
 python_functions = ["test_*"]
 log_cli = true
 log_cli_level = "INFO"
+markers = [
+    "qa_e2e: black-box journeys that need a live stack (tests/e2e)",
+    "qa_direct: one user, one action",
+    "qa_deep: multi-step flow with rule and boundary checks",
+    "qa_full: complete end-to-end journey across several users",
+]

@@ -2,6 +2,8 @@
 
 from httpx import AsyncClient
 
+from app.core.config import SUPER_ADMIN_BOOTSTRAP_CODE
+
 
 async def register_school_admin(
     test_client: AsyncClient,
@@ -20,7 +22,7 @@ async def register_school_admin(
             "email": f"bootstrap_sa_{email}",
             "password": "sapass123",
             "role": "super_admin",
-            "invite_code": "regester123",
+            "invite_code": SUPER_ADMIN_BOOTSTRAP_CODE,
         },
     )
     assert sa_reg.status_code == 200, sa_reg.text

@@ -51,13 +51,14 @@ class TenantRepository:
 
     async def get_level_by_name(self, name: str) -> dict | None:
         row = await self.pool.fetchrow(
-            "SELECT level_id, name FROM levels WHERE LOWER(name) = LOWER($1)",
-            name.strip()
+            "SELECT level_id, name FROM levels WHERE LOWER(name) = LOWER($1)", name.strip()
         )
         return dict(row) if row else None
 
     async def get_level_by_id(self, level_id: int) -> dict | None:
-        row = await self.pool.fetchrow("SELECT level_id, name FROM levels WHERE level_id = $1", parse_id(level_id))
+        row = await self.pool.fetchrow(
+            "SELECT level_id, name FROM levels WHERE level_id = $1", parse_id(level_id)
+        )
         return dict(row) if row else None
 
     async def get_all_levels(self) -> list[dict]:
@@ -74,36 +75,6 @@ class TenantRepository:
         """
         async with self.pool.acquire() as conn:
             async with conn.transaction():
-                # 1. Ensure table schema columns exist
-                await conn.execute("ALTER TABLE levels ADD COLUMN IF NOT EXISTS isced_level INTEGER;")
-                await conn.execute("ALTER TABLE levels ADD COLUMN IF NOT EXISTS age_band_min INTEGER;")
-                await conn.execute("ALTER TABLE levels ADD COLUMN IF NOT EXISTS age_band_max INTEGER;")
-                await conn.execute("ALTER TABLE levels ADD COLUMN IF NOT EXISTS ordinal INTEGER;")
-                await conn.execute("ALTER TABLE levels ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;")
-                await conn.execute("ALTER TABLE class ADD COLUMN IF NOT EXISTS capacity INTEGER NOT NULL DEFAULT 25;")
-                
-                await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS academic_settings (
-                        id BIGSERIAL PRIMARY KEY,
-                        system TEXT DEFAULT 'US',
-                        academic_year TEXT NOT NULL,
-                        start_month INTEGER NOT NULL,
-                        weekend_days TEXT[] NOT NULL DEFAULT '{}',
-                        updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-                    );
-                """)
-                await conn.execute("ALTER TABLE academic_settings ADD COLUMN IF NOT EXISTS system TEXT DEFAULT 'US';")
-                
-                await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS blackout_dates (
-                        id BIGSERIAL PRIMARY KEY,
-                        date DATE NOT NULL,
-                        title TEXT NOT NULL,
-                        tags TEXT[] NOT NULL DEFAULT '{}',
-                        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-                    );
-                """)
-
                 # 2. Save Academic Settings
                 system_val = payload.get("system") or "US"
                 cal = payload.get("calendar") or {}
@@ -119,7 +90,11 @@ class TenantRepository:
                         SET system = $1, academic_year = $2, start_month = $3, weekend_days = $4, updated_at = CURRENT_TIMESTAMP
                         WHERE id = $5
                         """,
-                        system_val, acad_year, start_month, weekend_days, existing_settings
+                        system_val,
+                        acad_year,
+                        start_month,
+                        weekend_days,
+                        existing_settings,
                     )
                 else:
                     await conn.execute(
@@ -127,7 +102,10 @@ class TenantRepository:
                         INSERT INTO academic_settings (system, academic_year, start_month, weekend_days)
                         VALUES ($1, $2, $3, $4)
                         """,
-                        system_val, acad_year, start_month, weekend_days
+                        system_val,
+                        acad_year,
+                        start_month,
+                        weekend_days,
                     )
 
                 # 3. Save Blackout Dates
@@ -142,22 +120,21 @@ class TenantRepository:
                             d_parsed = d_val
                         await conn.execute(
                             "INSERT INTO blackout_dates (date, title, tags) VALUES ($1, $2, $3)",
-                            d_parsed, bd.get("title") or "Holiday", bd.get("tags") or []
+                            d_parsed,
+                            bd.get("title") or "Holiday",
+                            bd.get("tags") or [],
                         )
 
                 # 4. Upsert Levels and Classes / Sections
                 levels = payload.get("levels") or []
+                # Sections created before any real teacher exists simply have no
+                # head teacher yet -- head_teacher_id is nullable for exactly this
+                # case; the admin assigns one later via PUT /students/classes/{id}.
                 default_teacher_id = await conn.fetchval("SELECT id FROM teachers LIMIT 1")
                 if default_teacher_id is None:
-                    t_uid = await conn.fetchval("SELECT id FROM users WHERE role = 'teacher' LIMIT 1")
-                    if t_uid is None:
-                        t_uid = await conn.fetchval(
-                            "INSERT INTO users (email, role, password_hash) VALUES ('admin.teacher@school.com', 'teacher', 'managed') RETURNING id"
-                        )
                     default_teacher_id = await conn.fetchval(
-                        "INSERT INTO teachers (id, name) VALUES ($1, 'Lead Teacher') ON CONFLICT DO NOTHING RETURNING id",
-                        t_uid
-                    ) or t_uid
+                        "SELECT id FROM users WHERE role = 'teacher' LIMIT 1"
+                    )
 
                 for lvl in levels:
                     lvl_name = lvl.get("name") or "Grade"
@@ -169,9 +146,14 @@ class TenantRepository:
 
                     existing_lvl_id = None
                     if ordinal is not None:
-                        existing_lvl_id = await conn.fetchval("SELECT level_id FROM levels WHERE ordinal = $1", ordinal)
+                        existing_lvl_id = await conn.fetchval(
+                            "SELECT level_id FROM levels WHERE ordinal = $1", ordinal
+                        )
                     if not existing_lvl_id:
-                        existing_lvl_id = await conn.fetchval("SELECT level_id FROM levels WHERE LOWER(name) = LOWER($1)", lvl_name.strip())
+                        existing_lvl_id = await conn.fetchval(
+                            "SELECT level_id FROM levels WHERE LOWER(name) = LOWER($1)",
+                            lvl_name.strip(),
+                        )
 
                     if existing_lvl_id:
                         await conn.execute(
@@ -180,7 +162,13 @@ class TenantRepository:
                             SET name = $1, isced_level = $2, age_band_min = $3, age_band_max = $4, ordinal = $5, is_active = $6
                             WHERE level_id = $7
                             """,
-                            lvl_name, isced, age_min, age_max, ordinal, is_active, existing_lvl_id
+                            lvl_name,
+                            isced,
+                            age_min,
+                            age_max,
+                            ordinal,
+                            is_active,
+                            existing_lvl_id,
                         )
                         lvl_id = existing_lvl_id
                     else:
@@ -190,7 +178,12 @@ class TenantRepository:
                             VALUES ($1, $2, $3, $4, $5, $6)
                             RETURNING level_id
                             """,
-                            lvl_name, isced, age_min, age_max, ordinal, is_active
+                            lvl_name,
+                            isced,
+                            age_min,
+                            age_max,
+                            ordinal,
+                            is_active,
                         )
 
                     sections = lvl.get("sections") or []
@@ -200,12 +193,14 @@ class TenantRepository:
 
                         existing_class_id = await conn.fetchval(
                             "SELECT id FROM class WHERE level_id = $1 AND LOWER(name) = LOWER($2)",
-                            lvl_id, sec_name.strip()
+                            lvl_id,
+                            sec_name.strip(),
                         )
                         if existing_class_id:
                             await conn.execute(
                                 "UPDATE class SET capacity = $1 WHERE id = $2",
-                                sec_cap, existing_class_id
+                                sec_cap,
+                                existing_class_id,
                             )
                         else:
                             await conn.execute(
@@ -213,73 +208,67 @@ class TenantRepository:
                                 INSERT INTO class (name, level_id, capacity, head_teacher_id)
                                 VALUES ($1, $2, $3, $4)
                                 """,
-                                sec_name, lvl_id, sec_cap, default_teacher_id
+                                sec_name,
+                                lvl_id,
+                                sec_cap,
+                                default_teacher_id,
                             )
 
     async def get_academic_structure(self) -> dict:
         """Fetch complete saved academic structure & calendar for tenant."""
-        try:
-            await self.pool.execute("ALTER TABLE levels ADD COLUMN IF NOT EXISTS isced_level INTEGER;")
-            await self.pool.execute("ALTER TABLE levels ADD COLUMN IF NOT EXISTS age_band_min INTEGER;")
-            await self.pool.execute("ALTER TABLE levels ADD COLUMN IF NOT EXISTS age_band_max INTEGER;")
-            await self.pool.execute("ALTER TABLE levels ADD COLUMN IF NOT EXISTS ordinal INTEGER;")
-            await self.pool.execute("ALTER TABLE levels ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;")
-            await self.pool.execute("ALTER TABLE class ADD COLUMN IF NOT EXISTS capacity INTEGER NOT NULL DEFAULT 25;")
-            await self.pool.execute("ALTER TABLE academic_settings ADD COLUMN IF NOT EXISTS system TEXT DEFAULT 'US';")
-        except Exception:
-            pass
-
         # 1. Academic Settings
-        settings_row = await self.pool.fetchrow("SELECT system, academic_year, start_month, weekend_days FROM academic_settings ORDER BY id DESC LIMIT 1")
+        settings_row = await self.pool.fetchrow(
+            "SELECT system, academic_year, start_month, weekend_days FROM academic_settings ORDER BY id DESC LIMIT 1"
+        )
         if settings_row:
             system = settings_row["system"] or "US"
             calendar = {
                 "academic_year": settings_row["academic_year"],
                 "start_month": settings_row["start_month"],
-                "weekend_days": settings_row["weekend_days"] or ["Saturday", "Sunday"]
+                "weekend_days": settings_row["weekend_days"] or ["Saturday", "Sunday"],
             }
         else:
             system = "US"
             calendar = {
                 "academic_year": "2026-2027",
                 "start_month": 9,
-                "weekend_days": ["Saturday", "Sunday"]
+                "weekend_days": ["Saturday", "Sunday"],
             }
 
         # 2. Blackout Dates
-        bd_rows = await self.pool.fetch("SELECT date, title, tags FROM blackout_dates ORDER BY date ASC")
+        bd_rows = await self.pool.fetch(
+            "SELECT date, title, tags FROM blackout_dates ORDER BY date ASC"
+        )
         blackout_dates = [
-            {
-                "date": str(r["date"]),
-                "title": r["title"],
-                "tags": r["tags"] or []
-            }
-            for r in bd_rows
+            {"date": str(r["date"]), "title": r["title"], "tags": r["tags"] or []} for r in bd_rows
         ]
 
         # 3. Levels and Classes
-        lvl_rows = await self.pool.fetch("SELECT level_id, name, isced_level, age_band_min, age_band_max, ordinal, is_active FROM levels ORDER BY COALESCE(ordinal, 999), level_id ASC")
+        lvl_rows = await self.pool.fetch(
+            "SELECT level_id, name, isced_level, age_band_min, age_band_max, ordinal, is_active FROM levels ORDER BY COALESCE(ordinal, 999), level_id ASC"
+        )
         levels = []
         for lr in lvl_rows:
-            c_rows = await self.pool.fetch("SELECT id, name, capacity FROM class WHERE level_id = $1 ORDER BY name ASC", lr["level_id"])
+            c_rows = await self.pool.fetch(
+                "SELECT id, name, capacity FROM class WHERE level_id = $1 ORDER BY name ASC",
+                lr["level_id"],
+            )
             sections = [
-                {
-                    "id": cr["id"],
-                    "name": cr["name"],
-                    "capacity": cr.get("capacity") or 25
-                }
+                {"id": cr["id"], "name": cr["name"], "capacity": cr.get("capacity") or 25}
                 for cr in c_rows
             ]
-            levels.append({
-                "level_id": lr["level_id"],
-                "name": lr["name"],
-                "isced_level": lr.get("isced_level") or 1,
-                "age_band_min": lr.get("age_band_min"),
-                "age_band_max": lr.get("age_band_max"),
-                "ordinal": lr.get("ordinal"),
-                "is_active": lr.get("is_active", True),
-                "sections": sections
-            })
+            levels.append(
+                {
+                    "level_id": lr["level_id"],
+                    "name": lr["name"],
+                    "isced_level": lr.get("isced_level") or 1,
+                    "age_band_min": lr.get("age_band_min"),
+                    "age_band_max": lr.get("age_band_max"),
+                    "ordinal": lr.get("ordinal"),
+                    "is_active": lr.get("is_active", True),
+                    "sections": sections,
+                }
+            )
 
         # A saved calendar alone (settings_row) does not mean the school has a
         # real academic structure — it must have at least one active level
@@ -290,7 +279,7 @@ class TenantRepository:
             "system": system,
             "calendar": calendar,
             "blackout_dates": blackout_dates,
-            "levels": levels
+            "levels": levels,
         }
 
     # =========================================================================
@@ -379,16 +368,23 @@ class TenantRepository:
     # =========================================================================
     # Students
     # =========================================================================
-    async def create_student(self, user_id, name: str, class_id: int, gender: str | None = None, birth_data: str | None = None) -> int:
+    async def create_student(
+        self,
+        user_id,
+        name: str,
+        class_id: int,
+        gender: str | None = None,
+        birth_data: str | None = None,
+    ) -> int:
         u_id = parse_id(user_id)
         await self.pool.execute(
             """
             INSERT INTO students (id, name, class_id, gender, birth_data)
             VALUES ($1, $2, $3, $4, $5)
-            ON CONFLICT (id) DO UPDATE SET 
-                name = EXCLUDED.name, 
-                class_id = EXCLUDED.class_id, 
-                gender = EXCLUDED.gender, 
+            ON CONFLICT (id) DO UPDATE SET
+                name = EXCLUDED.name,
+                class_id = EXCLUDED.class_id,
+                gender = EXCLUDED.gender,
                 birth_data = EXCLUDED.birth_data
             """,
             u_id,
@@ -441,11 +437,12 @@ class TenantRepository:
         for row in rows:
             d = dict(row)
             import json
-            if isinstance(d.get('parents'), str):
+
+            if isinstance(d.get("parents"), str):
                 try:
-                    d['parents'] = json.loads(d['parents'])
+                    d["parents"] = json.loads(d["parents"])
                 except:
-                    d['parents'] = []
+                    d["parents"] = []
             results.append(d)
         return results
 
@@ -478,7 +475,6 @@ class TenantRepository:
         )
         return row is not None
 
-
     async def get_parent_email_for_student(self, student_id) -> str | None:
         row = await self.pool.fetchrow(
             """
@@ -510,7 +506,9 @@ class TenantRepository:
     # =========================================================================
     # Classes
     # =========================================================================
-    async def create_class(self, name: str, level_id: int, head_teacher_id = None, capacity: int = 25) -> int:
+    async def create_class(
+        self, name: str, level_id: int, head_teacher_id=None, capacity: int = 25
+    ) -> int:
         h_id = parse_id(head_teacher_id) if head_teacher_id else None
         return await self.pool.fetchval(
             """
@@ -532,7 +530,7 @@ class TenantRepository:
             WHERE LOWER(name) = LOWER($1) AND level_id = $2
             """,
             name.strip(),
-            parse_id(level_id)
+            parse_id(level_id),
         )
         return dict(row) if row else None
 
@@ -557,7 +555,7 @@ class TenantRepository:
         class_id: int,
         name: str | None = None,
         level_id: int | None = None,
-        head_teacher_id = None,
+        head_teacher_id=None,
         capacity: int | None = None,
     ) -> dict:
         cid = parse_id(class_id)
@@ -567,7 +565,9 @@ class TenantRepository:
 
         new_name = name.strip() if name is not None else current["name"]
         new_level_id = parse_id(level_id) if level_id is not None else current["level_id"]
-        new_head = parse_id(head_teacher_id) if head_teacher_id is not None else current["head_teacher_id"]
+        new_head = (
+            parse_id(head_teacher_id) if head_teacher_id is not None else current["head_teacher_id"]
+        )
         new_capacity = int(capacity) if capacity is not None else current.get("capacity", 25)
 
         await self.pool.execute(
@@ -586,8 +586,6 @@ class TenantRepository:
 
     async def delete_class(self, class_id: int) -> bool:
         cid = parse_id(class_id)
-        # Ensure students class_id column is nullable
-        await self.pool.execute("ALTER TABLE students ALTER COLUMN class_id DROP NOT NULL")
         # Unlink students if any
         await self.pool.execute("UPDATE students SET class_id = NULL WHERE class_id = $1", cid)
         await self.pool.execute("DELETE FROM event_class_map WHERE class_id = $1", cid)
@@ -617,7 +615,7 @@ class TenantRepository:
         current = await self.get_level_by_id(lid)
         if not current:
             raise ValueError(f"Level {lid} not found")
-        
+
         new_name = name.strip() if name is not None else current.get("name")
         new_isced = isced_level if isced_level is not None else current.get("isced_level")
         new_min = age_band_min if age_band_min is not None else current.get("age_band_min")
@@ -631,7 +629,13 @@ class TenantRepository:
             SET name = $1, isced_level = $2, age_band_min = $3, age_band_max = $4, ordinal = $5, is_active = $6
             WHERE level_id = $7
             """,
-            new_name, new_isced, new_min, new_max, new_ord, new_active, lid
+            new_name,
+            new_isced,
+            new_min,
+            new_max,
+            new_ord,
+            new_active,
+            lid,
         )
         return await self.get_level_by_id(lid)
 
@@ -666,7 +670,9 @@ class TenantRepository:
             return 0
         sids = [parse_id(s) for s in student_ids]
         cid = parse_id(new_class_id) if new_class_id else None
-        await self.pool.execute("UPDATE students SET class_id = $1 WHERE id = ANY($2::bigint[])", cid, sids)
+        await self.pool.execute(
+            "UPDATE students SET class_id = $1 WHERE id = ANY($2::bigint[])", cid, sids
+        )
         return len(sids)
 
     async def get_class_by_head_teacher(self, teacher_id) -> dict | None:
@@ -708,7 +714,9 @@ class TenantRepository:
         school_subsidy: float,
         date_val: datetime,
         created_by,
-        class_mappings: list[dict],  # list of {"class_id": int, "ticket_price": float, "costbudget_id": int | None, "budget_description": str | None, "budget_price": float | None}
+        class_mappings: list[
+            dict
+        ],  # list of {"class_id": int, "ticket_price": float, "costbudget_id": int | None, "budget_description": str | None, "budget_price": float | None}
     ) -> dict:
         event_id = None
         async with self.pool.acquire() as conn:
@@ -818,7 +826,7 @@ class TenantRepository:
         if not student or not student.get("class_id"):
             return []
         class_id = student["class_id"]
-        
+
         rows = await self.pool.fetch(
             """
             SELECT DISTINCT e.id, e.title, e.description, e.address, e.event_map_id, e.school_subsidy, e.date, e.created_by, e.created_at,
@@ -855,7 +863,15 @@ class TenantRepository:
             results.append(ev)
         return results
 
-    async def update_event(self, event_id: int, title: str, description: str, address: str | None, school_subsidy: float, date_val: datetime) -> dict | None:
+    async def update_event(
+        self,
+        event_id: int,
+        title: str,
+        description: str,
+        address: str | None,
+        school_subsidy: float,
+        date_val: datetime,
+    ) -> dict | None:
         ev_id = parse_id(event_id)
         row = await self.pool.fetchrow(
             """
@@ -963,7 +979,9 @@ class TenantRepository:
     # =========================================================================
     # Enrollments
     # =========================================================================
-    async def create_enrollment(self, student_id, event_class_map_id: int, state: str, teacher_id = None, parent_id = None) -> int:
+    async def create_enrollment(
+        self, student_id, event_class_map_id: int, state: str, teacher_id=None, parent_id=None
+    ) -> int:
         return await self.pool.fetchval(
             """
             INSERT INTO enrollment (student_id, event_class_map_id, state, teacher_id, parent_id)
@@ -978,7 +996,9 @@ class TenantRepository:
             parse_id(parent_id) if parent_id else None,
         )
 
-    async def update_enrollment_state(self, enrollment_id: int, state: str, teacher_id = None, parent_id = None) -> bool:
+    async def update_enrollment_state(
+        self, enrollment_id: int, state: str, teacher_id=None, parent_id=None
+    ) -> bool:
         query = "UPDATE enrollment SET state = $1"
         params = [state]
         if teacher_id:
@@ -1008,7 +1028,9 @@ class TenantRepository:
         )
         return dict(row) if row else None
 
-    async def get_enrollment_by_student_and_map(self, student_id, event_class_map_id: int) -> dict | None:
+    async def get_enrollment_by_student_and_map(
+        self, student_id, event_class_map_id: int
+    ) -> dict | None:
         row = await self.pool.fetchrow(
             "SELECT id, student_id, event_class_map_id, state, teacher_id, parent_id, created_at FROM enrollment WHERE student_id = $1 AND event_class_map_id = $2",
             parse_id(student_id),
@@ -1031,6 +1053,24 @@ class TenantRepository:
               AND en.state NOT IN ('requested_by_student', 'rejected_by_parent')
             """,
             parse_id(teacher_id),
+        )
+        return [dict(row) for row in rows]
+
+    async def get_all_enrollments(self) -> list[dict]:
+        """The whole tenant's roster -- for school_admin/super_admin, who
+        lead no single class and so cannot use get_enrollments_for_teacher()."""
+        rows = await self.pool.fetch(
+            """
+            SELECT en.id, en.student_id, en.event_class_map_id, en.state, en.teacher_id, en.parent_id, en.created_at,
+                   s.name AS student_name, c.name AS class_name, e.title AS event_title, ecm.ticket_price, u.email AS student_email
+            FROM enrollment en
+            JOIN students s ON en.student_id = s.id
+            JOIN users u ON s.id = u.id
+            JOIN event_class_map ecm ON en.event_class_map_id = ecm.id
+            JOIN class c ON ecm.class_id = c.id
+            JOIN event e ON ecm.event_id = e.id
+            WHERE en.state NOT IN ('requested_by_student', 'rejected_by_parent')
+            """
         )
         return [dict(row) for row in rows]
 
@@ -1068,7 +1108,9 @@ class TenantRepository:
         return [dict(row) for row in rows]
 
     async def delete_enrollment(self, enrollment_id: int) -> bool:
-        result = await self.pool.execute("DELETE FROM enrollment WHERE id = $1", parse_id(enrollment_id))
+        result = await self.pool.execute(
+            "DELETE FROM enrollment WHERE id = $1", parse_id(enrollment_id)
+        )
         return result == "DELETE 1"
 
     # =========================================================================
@@ -1087,13 +1129,18 @@ class TenantRepository:
         )
 
     async def get_payment_by_enrollment(self, enrollment_id: int) -> dict | None:
-        row = await self.pool.fetchrow("SELECT id, enrollment_id, amount, status, created_at FROM payments WHERE enrollment_id = $1", parse_id(enrollment_id))
+        row = await self.pool.fetchrow(
+            "SELECT id, enrollment_id, amount, status, created_at FROM payments WHERE enrollment_id = $1",
+            parse_id(enrollment_id),
+        )
         return dict(row) if row else None
 
     # =========================================================================
     # Feedbacks
     # =========================================================================
-    async def create_event_feedback(self, event_id: int, user_id, rating: int, comments: str | None) -> int:
+    async def create_event_feedback(
+        self, event_id: int, user_id, rating: int, comments: str | None
+    ) -> int:
         return await self.pool.fetchval(
             """
             INSERT INTO event_feedback (event_id, user_id, rating, comments)
@@ -1205,18 +1252,22 @@ class TenantRepository:
                 (SELECT COUNT(*) FROM event) AS event_count
             """
         )
-        return dict(row) if row else {
-            "student_count": 0,
-            "class_count": 0,
-            "enrollment_count": 0,
-            "event_count": 0,
-        }
+        return (
+            dict(row)
+            if row
+            else {
+                "student_count": 0,
+                "class_count": 0,
+                "enrollment_count": 0,
+                "event_count": 0,
+            }
+        )
 
     # =========================================================================
     # Resource Types (workflow & resource schema)
     # =========================================================================
     async def create_resource_type(
-        self, name: str, category: str, is_custom: bool = False, created_by_user_id = None
+        self, name: str, category: str, is_custom: bool = False, created_by_user_id=None
     ) -> int:
         return await self.pool.fetchval(
             """
@@ -1253,7 +1304,12 @@ class TenantRepository:
     # Resources (workflow & resource schema)
     # =========================================================================
     async def create_resource(
-        self, event_id: int, resource_type_id: int, description: str | None, quantity: int, added_by_user_id: int
+        self,
+        event_id: int,
+        resource_type_id: int,
+        description: str | None,
+        quantity: int,
+        added_by_user_id: int,
     ) -> int:
         return await self.pool.fetchval(
             """
@@ -1278,7 +1334,7 @@ class TenantRepository:
     async def get_resources_for_event(self, event_id: int) -> list[dict]:
         rows = await self.pool.fetch(
             """
-            SELECT r.id, r.event_id, r.resource_type_id, r.description, r.quantity, 
+            SELECT r.id, r.event_id, r.resource_type_id, r.description, r.quantity,
                    r.added_by_user_id, r.updated_by_user_id, r.created_at, r.updated_at,
                    rt.name AS resource_type_name, rt.category AS resource_type_category
             FROM resources r
@@ -1297,7 +1353,12 @@ class TenantRepository:
         )
 
     async def update_resource(
-        self, resource_id: int, resource_type_id: int | None, description: str | None, quantity: int | None, updated_by_user_id: int
+        self,
+        resource_id: int,
+        resource_type_id: int | None,
+        description: str | None,
+        quantity: int | None,
+        updated_by_user_id: int,
     ) -> None:
         await self.pool.execute(
             """
@@ -1320,11 +1381,15 @@ class TenantRepository:
     # Resource Cost (workflow & resource schema)
     # =========================================================================
     async def set_resource_cost(
-        self, resource_id: int, unit_price: float, total_cost: float, currency: str, set_by_user_id: int
+        self,
+        resource_id: int,
+        unit_price: float,
+        total_cost: float,
+        currency: str,
+        set_by_user_id: int,
     ) -> int:
         event_id = await self.pool.fetchval(
-            "SELECT event_id FROM resources WHERE id = $1",
-            parse_id(resource_id)
+            "SELECT event_id FROM resources WHERE id = $1", parse_id(resource_id)
         )
         if not event_id:
             raise ValueError(f"Resource with ID {resource_id} not found")
@@ -1380,11 +1445,8 @@ class TenantRepository:
         rows = await self.pool.fetch("SELECT id, email, role FROM users WHERE role = 'manager'")
         return [dict(row) for row in rows]
 
-    async def get_all_finance_users(self) -> list[dict]:
-        rows = await self.pool.fetch("SELECT id, email, role FROM users WHERE role = 'finance'")
-        return [dict(row) for row in rows]
-
     async def get_all_event_teachers(self) -> list[dict]:
-        rows = await self.pool.fetch("SELECT id, email, role FROM users WHERE role = 'event_teacher'")
+        rows = await self.pool.fetch(
+            "SELECT id, email, role FROM users WHERE role = 'event_teacher'"
+        )
         return [dict(row) for row in rows]
-

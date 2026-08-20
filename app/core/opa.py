@@ -14,6 +14,17 @@ from app.core.config import OPA_URL
 logger = logging.getLogger("sams.opa")
 
 
+class OPAUnavailableError(Exception):
+    """Raised when OPA could not be reached, or answered with a non-decision
+    response, rather than an actual allow/deny.
+
+    Callers use this to distinguish "OPA is down" (where falling back to a
+    local check is a reasonable resilience measure) from a real allow=false
+    decision returned by a reachable OPA, which must be treated as final —
+    see CurrentUser.can() in app/core/dependencies.py.
+    """
+
+
 async def verify_opa_authorization(
     user_id: str,
     tenant_id: str,
@@ -33,6 +44,10 @@ async def verify_opa_authorization(
         "resource": resource or {}
       }
     }
+
+    Returns the actual allow/deny decision from OPA. Raises
+    OPAUnavailableError if OPA could not be reached or did not return a
+    usable decision — this is never conflated with an explicit deny.
     """
     url = opa_url or OPA_URL
     resource_payload = resource or {}
@@ -52,21 +67,16 @@ async def verify_opa_authorization(
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.post(url, json=payload)
-            if response.status_code == 200:
-                result = response.json()
-                allowed = result.get("result", False)
-                return bool(allowed)
-            else:
-                logger.warning(
-                    f"OPA endpoint returned status {response.status_code}: {response.text}"
-                )
-                return False
     except Exception as exc:
         logger.error(f"Error connecting to OPA endpoint at {url}: {exc}")
-        # Local fallback: super_admin is always allowed
-        if "super_admin" in roles:
-            return True
-        return False
+        raise OPAUnavailableError(str(exc)) from exc
+
+    if response.status_code != 200:
+        logger.warning(f"OPA endpoint returned status {response.status_code}: {response.text}")
+        raise OPAUnavailableError(f"OPA returned status {response.status_code}")
+
+    result = response.json()
+    return bool(result.get("result", False))
 
 
 async def verify_opa_http_route(

@@ -14,11 +14,13 @@ from tests.integration._helpers import register_school_admin
 # =============================================================================
 class TestAuthRouter:
     async def test_register_and_login_super_admin(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
+        from app.core.config import SUPER_ADMIN_BOOTSTRAP_CODE
+
         reg_payload = {
             "email": "sa@desk.com",
             "password": "sapassword123",
             "role": "super_admin",
-            "invite_code": "regester123"
+            "invite_code": SUPER_ADMIN_BOOTSTRAP_CODE
         }
         reg_resp = await test_client.post("/api/v1/auth/register", json=reg_payload)
         assert reg_resp.status_code == 200
@@ -953,7 +955,7 @@ class TestEventUpdateRouter:
 
 
 class TestAdminStaffCreation:
-    async def test_admin_creates_manager_and_finance(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
+    async def test_admin_creates_manager(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
         # 1. Register a school_admin (via a real invitation)
         admin_token = await register_school_admin(test_client, "school_admin@test.com")
         admin_headers = {"Authorization": f"Bearer {admin_token}"}
@@ -968,15 +970,13 @@ class TestAdminStaffCreation:
         assert mgr_resp.json()["role"] == "manager"
         assert mgr_resp.json()["email"] == "new_manager@test.com"
 
-        # 3. Register a finance user (admin only)
+        # 3. finance is retired -- the endpoint no longer exists.
         fin_resp = await test_client.post(
             "/api/v1/students/finance",
             json={"email": "new_finance@test.com", "password": "pass"},
             headers=admin_headers
         )
-        assert fin_resp.status_code == 200
-        assert fin_resp.json()["role"] == "finance"
-        assert fin_resp.json()["email"] == "new_finance@test.com"
+        assert fin_resp.status_code == 404
 
         # 4. Teacher tries to create a manager (should fail with 403)
         from app.core.config import TEACHER_INVITE_CODE

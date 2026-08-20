@@ -47,7 +47,7 @@ class TestDynamicPermissionsApi:
         assert "manager" in role_ids
         assert "parent" in role_ids
         assert "student" in role_ids
-        assert "finance" in role_ids
+        assert "finance" not in role_ids  # retired -- manager owns pricing/cost duties now
 
     async def test_school_admin_can_view_and_modify_user_permissions(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
         # 1. Register School Admin (via a real invitation — required since
@@ -184,17 +184,24 @@ class TestDeleteUser:
         assert re_reg.status_code == 200
 
     async def test_school_admin_cannot_delete_super_admin(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
-        # register_school_admin's bootstrap super_admin gets JIT-provisioned
-        # into tenant_a's users table as a side effect of calling
-        # POST /auth/invitations — giving us a real super_admin row to target.
+        # super_admin is deliberately NOT JIT-provisioned into a tenant's local
+        # `users` table (see get_current_user in dependencies.py -- a prior
+        # version did this and it surprised tenant admins who found a "user I
+        # never created" in their school). So a school_admin's own
+        # users-permissions listing for their tenant must never contain a
+        # super_admin row in the first place: there is nothing to delete.
         admin_token = await register_school_admin(test_client, "admin_vs_sa@school.com")
         admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
         users = (await test_client.get("/api/v1/auth/users-permissions", headers=admin_headers)).json()
-        super_admin_row = next(u for u in users if u["role"] == "super_admin")
+        assert not any(u["role"] == "super_admin" for u in users)
 
-        del_resp = await test_client.delete(f"/api/v1/auth/users/{super_admin_row['id']}", headers=admin_headers)
-        assert del_resp.status_code == 403
+        # Belt-and-braces: even if a super_admin row somehow existed locally,
+        # deleting it must still be refused.
+        super_admin_row = next((u for u in users if u["role"] == "super_admin"), None)
+        if super_admin_row:
+            del_resp = await test_client.delete(f"/api/v1/auth/users/{super_admin_row['id']}", headers=admin_headers)
+            assert del_resp.status_code == 403
 
     async def test_admin_cannot_delete_own_account(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
         admin_token = await register_school_admin(test_client, "admin_self@school.com")
@@ -207,8 +214,10 @@ class TestDeleteUser:
     async def test_super_admin_can_delete_school_admin(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
         admin_token = await register_school_admin(test_client, "admin_deletable@school.com")
 
+        from app.core.config import SUPER_ADMIN_BOOTSTRAP_CODE
+
         sa_reg = await test_client.post("/api/v1/auth/register", json={
-            "email": "root_sa@desk.com", "password": "pass", "role": "super_admin", "invite_code": "regester123"
+            "email": "root_sa@desk.com", "password": "pass", "role": "super_admin", "invite_code": SUPER_ADMIN_BOOTSTRAP_CODE
         })
         sa_headers = {"Authorization": f"Bearer {sa_reg.json()['access_token']}"}
 

@@ -41,10 +41,12 @@ tenant_matches if {
     input.user.tenant_id == input.resource.tenant_id
 }
 
-valid_tenant if {
-    not input.resource.tenant_id
-}
-
+# A resource with no tenant_id at all must NOT be treated as tenant-agnostic
+# — that previously let any input omitting resource.tenant_id skip the
+# cross-tenant check entirely. valid_tenant now requires an explicit match;
+# callers acting within their own tenant (the common case) must supply
+# resource.tenant_id themselves (see require_permission() in
+# app/core/dependencies.py, which always injects the caller's own tenant_id).
 valid_tenant if {
     tenant_matches
 }
@@ -192,8 +194,8 @@ teacher_permission := {
     "event:view_draft", "event:audience_edit", "event:audience_predict", "resource:create",
     "resource:view", "resource:read", "resource:edit", "resource:update", "resource:delete",
     "resource_type:create", "resource_type:read", "enrollment:teacher_approve", "enrollment:view_roster",
-    "enrollment:read", "health:view", "notification:read", "notification:mark_read", "feedback:view",
-    "feedback:create"
+    "enrollment:read", "health:view", "health:manage", "notification:read", "notification:mark_read",
+    "feedback:view", "feedback:create"
 }
 
 valid_teacher_resource_status if {

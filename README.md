@@ -1,7 +1,9 @@
 # doumind-backend
 
 > Production-ready FastAPI backend for the **SchoolDesk** school event management platform.  
-> Multi-tenant architecture: one PostgreSQL database per school (tenant).
+> Multi-tenant architecture: schema-per-tenant inside one shared PostgreSQL database — each
+> school gets its own Postgres schema, isolated via `SET search_path` (see
+> `docs/adr/0001-use-clean-architecture.md` for the full rationale and history).
 
 ## Architecture
 
@@ -45,7 +47,19 @@ This starts:
 - **Apache APISIX** internally as the API Gateway
 - **Nginx DMZ** on port `9080` (this is what the frontend talks to, proxying to APISIX)
 
-### 5. Run without Docker (development)
+### 5. Run database migrations
+Schema changes are managed by Alembic (see `alembic/env.py`). Because this is
+schema-per-tenant in one database, control-plane and tenant tables are two
+independent migration branches — there's no single `head`, so run both:
+```bash
+alembic upgrade control_plane@head
+python alembic/apply_all_tenants.py
+```
+The second command applies the tenant branch to every tenant already
+registered in the control plane, not just one. New tenants created later
+already get migrated automatically as part of their normal provisioning.
+
+### 6. Run without Docker (development)
 ```bash
 # Start Postgres separately, then:
 uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload

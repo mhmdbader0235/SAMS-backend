@@ -1,12 +1,17 @@
 import os
 from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPBearer
 from pydantic import BaseModel
 
-
 from app.core.database import get_control_plane_pool, get_db_pool
-from app.core.dependencies import CurrentUser, get_current_user, require_tenant_live
+from app.core.dependencies import (
+    CurrentUser,
+    get_current_user,
+    require_permission,
+    require_tenant_live,
+)
 from app.core.schemas import TokenResponse, UserLoginRequest, UserRegisterRequest
 from app.domains.auth.service import AuthService
 from app.domains.tenant.control_plane_repository import ControlPlaneRepository
@@ -18,7 +23,9 @@ router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 # creation) are off-limits until Day-1 setup is complete. Login, register,
 # /me, the public tenant list, invitation-code verification, and
 # self-service profile reads stay reachable so auth itself never breaks.
-router_gated = APIRouter(prefix="/api/v1/auth", tags=["auth"], dependencies=[Depends(require_tenant_live)])
+router_gated = APIRouter(
+    prefix="/api/v1/auth", tags=["auth"], dependencies=[Depends(require_tenant_live)]
+)
 _security = HTTPBearer(auto_error=False)
 
 
@@ -48,11 +55,9 @@ async def list_tenants() -> dict:
 @router_gated.post("/tenants", summary="Create a new tenant and generate schema (Super Admin)")
 async def create_tenant(
     payload: CreateTenantRequest,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_permission("tenant:manage")),
 ) -> dict:
     """Register a new tenant in control plane and generate its PostgreSQL schema & tables."""
-    if current_user.role != "super_admin":
-        raise HTTPException(status_code=403, detail="Only super_admin can create new tenants")
     try:
         res = await AuthService.create_tenant(payload.tenant_id, payload.name)
         return res
@@ -67,22 +72,32 @@ async def create_invitation(
 ) -> dict:
     """Generate a locked invitation code for a specific tenant and role."""
     allowed_roles = {"school_admin", "super_admin"}
-    if current_user.role not in allowed_roles and "school_admin" not in current_user.roles and "super_admin" not in current_user.roles:
-        raise HTTPException(status_code=403, detail="Only school_admin or super_admin can create invitations")
+    if (
+        current_user.role not in allowed_roles
+        and "school_admin" not in current_user.roles
+        and "super_admin" not in current_user.roles
+    ):
+        raise HTTPException(
+            status_code=403, detail="Only school_admin or super_admin can create invitations"
+        )
 
     # Strict Tenant Scoping: non-super_admin can only create invitations for their own tenant
     is_super = current_user.role == "super_admin" or "super_admin" in (current_user.roles or [])
     target_tenant = payload.tenant_id
     if not is_super and current_user.tenant_id:
-        if payload.tenant_id and payload.tenant_id.strip().lower() != current_user.tenant_id.strip().lower():
+        if (
+            payload.tenant_id
+            and payload.tenant_id.strip().lower() != current_user.tenant_id.strip().lower()
+        ):
             raise HTTPException(
                 status_code=403,
-                detail=f"Admins of tenant '{current_user.tenant_id}' cannot create invitations for tenant '{payload.tenant_id}'"
+                detail=f"Admins of tenant '{current_user.tenant_id}' cannot create invitations for tenant '{payload.tenant_id}'",
             )
         target_tenant = current_user.tenant_id
 
     # Safely resolve created_by — only pass a UUID; plain integer local-DB IDs are set to None
     from uuid import UUID as _UUID
+
     created_by_uuid = None
     try:
         if current_user.id and not str(current_user.id).isdigit():
@@ -139,8 +154,6 @@ async def get_invitation(code: str) -> dict:
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-
-
 @router.post("/register", response_model=TokenResponse, summary="Register a new user")
 async def register(payload: UserRegisterRequest) -> TokenResponse:
     tenant_id = payload.tenant_id or "tenant_a"
@@ -164,6 +177,7 @@ async def register(payload: UserRegisterRequest) -> TokenResponse:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except Exception as exc:
         import traceback
+
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
@@ -240,7 +254,9 @@ async def get_profile(current_user: CurrentUser = Depends(get_current_user)) -> 
                 local_user = await user_repo.get_user_by_email(current_user.email)
                 if local_user:
                     tenant_repo = TenantRepository(pool)
-                    linked_students = await tenant_repo.get_linked_students_for_parent(local_user["id"])
+                    linked_students = await tenant_repo.get_linked_students_for_parent(
+                        local_user["id"]
+                    )
                     students = [
                         ProfileStudentInfo(name=s["name"], email=s["email"])
                         for s in linked_students
@@ -270,12 +286,21 @@ async def get_profile(current_user: CurrentUser = Depends(get_current_user)) -> 
                             parent_email = parent_info.get("email")
                     elif current_user.role == "teacher":
                         from app.domains.tenant.service import TenantService
-                        class_info = await TenantService.get_class_by_head_teacher(current_user.tenant_id, db_user_id)
+
+                        class_info = await TenantService.get_class_by_head_teacher(
+                            current_user.tenant_id, db_user_id
+                        )
                         if class_info:
                             class_id = class_info.get("id")
-                            class_name = f"{class_info.get('name')} ({class_info.get('level_name')})"
+                            class_name = (
+                                f"{class_info.get('name')} ({class_info.get('level_name')})"
+                            )
 
-        email = profile["email"] if (profile and "email" in profile) else (current_user.email or "user@school.com")
+        email = (
+            profile["email"]
+            if (profile and "email" in profile)
+            else (current_user.email or "user@school.com")
+        )
         phone = profile.get("phone") if profile else None
         address = profile.get("address") if profile else None
 
@@ -287,7 +312,7 @@ async def get_profile(current_user: CurrentUser = Depends(get_current_user)) -> 
             class_name=class_name,
             parent_name=parent_name,
             parent_email=parent_email,
-            students=students
+            students=students,
         )
     except HTTPException:
         raise
@@ -298,8 +323,7 @@ async def get_profile(current_user: CurrentUser = Depends(get_current_user)) -> 
 
 @router_gated.post("/profile", summary="Update user profile")
 async def update_profile(
-    payload: ProfileUpdateRequest,
-    current_user: CurrentUser = Depends(get_current_user)
+    payload: ProfileUpdateRequest, current_user: CurrentUser = Depends(get_current_user)
 ) -> dict:
     try:
         # Update local tenant DB profile for all authenticated users
@@ -315,16 +339,17 @@ async def update_profile(
             if not parent:
                 raise HTTPException(status_code=404, detail="Parent not found")
             await cp_repo.update_parent_profile(parent["id"], payload.phone, payload.address)
-            
+
         return {"status": "success"}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router_gated.get("/parent-profile", response_model=ProfileResponse, summary="Get parent profile by email")
+@router_gated.get(
+    "/parent-profile", response_model=ProfileResponse, summary="Get parent profile by email"
+)
 async def get_parent_profile_by_email(
-    email: str,
-    current_user: CurrentUser = Depends(get_current_user)
+    email: str, current_user: CurrentUser = Depends(get_current_user)
 ) -> ProfileResponse:
     if current_user.role not in ("teacher", "school_admin"):
         raise HTTPException(status_code=403, detail="Only staff can view parent details")
@@ -332,19 +357,17 @@ async def get_parent_profile_by_email(
     try:
         cp_pool = await get_control_plane_pool()
         cp_repo = ControlPlaneRepository(cp_pool)
-        
+
         parent = await cp_repo.get_parent_by_email(email)
         if not parent:
             raise HTTPException(status_code=404, detail="Parent not found")
-            
+
         profile = await cp_repo.get_parent_profile(parent["id"])
         if not profile:
             raise HTTPException(status_code=404, detail="Parent profile not found")
-            
+
         return ProfileResponse(
-            email=profile["email"],
-            phone=profile["phone"],
-            address=profile["address"]
+            email=profile["email"], phone=profile["phone"], address=profile["address"]
         )
     except HTTPException:
         raise
@@ -372,13 +395,22 @@ class UserPermissionsUpdateRequest(BaseModel):
     permissions: list[str] = []
 
 
-@router_gated.get("/users-permissions", response_model=list[UserPermissionsResponse], summary="List all users and permissions (admin only)")
+@router_gated.get(
+    "/users-permissions",
+    response_model=list[UserPermissionsResponse],
+    summary="List all users and permissions (admin only)",
+)
 async def list_users_permissions(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[UserPermissionsResponse]:
-    if not (current_user.has_any_role("school_admin", "super_admin", "admin") or current_user.has_role("user:view")):
-        raise HTTPException(status_code=403, detail="Only school administrators can access user permissions")
-    
+    if not (
+        current_user.has_any_role("school_admin", "super_admin", "admin")
+        or current_user.has_role("user:view")
+    ):
+        raise HTTPException(
+            status_code=403, detail="Only school administrators can access user permissions"
+        )
+
     # current_user.tenant_id is already the security-checked value (only
     # super_admin can influence it via X-Tenant-ID -- see get_current_user) --
     # re-reading the raw header here would let ANY caller silently retarget
@@ -386,6 +418,7 @@ async def list_users_permissions(
     tenant_id = (current_user.tenant_id or "tenant_a").strip().lower()
     try:
         from app.domains.tenant.service import TenantService
+
         users = await TenantService.get_tenant_users_permissions(tenant_id, current_user.roles)
         return [UserPermissionsResponse(**u) for u in users]
     except PermissionError as exc:
@@ -394,15 +427,16 @@ async def list_users_permissions(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router_gated.put("/users/{user_id}/permissions", response_model=UserPermissionsResponse, summary="Update user roles and permissions (admin only)")
+@router_gated.put(
+    "/users/{user_id}/permissions",
+    response_model=UserPermissionsResponse,
+    summary="Update user roles and permissions (admin only)",
+)
 async def update_user_permissions(
     user_id: int | str,
     payload: UserPermissionsUpdateRequest,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_permission("user:invite")),
 ) -> UserPermissionsResponse:
-    if not (current_user.has_any_role("school_admin", "super_admin", "admin") or current_user.has_role("user:invite")):
-        raise HTTPException(status_code=403, detail="Only school administrators can modify user roles and permissions")
-    
     # current_user.tenant_id is already the security-checked value (only
     # super_admin can influence it via X-Tenant-ID -- see get_current_user) --
     # re-reading the raw header here would let ANY caller silently retarget
@@ -410,6 +444,7 @@ async def update_user_permissions(
     tenant_id = (current_user.tenant_id or "tenant_a").strip().lower()
     try:
         from app.domains.tenant.service import TenantService
+
         updated = await TenantService.update_tenant_user_permissions(
             tenant_id=tenant_id,
             user_id=user_id,
@@ -432,7 +467,10 @@ async def delete_user(
     user_id: int | str,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
-    if not (current_user.has_any_role("school_admin", "super_admin", "admin") or current_user.has_role("user:delete")):
+    if not (
+        current_user.has_any_role("school_admin", "super_admin", "admin")
+        or current_user.has_role("user:delete")
+    ):
         raise HTTPException(status_code=403, detail="Only school administrators can delete users")
 
     # current_user.tenant_id is already the security-checked value (only
@@ -442,6 +480,7 @@ async def delete_user(
     tenant_id = (current_user.tenant_id or "tenant_a").strip().lower()
     try:
         from app.domains.tenant.service import TenantService
+
         deleted = await TenantService.delete_tenant_user(
             tenant_id=tenant_id,
             target_user_id=user_id,
@@ -463,8 +502,10 @@ async def get_pending_users(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[dict]:
     if not (current_user.has_any_role("school_admin", "super_admin", "admin")):
-        raise HTTPException(status_code=403, detail="Only school administrators can view pending users")
-    
+        raise HTTPException(
+            status_code=403, detail="Only school administrators can view pending users"
+        )
+
     # current_user.tenant_id is already the security-checked value (only
     # super_admin can influence it via X-Tenant-ID -- see get_current_user) --
     # re-reading the raw header here would let ANY caller silently retarget
@@ -479,6 +520,7 @@ async def get_pending_users(
 
 from app.core.schemas import UserRoleUpdateRequest
 
+
 @router_gated.patch("/users/{email}/role", summary="Assign role to pending user (admin only)")
 async def assign_user_role(
     email: str,
@@ -487,7 +529,7 @@ async def assign_user_role(
 ) -> dict:
     if not (current_user.has_any_role("school_admin", "super_admin", "admin")):
         raise HTTPException(status_code=403, detail="Only school administrators can assign roles")
-    
+
     # current_user.tenant_id is already the security-checked value (only
     # super_admin can influence it via X-Tenant-ID -- see get_current_user) --
     # re-reading the raw header here would let ANY caller silently retarget
@@ -507,57 +549,131 @@ async def get_roles_catalog(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
     from app.core.dependencies import COMPOSITE_ROLE_PERMISSIONS
-    
+
     COMPOSITE_ROLES = [
-        {"id": "super_admin", "label": "Super Administrator", "description": "Full platform administration across all tenants and schemas."},
-        {"id": "school_admin", "label": "School Administrator", "description": "Full school-level management, staffing, and settings."},
-        {"id": "manager", "label": "Operations Manager", "description": "Event proposal review, pricing, publishing, and budget approvals."},
-        {"id": "teacher", "label": "Teacher / Class Lead", "description": "Draft event creation, resource requests, and student approvals."},
-        {"id": "parent", "label": "Parent / Guardian", "description": "Child trip view, enrollment approval, and payment."},
-        {"id": "student", "label": "Student", "description": "Browse class events and submit enrollment requests."},
-        {"id": "finance", "label": "Finance Officer", "description": "Resource unit pricing and trip budget management."},
-        {"id": "event_teacher", "label": "Event Lead Teacher", "description": "Designated lead for event execution."},
-        {"id": "pending", "label": "Pending / Unassigned", "description": "Awaiting role verification and access approval."},
+        {
+            "id": "super_admin",
+            "label": "Super Administrator",
+            "description": "Full platform administration across all tenants and schemas.",
+        },
+        {
+            "id": "school_admin",
+            "label": "School Administrator",
+            "description": "Full school-level management, staffing, and settings.",
+        },
+        {
+            "id": "manager",
+            "label": "Operations Manager",
+            "description": "Event proposal review, pricing, publishing, and budget approvals.",
+        },
+        {
+            "id": "teacher",
+            "label": "Teacher / Class Lead",
+            "description": "Draft event creation, resource requests, and student approvals.",
+        },
+        {
+            "id": "parent",
+            "label": "Parent / Guardian",
+            "description": "Child trip view, enrollment approval, and payment.",
+        },
+        {
+            "id": "student",
+            "label": "Student",
+            "description": "Browse class events and submit enrollment requests.",
+        },
+        {
+            "id": "event_teacher",
+            "label": "Event Lead Teacher",
+            "description": "Designated lead for event execution.",
+        },
+        {
+            "id": "pending",
+            "label": "Pending / Unassigned",
+            "description": "Awaiting role verification and access approval.",
+        },
     ]
-    
+
     CATEGORIES = {
         "Events Planning & Approvals": [
-            "event:create", "event:edit", "event:patch", "event:delete", "event:clone",
-            "event:propose", "event:submit", "event:review", "event:publish", "event:view_draft",
-            "event:audience_edit", "event:audience_predict"
+            "event:create",
+            "event:edit",
+            "event:patch",
+            "event:delete",
+            "event:clone",
+            "event:propose",
+            "event:submit",
+            "event:review",
+            "event:publish",
+            "event:view_draft",
+            "event:audience_edit",
+            "event:audience_predict",
         ],
         "Resources & Pricing": [
-            "resource:create", "resource:view", "resource:read", "resource:edit",
-            "resource:update", "resource:delete", "resource:price", "resource:set_cost",
-            "resource_type:create", "resource_type:read"
+            "resource:create",
+            "resource:view",
+            "resource:read",
+            "resource:edit",
+            "resource:update",
+            "resource:delete",
+            "resource:price",
+            "resource:set_cost",
+            "resource_type:create",
+            "resource_type:read",
         ],
         "Enrollments & Roster": [
-            "enrollment:request", "enrollment:parent_approve", "enrollment:teacher_approve",
-            "enrollment:cancel", "enrollment:view_roster", "enrollment:read"
+            "enrollment:request",
+            "enrollment:parent_approve",
+            "enrollment:teacher_approve",
+            "enrollment:cancel",
+            "enrollment:view_roster",
+            "enrollment:read",
         ],
         "Billing & Invoices": [
-            "billing:invoice", "billing:pay", "billing:refund", "billing:audit",
-            "billing:view_payment", "subsidy:manage"
+            "billing:invoice",
+            "billing:pay",
+            "billing:refund",
+            "billing:audit",
+            "billing:view_payment",
+            "subsidy:manage",
         ],
-        "Health & Safety": [
-            "health:view", "health:manage", "health:manage_child", "safety:manage"
-        ],
+        "Health & Safety": ["health:view", "health:manage", "health:manage_child", "safety:manage"],
         "Academic & Directory": [
-            "school:write", "school:read", "level:create", "level:manage", "level:read",
-            "class:create", "class:edit", "class:update", "class:read", "class:assign_teacher",
-            "user:create", "user:invite", "user:delete", "user:link", "user:view", "user:read",
-            "teacher:create", "teacher:read", "teacher:write", "parent:read", "student:create",
-            "student:read", "student:view_linked"
+            "school:write",
+            "school:read",
+            "level:create",
+            "level:manage",
+            "level:read",
+            "class:create",
+            "class:edit",
+            "class:update",
+            "class:read",
+            "class:assign_teacher",
+            "user:create",
+            "user:invite",
+            "user:delete",
+            "user:link",
+            "user:view",
+            "user:read",
+            "teacher:create",
+            "teacher:read",
+            "teacher:write",
+            "parent:read",
+            "student:create",
+            "student:read",
+            "student:view_linked",
         ],
         "Announcements & Feedback": [
-            "announcement:manage", "notification:send", "notification:read", "notification:mark_read",
-            "feedback:view", "feedback:create"
-        ]
+            "announcement:manage",
+            "notification:send",
+            "notification:read",
+            "notification:mark_read",
+            "feedback:view",
+            "feedback:create",
+        ],
     }
-    
+
     return {
         "composite_roles": COMPOSITE_ROLES,
         "composite_role_permissions": {k: list(v) for k, v in COMPOSITE_ROLE_PERMISSIONS.items()},
         "categories": CATEGORIES,
     }
-

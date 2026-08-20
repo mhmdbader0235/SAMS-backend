@@ -3,7 +3,12 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.core.database import get_db_pool
-from app.core.dependencies import CurrentUser, get_current_user, require_tenant_live
+from app.core.dependencies import (
+    CurrentUser,
+    get_current_user,
+    require_permission,
+    require_tenant_live,
+)
 from app.core.schemas import (
     ClassCreateRequest,
     ClassResponse,
@@ -35,13 +40,17 @@ router = APIRouter(prefix="/api/v1/students", tags=["students"])
 # tenant has completed Day-1 setup (see app/domains/school/) -- those two
 # endpoints ARE the mechanism by which setup gets completed, so they must
 # stay reachable while the tenant is still in "setup" status.
-router_gated = APIRouter(prefix="/api/v1/students", tags=["students"], dependencies=[Depends(require_tenant_live)])
+router_gated = APIRouter(
+    prefix="/api/v1/students", tags=["students"], dependencies=[Depends(require_tenant_live)]
+)
 
 
 # =============================================================================
 # Levels
 # =============================================================================
-@router_gated.post("/levels", response_model=LevelResponse, summary="Create a school level (staff only)")
+@router_gated.post(
+    "/levels", response_model=LevelResponse, summary="Create a school level (staff only)"
+)
 async def create_level(
     payload: LevelCreateRequest,
     current_user: CurrentUser = Depends(get_current_user),
@@ -59,7 +68,7 @@ async def create_level(
             age_band_min=payload.age_band_min,
             age_band_max=payload.age_band_max,
             ordinal=payload.ordinal,
-            is_active=payload.is_active
+            is_active=payload.is_active,
         )
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
@@ -71,8 +80,14 @@ async def create_level(
 async def list_levels(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[LevelResponse]:
-    if not (current_user.has_any_role("school_admin", "super_admin", "manager", "teacher") or current_user.has_role("level:read")):
-        raise HTTPException(status_code=403, detail="Forbidden: Students and unauthorized users cannot list school levels")
+    if not (
+        current_user.has_any_role("school_admin", "super_admin", "manager", "teacher")
+        or current_user.has_role("level:read")
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Forbidden: Students and unauthorized users cannot list school levels",
+        )
     try:
         results = await TenantService.get_all_levels(current_user.tenant_id)
         return [LevelResponse(**r) for r in results]
@@ -80,7 +95,9 @@ async def list_levels(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router_gated.put("/levels/{level_id}", response_model=LevelResponse, summary="Update level details")
+@router_gated.put(
+    "/levels/{level_id}", response_model=LevelResponse, summary="Update level details"
+)
 async def update_level(
     level_id: int,
     payload: LevelUpdateRequest,
@@ -96,7 +113,7 @@ async def update_level(
             age_band_max=payload.age_band_max,
             ordinal=payload.ordinal,
             is_active=payload.is_active,
-            user_role=current_user.roles
+            user_role=current_user.roles,
         )
         return LevelResponse(**res)
     except PermissionError as exc:
@@ -112,9 +129,7 @@ async def delete_level(
 ) -> dict:
     try:
         await TenantService.delete_level(
-            tenant_id=current_user.tenant_id,
-            level_id=level_id,
-            user_role=current_user.roles
+            tenant_id=current_user.tenant_id, level_id=level_id, user_role=current_user.roles
         )
         return {"status": "ok", "message": f"Level {level_id} deleted successfully"}
     except PermissionError as exc:
@@ -122,8 +137,6 @@ async def delete_level(
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
-
-from app.core.schemas import StructureSetupRequest
 
 @router.get("/structure", summary="Get current Academic Structure and Calendar")
 async def get_academic_structure(
@@ -160,11 +173,12 @@ async def setup_academic_structure(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-
 # =============================================================================
 # Teachers / Parents List
 # =============================================================================
-@router_gated.post("/teachers", response_model=TeacherResponse, summary="Create a teacher profile (staff only)")
+@router_gated.post(
+    "/teachers", response_model=TeacherResponse, summary="Create a teacher profile (staff only)"
+)
 async def create_teacher(
     payload: TeacherCreateRequest,
     current_user: CurrentUser = Depends(get_current_user),
@@ -177,11 +191,7 @@ async def create_teacher(
             name=payload.name,
             user_role=current_user.roles,
         )
-        return TeacherResponse(
-            id=teacher_id,
-            name=payload.name,
-            email=payload.email
-        )
+        return TeacherResponse(id=teacher_id, name=payload.name, email=payload.email)
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
@@ -197,19 +207,24 @@ class StaffUserCreateRequest(BaseModel):
     email: str
     password: str
 
+
 class StaffUserResponse(BaseModel):
     id: int
     email: str
     role: str
 
 
-@router_gated.post("/managers", response_model=StaffUserResponse, summary="Create a manager user (admin only)")
+@router_gated.post(
+    "/managers", response_model=StaffUserResponse, summary="Create a manager user (admin only)"
+)
 async def create_manager(
     payload: StaffUserCreateRequest,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> StaffUserResponse:
     if not (current_user.has_role("school_admin") or current_user.has_role("super_admin")):
-        raise HTTPException(status_code=403, detail="Only school_admin or super_admin can create managers")
+        raise HTTPException(
+            status_code=403, detail="Only school_admin or super_admin can create managers"
+        )
     try:
         user_id = await TenantService.create_staff_user(
             tenant_id=current_user.tenant_id,
@@ -227,36 +242,18 @@ async def create_manager(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router_gated.post("/finance", response_model=StaffUserResponse, summary="Create a finance user (admin only)")
-async def create_finance(
-    payload: StaffUserCreateRequest,
-    current_user: CurrentUser = Depends(get_current_user),
-) -> StaffUserResponse:
-    if not (current_user.has_role("school_admin") or current_user.has_role("super_admin")):
-        raise HTTPException(status_code=403, detail="Only school_admin or super_admin can create finance users")
-    try:
-        user_id = await TenantService.create_staff_user(
-            tenant_id=current_user.tenant_id,
-            email=payload.email,
-            password=payload.password,
-            role="finance",
-            user_role=current_user.roles,
-        )
-        return StaffUserResponse(id=user_id, email=payload.email, role="finance")
-    except PermissionError as exc:
-        raise HTTPException(status_code=403, detail=str(exc))
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
-
-
 @router_gated.get("/teachers", response_model=list[TeacherResponse], summary="List all teachers")
 async def list_teachers(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[TeacherResponse]:
-    if not (current_user.has_any_role("school_admin", "super_admin", "manager", "teacher") or current_user.has_role("teacher:read")):
-        raise HTTPException(status_code=403, detail="Forbidden: Students and unauthorized users cannot list teachers")
+    if not (
+        current_user.has_any_role("school_admin", "super_admin", "manager", "teacher")
+        or current_user.has_role("teacher:read")
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Forbidden: Students and unauthorized users cannot list teachers",
+        )
     try:
         results = await TenantService.get_all_teachers(current_user.tenant_id)
         return [TeacherResponse(**r) for r in results]
@@ -268,8 +265,13 @@ async def list_teachers(
 async def list_parents(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[ParentResponse]:
-    if not (current_user.has_any_role("school_admin", "super_admin", "manager") or current_user.has_role("parent:read")):
-        raise HTTPException(status_code=403, detail="Forbidden: Students and unauthorized users cannot list parents")
+    if not (
+        current_user.has_any_role("school_admin", "super_admin", "manager")
+        or current_user.has_role("parent:read")
+    ):
+        raise HTTPException(
+            status_code=403, detail="Forbidden: Students and unauthorized users cannot list parents"
+        )
     try:
         results = await TenantService.get_all_parents(current_user.tenant_id)
         return [ParentResponse(**r) for r in results]
@@ -280,7 +282,9 @@ async def list_parents(
 # =============================================================================
 # Student Profiles
 # =============================================================================
-@router_gated.post("", response_model=StudentResponse, summary="Create a student profile (staff only)")
+@router_gated.post(
+    "", response_model=StudentResponse, summary="Create a student profile (staff only)"
+)
 async def create_student(
     payload: StudentCreateRequest,
     current_user: CurrentUser = Depends(get_current_user),
@@ -301,6 +305,8 @@ async def create_student(
         return StudentResponse(**s_info)
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -309,8 +315,14 @@ async def create_student(
 async def list_students(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[StudentResponse]:
-    if not (current_user.has_any_role("school_admin", "super_admin", "manager", "teacher") or current_user.has_role("student:read")):
-        raise HTTPException(status_code=403, detail="Forbidden: Students and unauthorized users cannot list all students")
+    if not (
+        current_user.has_any_role("school_admin", "super_admin", "manager", "teacher")
+        or current_user.has_role("student:read")
+    ):
+        raise HTTPException(
+            status_code=403,
+            detail="Forbidden: Students and unauthorized users cannot list all students",
+        )
     try:
         results = await TenantService.get_all_students(current_user.tenant_id)
         return [StudentResponse(**r) for r in results]
@@ -338,7 +350,11 @@ async def link_parent_student(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router_gated.get("/linked", response_model=list[StudentResponse], summary="List linked students for current parent")
+@router_gated.get(
+    "/linked",
+    response_model=list[StudentResponse],
+    summary="List linked students for current parent",
+)
 async def list_linked_students(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[StudentResponse]:
@@ -350,9 +366,11 @@ async def list_linked_students(
         local_user = None
         if current_user.email:
             local_user = await user_repo.get_user_by_email(current_user.email)
-        
+
         target_id = local_user["id"] if local_user else parse_id(current_user.id)
-        results = await TenantService.get_linked_students_for_parent(current_user.tenant_id, target_id)
+        results = await TenantService.get_linked_students_for_parent(
+            current_user.tenant_id, target_id
+        )
         return [StudentResponse(**r) for r in results]
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
@@ -389,8 +407,13 @@ async def create_class(
 async def list_classes(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[ClassResponse]:
-    if not (current_user.has_any_role("school_admin", "super_admin", "manager", "teacher") or current_user.has_role("class:read")):
-        raise HTTPException(status_code=403, detail="Forbidden: Students and unauthorized users cannot list classes")
+    if not (
+        current_user.has_any_role("school_admin", "super_admin", "manager", "teacher")
+        or current_user.has_role("class:read")
+    ):
+        raise HTTPException(
+            status_code=403, detail="Forbidden: Students and unauthorized users cannot list classes"
+        )
     try:
         results = await TenantService.get_all_classes(current_user.tenant_id)
         return [ClassResponse(**r) for r in results]
@@ -398,7 +421,9 @@ async def list_classes(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router_gated.put("/classes/{class_id}", response_model=ClassResponse, summary="Update class details")
+@router_gated.put(
+    "/classes/{class_id}", response_model=ClassResponse, summary="Update class details"
+)
 async def update_class(
     class_id: int,
     payload: ClassUpdateRequest,
@@ -472,7 +497,9 @@ async def reassign_student_class(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router_gated.post("/students/bulk-enroll", summary="Bulk enroll/reassign students to a class section")
+@router_gated.post(
+    "/students/bulk-enroll", summary="Bulk enroll/reassign students to a class section"
+)
 async def bulk_reassign_students(
     payload: StudentBulkEnrollRequest,
     current_user: CurrentUser = Depends(get_current_user),
@@ -484,7 +511,11 @@ async def bulk_reassign_students(
             new_class_id=payload.class_id,
             user_role=current_user.roles,
         )
-        return {"status": "ok", "enrolled_count": count, "message": f"Successfully enrolled {count} students."}
+        return {
+            "status": "ok",
+            "enrolled_count": count,
+            "message": f"Successfully enrolled {count} students.",
+        }
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
     except Exception as exc:
@@ -494,7 +525,9 @@ async def bulk_reassign_students(
 # =============================================================================
 # Enrollments
 # =============================================================================
-@router_gated.post("/enrollments", response_model=EnrollmentResponse, summary="Enroll student in event class map")
+@router_gated.post(
+    "/enrollments", response_model=EnrollmentResponse, summary="Enroll student in event class map"
+)
 async def enroll_student(
     payload: EnrollmentCreateRequest,
     current_user: CurrentUser = Depends(get_current_user),
@@ -540,7 +573,11 @@ async def enroll_student(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router_gated.get("/enrollments", response_model=list[EnrollmentResponse], summary="Get enrollments for current user")
+@router_gated.get(
+    "/enrollments",
+    response_model=list[EnrollmentResponse],
+    summary="Get enrollments for current user",
+)
 async def get_enrollments(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[EnrollmentResponse]:
@@ -553,7 +590,11 @@ async def get_enrollments(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router_gated.post("/enrollments/{enrollment_id}/approve", response_model=EnrollmentResponse, summary="Approve/Reject enrollment")
+@router_gated.post(
+    "/enrollments/{enrollment_id}/approve",
+    response_model=EnrollmentResponse,
+    summary="Approve/Reject enrollment",
+)
 async def update_enrollment_approval(
     enrollment_id: int,
     payload: EnrollmentStateUpdateRequest,
@@ -582,29 +623,29 @@ async def update_enrollment_approval(
         if current_state != "requested_by_student":
             raise HTTPException(
                 status_code=400,
-                detail=f"Parent cannot approve/reject an enrollment in '{current_state}' state"
+                detail=f"Parent cannot approve/reject an enrollment in '{current_state}' state",
             )
         if payload.state not in ("approved_by_parent", "rejected_by_parent"):
             raise HTTPException(
                 status_code=400,
-                detail="Parent can only transition enrollment to approved_by_parent or rejected_by_parent"
+                detail="Parent can only transition enrollment to approved_by_parent or rejected_by_parent",
             )
     elif current_user.has_role("teacher"):
         teacher_id = parse_id(current_user.id)
         if current_state == "requested_by_student":
             raise HTTPException(
                 status_code=400,
-                detail="Enrollment must be approved by a parent before teacher approval"
+                detail="Enrollment must be approved by a parent before teacher approval",
             )
         if current_state != "approved_by_parent":
             raise HTTPException(
                 status_code=400,
-                detail=f"Teacher cannot approve/reject an enrollment in '{current_state}' state"
+                detail=f"Teacher cannot approve/reject an enrollment in '{current_state}' state",
             )
         if payload.state not in ("approved_by_teacher", "rejected_by_teacher"):
             raise HTTPException(
                 status_code=400,
-                detail="Teacher can only transition enrollment to approved_by_teacher or rejected_by_teacher"
+                detail="Teacher can only transition enrollment to approved_by_teacher or rejected_by_teacher",
             )
     else:
         raise HTTPException(status_code=403, detail="Unauthorized role for approval")
@@ -632,7 +673,7 @@ async def cancel_enrollment(
 ) -> dict:
     if not current_user.tenant_id and not current_user.has_role("super_admin"):
         raise HTTPException(status_code=400, detail="Tenant context required")
-        
+
     try:
         await TenantService.cancel_enrollment(
             tenant_id=current_user.tenant_id or "tenant_a",
@@ -652,11 +693,13 @@ async def cancel_enrollment(
 # =============================================================================
 # PII Student Health & Records
 # =============================================================================
-@router_gated.post("/{student_id}/health", summary="Create or update student health records (staff only)")
+@router_gated.post(
+    "/{student_id}/health", summary="Create or update student health records (staff only)"
+)
 async def create_or_update_health(
     student_id: int,
     payload: StudentHealthCreateRequest,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_permission("health:manage")),
 ) -> dict:
     try:
         rec_id = await TenantService.create_or_update_health_record(
@@ -675,11 +718,15 @@ async def create_or_update_health(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router_gated.get("/{student_id}/health", response_model=StudentHealthResponse, summary="Get student health records (staff only)")
+@router_gated.get(
+    "/{student_id}/health",
+    response_model=StudentHealthResponse,
+    summary="Get student health records (staff only)",
+)
 async def get_health(
     student_id: int,
     elevated_clearance: bool = Query(False, description="school_admin elevated clearance check"),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_permission("health:view")),
 ) -> StudentHealthResponse:
     try:
         record = await TenantService.get_health_record(
@@ -698,4 +745,3 @@ async def get_health(
         raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-

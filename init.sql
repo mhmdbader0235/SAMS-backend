@@ -19,8 +19,18 @@ CREATE SCHEMA IF NOT EXISTS keycloak;
 CREATE TABLE IF NOT EXISTS tenants (
     tenant_id   VARCHAR(50) PRIMARY KEY,
     name        TEXT        NOT NULL,
+    -- db_host/db_port/db_name: DEAD. get_pool() in app/core/database.py always
+    -- force-overwrites these back to the control-plane host/port/database ("Force
+    -- database name to use control plane database"), so the stored value is never
+    -- used to open a connection. Queued for removal in the Step 6 Alembic migration
+    -- (see FIX_PLAN.md Step 6) — don't wire new code to them.
     db_host     TEXT        NOT NULL,
     db_port     INTEGER     NOT NULL,
+    -- db_user/db_password: reserved for a future database-per-tenant model. Unlike
+    -- db_host/db_port above, get_pool() DOES read these on every call — every
+    -- tenant just happens to be seeded with the same admin credentials today, so
+    -- it's currently a no-op in practice. Live code, not dead code — don't remove
+    -- without also updating get_pool().
     db_user     TEXT        NOT NULL,
     db_password TEXT        NOT NULL,
     db_name     TEXT        NOT NULL,

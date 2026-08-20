@@ -33,8 +33,20 @@ async def _initialize_control_plane_tables(pool: asyncpg.Pool) -> None:
             CREATE TABLE IF NOT EXISTS tenants (
                 tenant_id   VARCHAR(50) PRIMARY KEY,
                 name        TEXT        NOT NULL,
+                -- db_host/db_port/db_name: DEAD. get_pool() in database.py always
+                -- force-overwrites these back to the control-plane host/port/database
+                -- ("Force database name to use control plane database"), so the
+                -- stored value is never used to open a connection. Queued for
+                -- removal in the Step 6 Alembic migration (see FIX_PLAN.md Step 6) —
+                -- don't wire new code to them.
                 db_host     TEXT        NOT NULL,
                 db_port     INTEGER     NOT NULL,
+                -- db_user/db_password: reserved for a future database-per-tenant
+                -- model. Unlike db_host/db_port above, get_pool() DOES read these on
+                -- every call — every tenant just happens to be seeded with the same
+                -- admin credentials today, so it's currently a no-op in practice.
+                -- Live code, not dead code — don't remove without also updating
+                -- get_pool().
                 db_user     TEXT        NOT NULL,
                 db_password TEXT        NOT NULL,
                 db_name     TEXT        NOT NULL,
@@ -674,10 +686,22 @@ shared_db_name = CONTROL_PLANE_DB_NAME
 
 TENANT_DB_CONFIG: dict[str, dict] = {
     "tenant_a": {
+        # host/port: DEAD — get_pool() always overwrites these back to the global
+        # DB_HOST/DB_PORT before opening a connection (see "Force database name to
+        # use control plane database" there). Queued for removal in the Step 6
+        # Alembic migration — see FIX_PLAN.md Step 6.
         "host": os.getenv("TENANT_A_DB_HOST") or DB_HOST,
         "port": int(os.getenv("TENANT_A_DB_PORT") or DB_PORT),
+        # user/password: reserved for a future database-per-tenant model. These DO
+        # reach get_pool()'s connection config (unlike host/port above) — they just
+        # currently resolve to the same admin credentials as everything else, since
+        # every tenant here shares one Postgres instance. Live code, not dead code.
         "user": os.getenv("TENANT_A_DB_USER") or DB_USER,
         "password": os.getenv("TENANT_A_DB_PASSWORD") or DB_PASSWORD,
+        # "database" is always forced to the control-plane DB name at every call
+        # site below — TENANT_A_DB_NAME in .env.example is never read anywhere.
+        # Dead env var, queued for removal alongside TENANT_B_DB_NAME/TENANT_C_DB_NAME
+        # in the Step 6 Alembic migration.
         "database": shared_db_name,
     },
     "tenant_b": {
@@ -783,6 +807,10 @@ class DatabaseManager:
             if tenant_id not in self._databases:
                 # Dynamic tenant discovery from control plane
                 cp_pool = await self.get_control_plane_pool()
+                # db_host/db_port/db_name are selected but never used below (see the
+                # forced overwrite further down) — dead columns, queued for removal
+                # in the Step 6 Alembic migration (FIX_PLAN.md Step 6). db_user/
+                # db_password ARE used — reserved/live, see TENANT_DB_CONFIG above.
                 row = await cp_pool.fetchrow(
                     "SELECT db_host, db_port, db_user, db_password, db_name FROM tenants WHERE tenant_id = $1",
                     tenant_id
@@ -823,7 +851,11 @@ class DatabaseManager:
                         )
 
 
-                # Force database name to use control plane database
+                # Force database name to use control plane database. This is what
+                # makes tenants.db_host/db_port/db_name dead (see the comments on
+                # that table and on the SELECT above) — every tenant lives in this
+                # one physical database, isolated by schema, not a separate
+                # per-tenant Postgres instance.
                 config["host"] = DB_HOST
                 config["port"] = DB_PORT
                 config["database"] = CONTROL_PLANE_DB_CONFIG["database"]

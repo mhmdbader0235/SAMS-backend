@@ -12,11 +12,13 @@ from pydantic import BaseModel, EmailStr
 class UserRoleUpdateRequest(BaseModel):
     role: str
 
+
 class UserSummaryResponse(BaseModel):
     id: int | str
     email: str
     role: str
     created_at: datetime | None = None
+
 
 class UserRegisterRequest(BaseModel):
     email: EmailStr
@@ -52,6 +54,7 @@ class LevelResponse(BaseModel):
     ordinal: int | None = None
     is_active: bool = True
 
+
 class LevelCreateRequest(BaseModel):
     name: str
     isced_level: int | None = None
@@ -59,6 +62,7 @@ class LevelCreateRequest(BaseModel):
     age_band_max: int | None = None
     ordinal: int | None = None
     is_active: bool = True
+
 
 class LevelUpdateRequest(BaseModel):
     name: str | None = None
@@ -76,6 +80,7 @@ class TeacherResponse(BaseModel):
     id: int
     name: str
     email: str
+
 
 class TeacherCreateRequest(BaseModel):
     email: EmailStr
@@ -97,6 +102,7 @@ class StudentCreateRequest(BaseModel):
     class_id: int | None = None
     gender: str | None = None
     birth_data: str | None = None
+
 
 class StudentReassignClassRequest(BaseModel):
     class_id: int | None = None
@@ -132,6 +138,7 @@ class ClassCreateRequest(BaseModel):
     level_id: int
     head_teacher_id: int | None = None
     capacity: int = 25
+
 
 class ClassUpdateRequest(BaseModel):
     name: str | None = None
@@ -175,7 +182,6 @@ class TicketPriceUpdate(BaseModel):
     ticket_price: float
 
 
-
 class EventCreateRequest(BaseModel):
     title: str
     description: str | None = ""
@@ -206,7 +212,6 @@ class EventResponse(BaseModel):
     finance_priced_at: datetime | None = None
     published_at: datetime | None = None
     rejection_reason: str | None = None
-
 
 
 class EventsListResponse(BaseModel):
@@ -346,11 +351,6 @@ class ManagerDecision(BaseModel):
     reason: str | None = None
 
 
-class FinalDecision(BaseModel):
-    decision: Literal["publish", "return_to_finance"]
-    reason: str | None = None
-
-
 class PublishedEventOut(BaseModel):
     id: int
     title: str
@@ -367,6 +367,7 @@ class SpineSectionSchema(BaseModel):
     name: str
     capacity: int
 
+
 class SpineLevelSchema(BaseModel):
     name: str
     isced_level: int | None = None
@@ -376,21 +377,33 @@ class SpineLevelSchema(BaseModel):
     is_active: bool = True
     sections: list[SpineSectionSchema] = []
 
+
 class AcademicSettingsSchema(BaseModel):
     academic_year: str
     start_month: int
     weekend_days: list[str] = []
+
 
 class BlackoutDateSchema(BaseModel):
     date: str
     title: str
     tags: list[str] = []
 
+
 class StructureSetupRequest(BaseModel):
     system: str
     levels: list[SpineLevelSchema]
     calendar: AcademicSettingsSchema
     blackout_dates: list[BlackoutDateSchema]
+
+
+class ResourceLineUpdate(BaseModel):
+    """All-optional counterpart to ResourceLineIn for PATCH, so changing just
+    the quantity of a resource line doesn't require resending every field."""
+
+    resource_type_id: int | None = None
+    description: str | None = None
+    quantity: int | None = Field(default=None, gt=0)
 
 
 # =============================================================================
@@ -480,4 +493,3 @@ class SchoolSetupStateResponse(BaseModel):
     blocking: list[str] = []
     warnings: list[str] = []
     activated_at: datetime | None = None
-

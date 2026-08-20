@@ -1,0 +1,178 @@
+{
+  "info": {
+    "_postman_id": "b7f3a2c4-6e1d-4f8a-9c2b-1a5d7e3f9c81",
+    "name": "Keycloak Token Diagnostics",
+    "description": "Portable Postman version of back/check_token.py. Gets a real Keycloak access token and checks its iss/aud/kid against this backend's configured KEYCLOAK_ISSUER / KEYCLOAK_AUDIENCE / KEYCLOAK_JWKS_URL (see back/app/core/keycloak_jwt.py). Read-only diagnostic only — decodes without verifying the signature, purely to inspect claims. Run request 1 then request 2, in order.\n\nBefore running: set `username` / `password` to a real, already-registered user's Keycloak credentials (collection variables below, or override them in a Postman Environment so you don't have to edit this file with real creds). Set `expected_issuer` / `expected_audience` to match this backend's .env (KEYCLOAK_ISSUER / KEYCLOAK_AUDIENCE) if you've changed them from the defaults.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "keycloak_url", "value": "http://localhost:8000", "type": "string" },
+    { "key": "realm", "value": "SAMS", "type": "string" },
+    { "key": "client_id", "value": "frontend", "type": "string" },
+    { "key": "username", "value": "", "type": "string" },
+    { "key": "password", "value": "", "type": "string" },
+    { "key": "expected_issuer", "value": "http://localhost:8000/realms/SAMS", "type": "string" },
+    { "key": "expected_audience", "value": "account,apisix,frontend", "type": "string" },
+    { "key": "access_token", "value": "", "type": "string" },
+    { "key": "token_kid", "value": "", "type": "string" },
+    { "key": "token_iss_ok", "value": "", "type": "string" },
+    { "key": "token_aud_ok", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "1. Get Keycloak Access Token",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            { "key": "grant_type", "value": "password", "type": "text" },
+            { "key": "client_id", "value": "{{client_id}}", "type": "text" },
+            { "key": "username", "value": "{{username}}", "type": "text" },
+            { "key": "password", "value": "{{password}}", "type": "text" }
+          ]
+        },
+        "url": {
+          "raw": "{{keycloak_url}}/realms/{{realm}}/protocol/openid-connect/token",
+          "host": [ "{{keycloak_url}}" ],
+          "path": [ "realms", "{{realm}}", "protocol", "openid-connect", "token" ]
+        },
+        "description": "Resource Owner Password Credentials grant against the realm's public `frontend` client (directAccessGrantsEnabled=true in SAMS-realm.json). Requires a real username/password of a user already provisioned in Keycloak."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// Portable Postman equivalent of back/check_token.py.",
+              "function base64UrlDecode(input) {",
+              "    var b64 = input.replace(/-/g, '+').replace(/_/g, '/');",
+              "    while (b64.length % 4) b64 += '=';",
+              "    var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';",
+              "    var output = '';",
+              "    for (var bc = 0, bs = 0, buffer, idx = 0; (buffer = b64.charAt(idx++)); ) {",
+              "        var pos = chars.indexOf(buffer);",
+              "        if (pos === -1) continue;",
+              "        bs = bc % 4 ? bs * 64 + pos : pos;",
+              "        if (bc++ % 4) output += String.fromCharCode(255 & (bs >> (-2 * bc & 6)));",
+              "    }",
+              "    try {",
+              "        return decodeURIComponent(output.split('').map(function (c) {",
+              "            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);",
+              "        }).join(''));",
+              "    } catch (e) {",
+              "        return output;",
+              "    }",
+              "}",
+              "",
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "var body = pm.response.json();",
+              "",
+              "pm.test('Response has access_token', function () {",
+              "    pm.expect(body).to.have.property('access_token');",
+              "});",
+              "",
+              "var token = body.access_token;",
+              "if (!token) {",
+              "    console.log('No access_token in response:', JSON.stringify(body));",
+              "} else {",
+              "    var parts = token.split('.');",
+              "    var header = JSON.parse(base64UrlDecode(parts[0]));",
+              "    var payload = JSON.parse(base64UrlDecode(parts[1]));",
+              "",
+              "    pm.collectionVariables.set('access_token', token);",
+              "    pm.collectionVariables.set('token_kid', header.kid || '');",
+              "",
+              "    var expectedIssuer = pm.collectionVariables.get('expected_issuer');",
+              "    var expectedAudience = (pm.collectionVariables.get('expected_audience') || '')",
+              "        .split(',').map(function (s) { return s.trim(); }).filter(Boolean);",
+              "",
+              "    var tokenAud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];",
+              "    var audOk = tokenAud.some(function (a) { return expectedAudience.indexOf(a) !== -1; });",
+              "    var issOk = payload.iss === expectedIssuer;",
+              "",
+              "    pm.collectionVariables.set('token_iss_ok', String(issOk));",
+              "    pm.collectionVariables.set('token_aud_ok', String(audOk));",
+              "",
+              "    console.log('='.repeat(60));",
+              "    console.log('Header:', JSON.stringify(header, null, 2));",
+              "    console.log('-'.repeat(60));",
+              "    console.log('iss (token)      :', payload.iss);",
+              "    console.log('expected_issuer  :', expectedIssuer);",
+              "    console.log(issOk ? '  -> MATCH' : '  -> MISMATCH — set expected_issuer / KEYCLOAK_ISSUER to the token value above');",
+              "    console.log('aud (token)      :', JSON.stringify(payload.aud));",
+              "    console.log('expected_audience:', expectedAudience.join(','));",
+              "    console.log(audOk ? '  -> MATCH' : '  -> MISMATCH — narrow expected_audience / KEYCLOAK_AUDIENCE to the token value(s) above');",
+              "    console.log('kid (token)      :', header.kid, '(run request 2 to confirm this is in the JWKS)');",
+              "    console.log('Full payload:', JSON.stringify(payload, null, 2));",
+              "",
+              "    pm.test('iss matches expected_issuer', function () { pm.expect(issOk).to.be.true; });",
+              "    pm.test('aud matches expected_audience', function () { pm.expect(audOk).to.be.true; });",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Verify Signing Key (JWKS kid check)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{keycloak_url}}/realms/{{realm}}/protocol/openid-connect/certs",
+          "host": [ "{{keycloak_url}}" ],
+          "path": [ "realms", "{{realm}}", "protocol", "openid-connect", "certs" ]
+        },
+        "description": "Fetches the realm's JWKS and confirms it publishes the `kid` seen in the token's header from request 1. This is the same URL the backend's PyJWKClient (app/core/keycloak_jwt.py) fetches at runtime."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "var body = pm.response.json();",
+              "var keys = body.keys || [];",
+              "",
+              "pm.test('Status code is 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "pm.test('JWKS endpoint returned at least one key', function () {",
+              "    pm.expect(keys.length).to.be.above(0);",
+              "});",
+              "",
+              "var tokenKid = pm.collectionVariables.get('token_kid');",
+              "if (!tokenKid) {",
+              "    console.log('No token_kid saved — run \"1. Get Keycloak Access Token\" first.');",
+              "} else {",
+              "    var match = keys.some(function (k) { return k.kid === tokenKid; });",
+              "",
+              "    console.log('token kid        :', tokenKid);",
+              "    console.log('JWKS kids        :', keys.map(function (k) { return k.kid; }).join(', '));",
+              "    console.log(match ? '  -> MATCH' : \"  -> MISMATCH — JWKS URL does not serve this token's signing key\");",
+              "",
+              "    pm.test(\"JWKS contains the token's kid\", function () { pm.expect(match).to.be.true; });",
+              "",
+              "    var issOk = pm.collectionVariables.get('token_iss_ok') === 'true';",
+              "    var audOk = pm.collectionVariables.get('token_aud_ok') === 'true';",
+              "",
+              "    console.log('='.repeat(60));",
+              "    if (issOk && audOk && match) {",
+              "        console.log('iss, aud, and kid all match. Safe to proceed.');",
+              "    } else {",
+              "        console.log('Mismatch found above — update .env (KEYCLOAK_ISSUER / KEYCLOAK_AUDIENCE / KEYCLOAK_JWKS_URL) accordingly before relying on this in production.');",
+              "    }",
+              "}"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

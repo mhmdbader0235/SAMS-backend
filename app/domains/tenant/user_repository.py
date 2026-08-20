@@ -1,6 +1,7 @@
 """UserRepository — user-related database queries for tenant databases."""
 
 from uuid import UUID
+
 import asyncpg
 
 
@@ -27,47 +28,68 @@ class UserRepository:
 
     async def create_user(self, email: str, password_hash: str, role: str) -> int:
         """Insert a new tenant user and return their bigint ID."""
-        valid_roles = ('super_admin', 'school_admin', 'admin', 'teacher', 'parent', 'student', 'manager', 'finance', 'event_teacher', 'pending')
+        valid_roles = (
+            "super_admin",
+            "school_admin",
+            "admin",
+            "teacher",
+            "parent",
+            "student",
+            "manager",
+            "event_teacher",
+            "pending",
+        )
         if role not in valid_roles:
             raise ValueError(f"Invalid tenant user role: {role}")
-        return await self.pool.fetchval(
-            """
-            INSERT INTO users (email, password_hash, role)
-            VALUES ($1, $2, $3)
-            RETURNING id
-            """,
-            email.strip().lower(),
-            password_hash,
-            role,
-        )
+        try:
+            return await self.pool.fetchval(
+                """
+                INSERT INTO users (email, password_hash, role)
+                VALUES ($1, $2, $3)
+                RETURNING id
+                """,
+                email.strip().lower(),
+                password_hash,
+                role,
+            )
+        except asyncpg.UniqueViolationError as exc:
+            raise ValueError("Email already registered") from exc
 
     async def get_users_by_role(self, role: str) -> list[dict]:
         """Fetch users matching a specific role."""
         rows = await self.pool.fetch(
             "SELECT id, email, role, created_at FROM users WHERE role = $1 ORDER BY created_at DESC",
-            role
+            role,
         )
         return [dict(row) for row in rows]
 
     async def update_user_role(self, email: str, new_role: str) -> bool:
         """Update a user's role and roles array."""
-        valid_roles = ('super_admin', 'school_admin', 'admin', 'teacher', 'parent', 'student', 'manager', 'finance', 'event_teacher', 'pending')
+        valid_roles = (
+            "super_admin",
+            "school_admin",
+            "admin",
+            "teacher",
+            "parent",
+            "student",
+            "manager",
+            "event_teacher",
+            "pending",
+        )
         if new_role not in valid_roles:
             raise ValueError(f"Invalid tenant user role: {new_role}")
-        
+
         try:
             res = await self.pool.execute(
                 "UPDATE users SET role = $1, roles = ARRAY[$1]::TEXT[] WHERE UPPER(email) = UPPER($2)",
                 new_role,
-                email.strip()
+                email.strip(),
             )
             return res == "UPDATE 1"
         except Exception:
             # Fallback if 'roles' column doesn't exist
             res = await self.pool.execute(
-                "UPDATE users SET role = $1 WHERE UPPER(email) = UPPER($2)",
-                new_role,
-                email.strip()
+                "UPDATE users SET role = $1 WHERE UPPER(email) = UPPER($2)", new_role, email.strip()
             )
             return res == "UPDATE 1"
 
@@ -78,11 +100,11 @@ class UserRepository:
         try:
             row = await self.pool.fetchrow(
                 """
-                SELECT id, email, password_hash, role, 
+                SELECT id, email, password_hash, role, phone, address,
                        COALESCE(roles, ARRAY[]::TEXT[]) as roles,
                        COALESCE(permissions, ARRAY[]::TEXT[]) as permissions,
-                       created_at 
-                FROM users 
+                       created_at
+                FROM users
                 WHERE UPPER(email) = UPPER($1)
                 """,
                 email.strip(),
@@ -92,8 +114,8 @@ class UserRepository:
             try:
                 row = await self.pool.fetchrow(
                     """
-                    SELECT id, email, password_hash, role, created_at 
-                    FROM users 
+                    SELECT id, email, password_hash, role, phone, address, created_at
+                    FROM users
                     WHERE UPPER(email) = UPPER($1)
                     """,
                     email.strip(),
@@ -114,11 +136,11 @@ class UserRepository:
             try:
                 row = await self.pool.fetchrow(
                     """
-                    SELECT id, email, role, 
+                    SELECT id, email, role,
                            COALESCE(roles, ARRAY[]::TEXT[]) as roles,
                            COALESCE(permissions, ARRAY[]::TEXT[]) as permissions,
-                           created_at 
-                    FROM users 
+                           created_at
+                    FROM users
                     WHERE id = $1
                     """,
                     parsed,
@@ -128,8 +150,8 @@ class UserRepository:
                 try:
                     row = await self.pool.fetchrow(
                         """
-                        SELECT id, email, role, created_at 
-                        FROM users 
+                        SELECT id, email, role, created_at
+                        FROM users
                         WHERE id = $1
                         """,
                         parsed,
@@ -154,7 +176,7 @@ class UserRepository:
                     SELECT id, email, role, phone, address,
                            COALESCE(roles, ARRAY[]::TEXT[]) as roles,
                            COALESCE(permissions, ARRAY[]::TEXT[]) as permissions
-                    FROM users 
+                    FROM users
                     WHERE id = $1
                     """,
                     parsed,
@@ -165,7 +187,7 @@ class UserRepository:
                     row = await self.pool.fetchrow(
                         """
                         SELECT id, email, role, phone, address
-                        FROM users 
+                        FROM users
                         WHERE id = $1
                         """,
                         parsed,
@@ -182,14 +204,6 @@ class UserRepository:
 
     async def get_all_tenant_users(self) -> list[dict]:
         """Fetch all users in the tenant schema with their assigned roles and permissions."""
-        try:
-            await self.pool.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS roles TEXT[] DEFAULT '{}';")
-            await self.pool.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions TEXT[] DEFAULT '{}';")
-            await self.pool.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50) DEFAULT NULL;")
-            await self.pool.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT DEFAULT NULL;")
-        except Exception:
-            pass
-
         try:
             rows = await self.pool.fetch(
                 """
@@ -232,29 +246,22 @@ class UserRepository:
                     print(f"[UserRepository.get_all_tenant_users] Error fetching users: {e}")
                     return []
 
-
     async def update_user_roles_and_permissions(
         self, user_id, primary_role: str, roles: list[str], permissions: list[str]
     ) -> dict | None:
         """Update a tenant user's primary role, composite roles, and custom permissions."""
-        try:
-            await self.pool.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS roles TEXT[] DEFAULT '{}';")
-            await self.pool.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions TEXT[] DEFAULT '{}';")
-        except Exception:
-            pass
-
         parsed = parse_id(user_id)
-        if primary_role in ('pending', 'none', 'unassigned'):
+        if primary_role in ("pending", "none", "unassigned"):
             all_roles = [primary_role]
             permissions = []
         else:
-            clean_roles = [r for r in roles if r and r not in ('pending', 'none', 'unassigned')]
+            clean_roles = [r for r in roles if r and r not in ("pending", "none", "unassigned")]
             all_roles = list(dict.fromkeys([primary_role] + clean_roles))
-        
+
         if isinstance(parsed, (int, UUID)):
             row = await self.pool.fetchrow(
                 """
-                UPDATE users 
+                UPDATE users
                 SET role = $1, roles = $2, permissions = $3
                 WHERE id = $4
                 RETURNING id, email, role, roles, permissions, phone, address, created_at
@@ -271,7 +278,7 @@ class UserRepository:
         if isinstance(user_id, str) and "@" in user_id:
             row = await self.pool.fetchrow(
                 """
-                UPDATE users 
+                UPDATE users
                 SET role = $1, roles = $2, permissions = $3
                 WHERE UPPER(email) = UPPER($4)
                 RETURNING id, email, role, roles, permissions, phone, address, created_at
@@ -329,8 +336,14 @@ class UserRepository:
                 if not row:
                     return None
 
-                await conn.execute("UPDATE event SET manager_reviewer_id = NULL WHERE manager_reviewer_id = $1", parsed)
-                await conn.execute("UPDATE event SET finance_reviewer_id = NULL WHERE finance_reviewer_id = $1", parsed)
+                await conn.execute(
+                    "UPDATE event SET manager_reviewer_id = NULL WHERE manager_reviewer_id = $1",
+                    parsed,
+                )
+                await conn.execute(
+                    "UPDATE event SET finance_reviewer_id = NULL WHERE finance_reviewer_id = $1",
+                    parsed,
+                )
                 try:
                     await conn.execute("DELETE FROM users WHERE id = $1", parsed)
                 except asyncpg.exceptions.ForeignKeyViolationError as exc:
@@ -339,5 +352,3 @@ class UserRepository:
                         "until those records are reassigned to another staff member."
                     ) from exc
                 return dict(row)
-
-

@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.database import db_manager, get_control_plane_pool
+from app.core.keycloak_jwt import start_jwks_refresh_loop, stop_jwks_refresh_loop
 from app.domains.analytics.router import router as analytics_router
 from app.domains.auth.router import router as auth_router, router_gated as auth_gated_router
 from app.domains.events.router import router as events_router
@@ -47,18 +48,22 @@ async def lifespan(application: FastAPI):  # noqa: ARG001
         ensure_keycloak_frontend_redirect_uris()
     except Exception as exc:
         print(f"[startup] Warning: could not initialize Control-Plane DB: {exc}")
-    
+
+    await start_jwks_refresh_loop()
+    print("[startup] Keycloak JWKS fetch/refresh loop started.")
+
     # Start the event reminders scheduler in the background
     scheduler_task = asyncio.create_task(event_reminders_scheduler())
-    
+
     yield
-    
+
     scheduler_task.cancel()
     try:
         await scheduler_task
     except asyncio.CancelledError:
         pass
-        
+
+    await stop_jwks_refresh_loop()
     await db_manager.disconnect_all()
     print("[shutdown] All tenant/control-plane connection pools closed.")
 

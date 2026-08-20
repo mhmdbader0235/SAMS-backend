@@ -1,0 +1,4 @@
+Schema-per-tenant configuration, not a generic single-database one — two
+independent migration branches ("control_plane" and "tenant") share this one
+versions/ directory. See env.py's module docstring and back/README.md's
+"Run database migrations" step for how to invoke each branch.

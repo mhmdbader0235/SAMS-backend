@@ -9,7 +9,6 @@ import os
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-
 import jwt
 from passlib.context import CryptContext
 
@@ -49,10 +48,14 @@ def _get_verification_key() -> tuple[str | bytes, str]:
             with open(JWT_PUBLIC_KEY_PATH, "rb") as f:
                 cert_data = f.read()
             cert = x509.load_pem_x509_certificate(cert_data)
-            public_key_pem = cert.public_key().public_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PublicFormat.SubjectPublicKeyInfo,
-            ).decode("utf-8")
+            public_key_pem = (
+                cert.public_key()
+                .public_bytes(
+                    encoding=serialization.Encoding.PEM,
+                    format=serialization.PublicFormat.SubjectPublicKeyInfo,
+                )
+                .decode("utf-8")
+            )
             return public_key_pem, "RS256"
         except Exception:
             pass
@@ -71,7 +74,9 @@ class AuthService:
         return _pwd_context.verify(plain_password, hashed_password)
 
     @staticmethod
-    def create_access_token(user_id, tenant_id: str | None, role: str, email: str = "", roles: list[str] | None = None) -> str:
+    def create_access_token(
+        user_id, tenant_id: str | None, role: str, email: str = "", roles: list[str] | None = None
+    ) -> str:
         """Create a signed JWT containing user_id, tenant_id, role, roles, and email."""
         expires_at = datetime.now(UTC) + timedelta(minutes=JWT_EXPIRATION_MINUTES)
         payload = {
@@ -84,7 +89,6 @@ class AuthService:
         }
         key, algorithm = _get_signing_key()
         return jwt.encode(payload, key, algorithm=algorithm)
-
 
     @staticmethod
     def decode_access_token(token: str) -> dict | None:
@@ -144,8 +148,18 @@ class AuthService:
                         "is_active": True,
                     }
 
+        from app.core.config import SUPER_ADMIN_BOOTSTRAP_CODE
+
         fallback_codes = {"school-staff-2026", "regester123", "register123", "teacher-pass-2026"}
-        if not inv_record and code_str.lower() not in fallback_codes:
+        is_recognized = (
+            code_str.lower() in fallback_codes
+            # Case-sensitive and role-scoped on purpose: this code must not
+            # also work as a staff passphrase for teacher/manager/etc, or
+            # F-01's "one shared secret grants full cross-tenant access" gap
+            # just reopens under a new name.
+            or (role == "super_admin" and code_str == SUPER_ADMIN_BOOTSTRAP_CODE)
+        )
+        if not inv_record and not is_recognized:
             raise ValueError("Invalid or unrecognized invitation code")
 
         invitation = None
@@ -182,19 +196,28 @@ class AuthService:
         password_hash = AuthService.hash_password(password)
 
         if role == "super_admin":
+            if not invitation:
+                from app.core.config import SUPER_ADMIN_BOOTSTRAP_CODE
+
+                if code_str != SUPER_ADMIN_BOOTSTRAP_CODE:
+                    raise PermissionError(
+                        "super_admin accounts require the dedicated platform bootstrap code, "
+                        "not a staff self-registration passphrase."
+                    )
             if await cp_repo.get_super_admin_by_email(email):
                 raise ValueError("Email already registered")
             user_id = await cp_repo.create_super_admin(email, password_hash)
             sync_user_to_keycloak(email, password, "super_admin")
             if invitation:
                 await cp_repo.increment_invitation_uses(invitation["code"])
-            return AuthService.create_access_token(user_id, tenant_id="", role="super_admin", email=email)
-
+            return AuthService.create_access_token(
+                user_id, tenant_id="", role="super_admin", email=email
+            )
 
         elif role == "parent":
             if not tenant_id:
                 raise ValueError("Tenant ID is required for parent registration")
-            
+
             # 1. Register parent globally in control plane
             global_parent = await cp_repo.get_parent_by_email(email)
             if global_parent:
@@ -203,7 +226,7 @@ class AuthService:
                 global_parent_id = global_parent["id"]
             else:
                 global_parent_id = await cp_repo.create_parent(email, password_hash)
-            
+
             await cp_repo.add_parent_tenant_link(global_parent_id, tenant_id)
 
             # 2. Register parent locally inside the tenant database
@@ -222,9 +245,11 @@ class AuthService:
             await cp_repo.upsert_user_tenant_map(email, tenant_id, "parent")
             if invitation:
                 await cp_repo.increment_invitation_uses(invitation["code"])
-            return AuthService.create_access_token(local_user_id, tenant_id=tenant_id, role="parent", email=email)
+            return AuthService.create_access_token(
+                local_user_id, tenant_id=tenant_id, role="parent", email=email
+            )
 
-        elif role in ("school_admin", "teacher", "student", "manager", "finance", "event_teacher"):
+        elif role in ("school_admin", "teacher", "student", "manager", "event_teacher"):
             if not tenant_id:
                 raise ValueError("Tenant ID is required for school users")
 
@@ -240,21 +265,29 @@ class AuthService:
                     "a super_admin or an existing school_admin for this tenant."
                 )
 
-            if not invitation and role in ("teacher", "manager", "finance", "event_teacher"):
+            if not invitation and role in ("teacher", "manager", "event_teacher"):
                 from app.core.config import TEACHER_INVITE_CODE
-                valid_codes = {TEACHER_INVITE_CODE, "regester123", "register123", "SCHOOL-STAFF-2026"}
+
+                valid_codes = {
+                    TEACHER_INVITE_CODE,
+                    "regester123",
+                    "register123",
+                    "SCHOOL-STAFF-2026",
+                }
                 if not invite_code or invite_code.strip() not in valid_codes:
                     raise PermissionError("Invalid or missing registration pass")
 
             tenant_pool = await get_db_pool(tenant_id)
             user_repo = UserRepository(tenant_pool)
             tenant_repo = TenantRepository(tenant_pool)
-            
+
             if await user_repo.get_user_by_email(email):
                 raise ValueError("Email already registered")
-                
+
             local_user_id = await user_repo.create_user(email, password_hash, role)
-            user_name = (name or f"{first_name or ''} {last_name or ''}".strip()) or email.split("@")[0].title()
+            user_name = (name or f"{first_name or ''} {last_name or ''}".strip()) or email.split(
+                "@"
+            )[0].title()
 
             # Create corresponding teacher / student details
             if role == "teacher":
@@ -277,9 +310,13 @@ class AuthService:
                         t_id = all_teachers[0]["id"]
                     else:
                         # Auto-create dummy staff user
-                        t_user_id = await user_repo.create_user(f"teacher_{tenant_id}@school.com", AuthService.hash_password("password"), "teacher")
+                        t_user_id = await user_repo.create_user(
+                            f"teacher_{tenant_id}@school.com",
+                            AuthService.hash_password("password"),
+                            "teacher",
+                        )
                         t_id = await tenant_repo.create_teacher(t_user_id, "Primary Head Teacher")
-                    
+
                     cls_id = await tenant_repo.create_class("General", lvl_id, t_id)
 
                 await tenant_repo.create_student(
@@ -289,7 +326,9 @@ class AuthService:
                 )
 
             # Sync user to Keycloak realm
-            sync_user_to_keycloak(email, password, role, tenant_id, first_name=first_name, last_name=last_name)
+            sync_user_to_keycloak(
+                email, password, role, tenant_id, first_name=first_name, last_name=last_name
+            )
             # Save email→tenant mapping for Keycloak token resolution
             await cp_repo.upsert_user_tenant_map(email, tenant_id, role)
 
@@ -312,7 +351,9 @@ class AuthService:
         if super_admin:
             if not AuthService.verify_password(password, super_admin["password_hash"]):
                 raise ValueError("Invalid email or password")
-            return AuthService.create_access_token(super_admin["id"], tenant_id="", role="super_admin", email=email)
+            return AuthService.create_access_token(
+                super_admin["id"], tenant_id="", role="super_admin", email=email
+            )
 
         # Auto-resolve tenant_id from control plane or tenant search if not explicitly passed
         if not tenant_id:
@@ -342,7 +383,7 @@ class AuthService:
         if parent:
             if not AuthService.verify_password(password, parent["password_hash"]):
                 raise ValueError("Invalid email or password")
-            
+
             is_linked = await cp_repo.check_parent_tenant_link(parent["id"], tenant_id)
             if not is_linked:
                 # Link parent to the resolved tenant automatically
@@ -354,13 +395,19 @@ class AuthService:
             tenant_repo = TenantRepository(tenant_pool)
             local_user = await user_repo.get_user_by_email(email)
             if not local_user:
-                local_user_id = await user_repo.create_user(email, parent["password_hash"], "parent")
-                await tenant_repo.create_parent(local_user_id, email.split("@")[0].title(), parent.get("phone"))
+                local_user_id = await user_repo.create_user(
+                    email, parent["password_hash"], "parent"
+                )
+                await tenant_repo.create_parent(
+                    local_user_id, email.split("@")[0].title(), parent.get("phone")
+                )
             else:
                 local_user_id = local_user["id"]
             # Save email→tenant mapping so Keycloak logins resolve correctly
             await cp_repo.upsert_user_tenant_map(email, tenant_id, "parent")
-            return AuthService.create_access_token(local_user_id, tenant_id=tenant_id, role="parent", email=email)
+            return AuthService.create_access_token(
+                local_user_id, tenant_id=tenant_id, role="parent", email=email
+            )
 
         # Check Tenant users (school_admin, teacher, student, parent)
         tenant_pool = await get_db_pool(tenant_id)
@@ -371,14 +418,18 @@ class AuthService:
 
         # Save email→tenant mapping so Keycloak logins resolve correctly
         await cp_repo.upsert_user_tenant_map(email, tenant_id, user["role"])
-        
+
         # Include all custom roles and permissions from database
-        user_roles = list(dict.fromkeys(
-            ([user["role"]] if user.get("role") else []) +
-            list(user.get("roles") or []) +
-            list(user.get("permissions") or [])
-        ))
-        return AuthService.create_access_token(user["id"], tenant_id, user["role"], email=email, roles=user_roles)
+        user_roles = list(
+            dict.fromkeys(
+                ([user["role"]] if user.get("role") else [])
+                + list(user.get("roles") or [])
+                + list(user.get("permissions") or [])
+            )
+        )
+        return AuthService.create_access_token(
+            user["id"], tenant_id, user["role"], email=email, roles=user_roles
+        )
 
     @staticmethod
     async def list_tenants() -> list[dict]:
@@ -392,13 +443,13 @@ class AuthService:
         """Create a new tenant record and generate its PostgreSQL schema and tables."""
         cp_pool = await get_control_plane_pool()
         cp_repo = ControlPlaneRepository(cp_pool)
-        
+
         # 1. Insert tenant in control plane
         await cp_repo.create_tenant(tenant_id=tenant_id, name=name)
-        
+
         # 2. Trigger schema creation and table initialization in PostgreSQL
         await get_db_pool(tenant_id)
-        
+
         return {
             "tenant_id": tenant_id,
             "name": name,
@@ -416,9 +467,10 @@ class AuthService:
     ) -> dict:
         """Generate a secure, role- & tenant-scoped invitation token."""
         import secrets
+
         code = f"INV-{tenant_id.upper()}-{role.upper()}-{secrets.token_hex(4).upper()}"
         expires_at = datetime.now(UTC) + timedelta(days=valid_days)
-        
+
         cp_pool = await get_control_plane_pool()
         cp_repo = ControlPlaneRepository(cp_pool)
         inv = await cp_repo.create_invitation(
@@ -430,16 +482,15 @@ class AuthService:
             expires_at=expires_at,
             created_by=created_by,
         )
-        
+
         # Send an email if a target email was provided
         if target_email:
             from app.utils.email import send_invitation_email
+
             await send_invitation_email(
-                to_email=target_email.strip().lower(),
-                invite_code=code,
-                role=role
+                to_email=target_email.strip().lower(), invite_code=code, role=role
             )
-            
+
         return inv
 
     @staticmethod
@@ -489,7 +540,7 @@ class AuthService:
 
         if not inv or not inv.get("is_active", True):
             raise ValueError("Invalid or inactive invitation code")
-        
+
         exp = inv.get("expires_at")
         if exp:
             if exp.tzinfo is None:
@@ -511,7 +562,17 @@ class AuthService:
     @staticmethod
     async def assign_user_role(tenant_id: str, email: str, new_role: str) -> dict:
         """Assign a new role to a pending user (or update an existing role)."""
-        valid_roles = ('super_admin', 'school_admin', 'admin', 'teacher', 'parent', 'student', 'manager', 'finance', 'event_teacher', 'pending')
+        valid_roles = (
+            "super_admin",
+            "school_admin",
+            "admin",
+            "teacher",
+            "parent",
+            "student",
+            "manager",
+            "event_teacher",
+            "pending",
+        )
         if new_role not in valid_roles:
             raise ValueError(f"Invalid role: {new_role}")
 
@@ -534,35 +595,47 @@ class AuthService:
         # 2. Ensure profile records in tenant DB
         try:
             async with db_pool.acquire() as conn_t:
-                if new_role in ("teacher", "event_teacher", "school_admin", "manager", "finance", "admin"):
+                if new_role in ("teacher", "event_teacher", "school_admin", "manager", "admin"):
                     await conn_t.execute(
                         "INSERT INTO teachers (id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING",
                         user_id,
-                        user_display_name
+                        user_display_name,
                     )
                 elif new_role == "student":
                     c_id = await conn_t.fetchval("SELECT id FROM class LIMIT 1")
                     if c_id is None:
                         l_id = await conn_t.fetchval("SELECT level_id FROM levels LIMIT 1")
                         if l_id is None:
-                            l_id = await conn_t.fetchval("INSERT INTO levels (name) VALUES ('Grade 1') RETURNING level_id")
+                            l_id = await conn_t.fetchval(
+                                "INSERT INTO levels (name) VALUES ('Grade 1') RETURNING level_id"
+                            )
                         t_id = await conn_t.fetchval("SELECT id FROM teachers LIMIT 1")
                         if t_id is None:
-                            t_u = await conn_t.fetchval("INSERT INTO users (email, role, password_hash) VALUES ($1, 'teacher', 'managed') RETURNING id", f"head_teacher_{tenant_id}@school.com")
-                            t_id = await conn_t.fetchval("INSERT INTO teachers (id, name) VALUES ($1, 'Head Teacher') RETURNING id", t_u)
-                        c_id = await conn_t.fetchval("INSERT INTO class (name, level_id, head_teacher_id) VALUES ('Default Class', $1, $2) RETURNING id", l_id, t_id)
+                            t_u = await conn_t.fetchval(
+                                "INSERT INTO users (email, role, password_hash) VALUES ($1, 'teacher', 'managed') RETURNING id",
+                                f"head_teacher_{tenant_id}@school.com",
+                            )
+                            t_id = await conn_t.fetchval(
+                                "INSERT INTO teachers (id, name) VALUES ($1, 'Head Teacher') RETURNING id",
+                                t_u,
+                            )
+                        c_id = await conn_t.fetchval(
+                            "INSERT INTO class (name, level_id, head_teacher_id) VALUES ('Default Class', $1, $2) RETURNING id",
+                            l_id,
+                            t_id,
+                        )
                     await conn_t.execute(
                         "INSERT INTO students (id, name, class_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
                         user_id,
                         user_display_name,
-                        c_id
+                        c_id,
                     )
                 elif new_role == "parent":
                     try:
                         await conn_t.execute(
                             "INSERT INTO parenets (id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING",
                             user_id,
-                            user_display_name
+                            user_display_name,
                         )
                     except Exception:
                         pass
@@ -579,7 +652,7 @@ class AuthService:
                 async with cp_pool.acquire() as conn_cp:
                     await conn_cp.execute(
                         "INSERT INTO super_admins (email, password_hash) VALUES ($1, 'managed') ON CONFLICT DO NOTHING",
-                        email
+                        email,
                     )
             except Exception as _e:
                 print(f"[assign_user_role] Warning super_admins insert: {_e}")
@@ -587,9 +660,9 @@ class AuthService:
         # 4. Update Keycloak
         try:
             from app.core.keycloak_admin import update_user_role_in_keycloak
+
             update_user_role_in_keycloak(email, new_role, tenant_id)
         except Exception as _e:
             print(f"[assign_user_role] Warning Keycloak update for {email}: {_e}")
 
         return {"status": "ok", "email": email, "role": new_role}
-

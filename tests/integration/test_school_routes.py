@@ -38,6 +38,10 @@ async def _register(test_client: AsyncClient, email: str, role: str, invite_code
     if role == "school_admin":
         token = await register_school_admin(test_client, email)
         return {"Authorization": f"Bearer {token}"}
+    if role == "super_admin":
+        from app.core.config import SUPER_ADMIN_BOOTSTRAP_CODE
+
+        invite_code = SUPER_ADMIN_BOOTSTRAP_CODE
 
     payload = {
         "email": email,

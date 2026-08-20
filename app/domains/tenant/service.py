@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from cryptography.fernet import Fernet
+
 from app.core.config import ENCRYPTION_KEY
 from app.core.database import get_control_plane_pool, get_db_pool
 from app.core.keycloak_admin import sync_user_to_keycloak
@@ -70,7 +71,7 @@ class TenantService:
             roles = set(user_role)
         else:
             roles = {str(user_role)}
-            
+
         reqs = {allowed_roles} if isinstance(allowed_roles, str) else set(allowed_roles)
 
         if "super_admin" in roles or "*" in roles:
@@ -80,6 +81,7 @@ class TenantService:
             roles.add("school_admin")
 
         from app.core.dependencies import COMPOSITE_ROLE_PERMISSIONS
+
         expanded_roles = set(roles)
         for r in list(roles):
             if r in COMPOSITE_ROLE_PERMISSIONS:
@@ -132,8 +134,8 @@ class TenantService:
             "resource:edit": {"teacher", "school_admin", "manager"},
             "resource:update": {"teacher", "school_admin", "manager"},
             "resource:delete": {"teacher", "school_admin", "manager"},
-            "resource:price": {"finance", "manager", "school_admin"},
-            "resource:set_cost": {"finance", "manager", "school_admin"},
+            "resource:price": {"manager", "school_admin"},
+            "resource:set_cost": {"manager", "school_admin"},
             "resource_type:create": {"teacher", "school_admin"},
             "resource_type:read": {"school_admin", "manager", "teacher"},
             "enrollment:request": {"student", "parent"},
@@ -142,12 +144,12 @@ class TenantService:
             "enrollment:cancel": {"parent", "student", "school_admin"},
             "enrollment:view_roster": {"school_admin", "manager", "teacher"},
             "enrollment:read": {"school_admin", "manager", "teacher", "parent", "student"},
-            "billing:invoice": {"finance", "manager", "school_admin"},
+            "billing:invoice": {"manager", "school_admin"},
             "billing:pay": {"parent", "manager", "school_admin"},
-            "billing:refund": {"finance", "manager", "school_admin"},
-            "billing:audit": {"finance", "manager", "school_admin"},
-            "billing:view_payment": {"parent", "finance", "manager", "school_admin"},
-            "subsidy:manage": {"finance", "manager", "school_admin"},
+            "billing:refund": {"manager", "school_admin"},
+            "billing:audit": {"manager", "school_admin"},
+            "billing:view_payment": {"parent", "manager", "school_admin"},
+            "subsidy:manage": {"manager", "school_admin"},
             "audit:view": {"school_admin"},
             "health:view": {"school_admin", "teacher"},
             "health:manage": {"school_admin"},
@@ -166,7 +168,6 @@ class TenantService:
                 expanded_roles.update(PERMISSION_TO_HIGH_LEVEL_ROLE_MAP[r])
 
         return bool(expanded_roles.intersection(reqs))
-
 
     # =========================================================================
     # Levels
@@ -227,7 +228,7 @@ class TenantService:
         if not TenantService._has_intersection(user_role, "school_admin"):
             raise PermissionError("Only school admins can register staff users")
 
-        if role not in ("manager", "finance"):
+        if role != "manager":
             raise ValueError("Invalid staff role")
 
         pool = await get_db_pool(tenant_id)
@@ -306,14 +307,18 @@ class TenantService:
         return await repo.get_student_by_id(student_id)
 
     @staticmethod
-    async def link_student_parent(tenant_id: str, student_id, parent_id, user_role: str | list[str], user_id=None) -> None:
+    async def link_student_parent(
+        tenant_id: str, student_id, parent_id, user_role: str | list[str], user_id=None
+    ) -> None:
         if not TenantService._has_intersection(user_role, {"school_admin", "teacher"}):
             raise PermissionError("Only school admins and teachers can link students and parents")
-            
+
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
-        
-        if TenantService._has_intersection(user_role, "teacher") and not TenantService._has_intersection(user_role, "school_admin"):
+
+        if TenantService._has_intersection(
+            user_role, "teacher"
+        ) and not TenantService._has_intersection(user_role, "school_admin"):
             # Teacher must be the head teacher of the student's class
             student = await repo.get_student_by_id(student_id)
             if not student:
@@ -321,7 +326,7 @@ class TenantService:
             class_info = await repo.get_class_by_head_teacher(user_id)
             if not class_info or class_info["id"] != student["class_id"]:
                 raise PermissionError("You can only link parents to students in your own class")
-                
+
         await repo.add_student_parent_link(student_id, parent_id)
 
     @staticmethod
@@ -335,9 +340,16 @@ class TenantService:
     # =========================================================================
     @staticmethod
     async def create_class(
-        tenant_id: str, name: str, level_id: int, head_teacher_id = None, capacity: int = 25, user_role: str | list[str] = ""
+        tenant_id: str,
+        name: str,
+        level_id: int,
+        head_teacher_id=None,
+        capacity: int = 25,
+        user_role: str | list[str] = "",
     ) -> int:
-        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin", "admin", "teacher", "class:write"}):
+        if not TenantService._has_intersection(
+            user_role, {"school_admin", "super_admin", "admin", "teacher", "class:write"}
+        ):
             raise PermissionError("Only staff can create classes")
 
         pool = await get_db_pool(tenant_id)
@@ -365,7 +377,7 @@ class TenantService:
         class_id: int,
         name: str | None = None,
         level_id: int | None = None,
-        head_teacher_id = None,
+        head_teacher_id=None,
         capacity: int | None = None,
         user_role: str | list[str] = "",
     ) -> dict:
@@ -376,7 +388,7 @@ class TenantService:
             name=name,
             level_id=level_id,
             head_teacher_id=head_teacher_id,
-            capacity=capacity
+            capacity=capacity,
         )
 
     @staticmethod
@@ -418,7 +430,7 @@ class TenantService:
             age_band_min=age_band_min,
             age_band_max=age_band_max,
             ordinal=ordinal,
-            is_active=is_active
+            is_active=is_active,
         )
 
     @staticmethod
@@ -431,7 +443,9 @@ class TenantService:
     async def reassign_student_class(
         tenant_id: str, student_id, new_class_id: int | None, user_role: str | list[str] = ""
     ) -> bool:
-        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin", "admin", "teacher", "student:manage"}):
+        if not TenantService._has_intersection(
+            user_role, {"school_admin", "super_admin", "admin", "teacher", "student:manage"}
+        ):
             raise PermissionError("Only staff can reassign student classes")
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
@@ -439,15 +453,18 @@ class TenantService:
 
     @staticmethod
     async def bulk_reassign_students(
-        tenant_id: str, student_ids: list[int], new_class_id: int | None, user_role: str | list[str] = ""
+        tenant_id: str,
+        student_ids: list[int],
+        new_class_id: int | None,
+        user_role: str | list[str] = "",
     ) -> int:
-        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin", "admin", "teacher", "student:manage"}):
+        if not TenantService._has_intersection(
+            user_role, {"school_admin", "super_admin", "admin", "teacher", "student:manage"}
+        ):
             raise PermissionError("Only staff can reassign student classes")
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
         return await repo.bulk_reassign_students(student_ids, new_class_id)
-
-
 
     # =========================================================================
     # Events & Targets
@@ -469,7 +486,7 @@ class TenantService:
 
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
-        
+
         event = await repo.create_event(
             title=title,
             description=description,
@@ -520,7 +537,9 @@ class TenantService:
         class_mappings = [
             {
                 "class_id": m["class_id"],
-                "ticket_price": float(m["ticket_price"]) if m.get("ticket_price") is not None else 0.0,
+                "ticket_price": (
+                    float(m["ticket_price"]) if m.get("ticket_price") is not None else 0.0
+                ),
                 "budgets": [],
             }
             for m in original.get("class_mappings", [])
@@ -570,7 +589,9 @@ class TenantService:
         date_val: datetime,
         user_role: str | list[str],
     ) -> dict:
-        if not TenantService._has_intersection(user_role, {"school_admin", "teacher", "event_teacher", "manager"}):
+        if not TenantService._has_intersection(
+            user_role, {"school_admin", "teacher", "event_teacher", "manager"}
+        ):
             raise PermissionError("Only staff can update events")
 
         pool = await get_db_pool(tenant_id)
@@ -612,12 +633,12 @@ class TenantService:
             if not teacher_class:
                 raise PermissionError("Teacher is not a head teacher of any class")
             teacher_class_id = teacher_class["id"]
-            
+
             # Load the existing event to verify if this teacher's class is targeted
             existing_event = await repo.get_event_by_id(event_id)
             if not existing_event:
                 raise ValueError("Event not found")
-                
+
             target_class_ids = {int(m["class_id"]) for m in existing_event["class_mappings"]}
             if int(teacher_class_id) not in target_class_ids:
                 raise PermissionError("Access denied. Event is not mapped to your class.")
@@ -627,9 +648,9 @@ class TenantService:
             for mapping in class_mappings:
                 if parse_id(mapping["class_id"]) == parse_id(teacher_class_id):
                     filtered_mappings.append(mapping)
-            
+
             class_mappings = filtered_mappings
-            
+
         else:
             raise PermissionError("Only staff can update events")
 
@@ -647,7 +668,9 @@ class TenantService:
         return event
 
     @staticmethod
-    async def get_events_for_user(tenant_id: str, user_id, user_role: str | list[str]) -> list[dict]:
+    async def get_events_for_user(
+        tenant_id: str, user_id, user_role: str | list[str]
+    ) -> list[dict]:
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
 
@@ -656,14 +679,19 @@ class TenantService:
                 self.id = id
                 self.role = role
                 self.roles = roles or [role]
-        actor = Actor(user_id, user_role[0] if isinstance(user_role, list) and user_role else (user_role or "student"), user_role if isinstance(user_role, list) else [user_role or "student"])
+
+        actor = Actor(
+            user_id,
+            user_role[0] if isinstance(user_role, list) and user_role else (user_role or "student"),
+            user_role if isinstance(user_role, list) else [user_role or "student"],
+        )
 
         roles = {user_role} if isinstance(user_role, str) else set(user_role)
 
-        if roles.intersection({"super_admin", "school_admin", "manager", "finance", "event_teacher"}):
+        if roles.intersection({"super_admin", "school_admin", "manager", "event_teacher"}):
             events = await repo.get_all_events()
             return [ev for ev in events if TenantService.check_event_permission(actor, ev, "read")]
-        
+
         filtered_events = []
         already_added = set()
 
@@ -673,7 +701,13 @@ class TenantService:
             events = await repo.get_all_events()
             for ev in events:
                 if ev["id"] not in already_added:
-                    if TenantService.check_event_permission(actor, ev, "read") or (teacher_class_id and any(m.get("class_id") == teacher_class_id for m in ev.get("class_mappings", []))):
+                    if TenantService.check_event_permission(actor, ev, "read") or (
+                        teacher_class_id
+                        and any(
+                            m.get("class_id") == teacher_class_id
+                            for m in ev.get("class_mappings", [])
+                        )
+                    ):
                         filtered_events.append(ev)
                         already_added.add(ev["id"])
 
@@ -707,8 +741,22 @@ class TenantService:
                     filtered_events.append(ev)
                     already_added.add(ev["id"])
 
-        if roles.intersection({"super_admin", "school_admin", "manager", "finance", "event_teacher", "teacher", "student", "parent"}):
-            return sorted(filtered_events, key=lambda e: e["date"]) if filtered_events else filtered_events
+        if roles.intersection(
+            {
+                "super_admin",
+                "school_admin",
+                "manager",
+                "event_teacher",
+                "teacher",
+                "student",
+                "parent",
+            }
+        ):
+            return (
+                sorted(filtered_events, key=lambda e: e["date"])
+                if filtered_events
+                else filtered_events
+            )
 
         return []
 
@@ -738,7 +786,9 @@ class TenantService:
             raise ValueError("Student not found")
 
         # 3. Check if student is already enrolled in this event (across any class mappings)
-        existing_event_enrollments = await repo.get_enrollments_for_student_and_event(student_id, class_map["event_id"])
+        existing_event_enrollments = await repo.get_enrollments_for_student_and_event(
+            student_id, class_map["event_id"]
+        )
         if existing_event_enrollments:
             # If already enrolled in this exact class map, return it
             for e in existing_event_enrollments:
@@ -783,7 +833,9 @@ class TenantService:
         return await repo.update_enrollment_state(enrollment_id, state, teacher_id, parent_id)
 
     @staticmethod
-    async def get_enrollments_for_user(tenant_id: str, user_id, user_role: str | list[str]) -> list[dict]:
+    async def get_enrollments_for_user(
+        tenant_id: str, user_id, user_role: str | list[str]
+    ) -> list[dict]:
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
         roles = {user_role} if isinstance(user_role, str) else set(user_role)
@@ -791,7 +843,17 @@ class TenantService:
         results = []
         enroll_ids = set()
 
-        if roles.intersection({"school_admin", "teacher"}):
+        # school_admin (and super_admin acting in-tenant) leads no single
+        # class, so routing them through get_enrollments_for_teacher() the
+        # same way as a teacher always returned an empty list -- the whole
+        # school's roster, not "my class's roster".
+        if roles.intersection({"school_admin", "super_admin"}):
+            enrolls = await repo.get_all_enrollments()
+            for e in enrolls:
+                if e["id"] not in enroll_ids:
+                    results.append(e)
+                    enroll_ids.add(e["id"])
+        elif "teacher" in roles:
             enrolls = await repo.get_enrollments_for_teacher(user_id)
             for e in enrolls:
                 if e["id"] not in enroll_ids:
@@ -851,9 +913,9 @@ class TenantService:
                 head_teacher_id = class_info["head_teacher_id"]
                 student_name = enrollment.get("student_name") or f"Student #{student_id}"
                 event_title = enrollment.get("event_title") or "the event"
-                
+
                 title_override = f"❌ Cancelled: {student_name} un-enrolled from '{event_title}'"
-                
+
                 await repo.create_notification(
                     event_id=class_map["event_id"],
                     recipient_user_id=head_teacher_id,
@@ -889,7 +951,9 @@ class TenantService:
     # Feedback
     # =========================================================================
     @staticmethod
-    async def create_event_feedback(tenant_id: str, event_id: int, user_id, rating: int, comments: str | None) -> int:
+    async def create_event_feedback(
+        tenant_id: str, event_id: int, user_id, rating: int, comments: str | None
+    ) -> int:
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
         return await repo.create_event_feedback(event_id, user_id, rating, comments)
@@ -923,7 +987,9 @@ class TenantService:
         med_enc = _encrypt(medical_conditions)
         emg_enc = _encrypt(emergency_contact)
 
-        _log_audit(requesting_user_id, f"WRITE student_health_and_records for student_id: {student_id}")
+        _log_audit(
+            requesting_user_id, f"WRITE student_health_and_records for student_id: {student_id}"
+        )
 
         return await repo.create_or_update_student_health(
             student_id=student_id,
@@ -940,9 +1006,8 @@ class TenantService:
         requesting_user_role: str | list[str],
         elevated_clearance: bool = False,
     ) -> dict | None:
-        if not TenantService._has_intersection(requesting_user_role, {"school_admin", "teacher"}):
-            raise PermissionError("Unauthorized to view student health records")
-
+        # Authorization is gated at the router via require_permission("health:view")
+        # (OPA) — this is the sole caller of this method, so no check is repeated here.
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
         record = await repo.get_student_health_by_student_id(student_id)
@@ -953,7 +1018,9 @@ class TenantService:
         med_dec = _decrypt(record["medical_conditions_encrypted"])
         emg_dec = _decrypt(record["emergency_contact_encrypted"])
 
-        _log_audit(requesting_user_id, f"READ student_health_and_records for student_id: {student_id}")
+        _log_audit(
+            requesting_user_id, f"READ student_health_and_records for student_id: {student_id}"
+        )
 
         if requesting_user_role == "school_admin" and elevated_clearance:
             return {
@@ -984,8 +1051,20 @@ class TenantService:
         return await repo.get_notifications_for_user(user_id)
 
     @staticmethod
-    async def save_academic_structure(tenant_id: str, payload: dict, user_role: str | list[str]) -> None:
-        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin", "admin", "level:manage", "level:create", "school:write"}):
+    async def save_academic_structure(
+        tenant_id: str, payload: dict, user_role: str | list[str]
+    ) -> None:
+        if not TenantService._has_intersection(
+            user_role,
+            {
+                "school_admin",
+                "super_admin",
+                "admin",
+                "level:manage",
+                "level:create",
+                "school:write",
+            },
+        ):
             raise PermissionError("Insufficient permissions to manage structure.")
 
         pool = await get_db_pool(tenant_id)
@@ -995,6 +1074,7 @@ class TenantService:
         # (see domains/school/) — grades and class sections stay fully
         # editable, only the UK/International/Custom choice itself is frozen.
         from app.domains.school.repository import SchoolRepository
+
         school_profile = await SchoolRepository(pool).get_profile_row()
         if school_profile and school_profile.get("curriculum_locked_at"):
             current_structure = await repo.get_academic_structure()
@@ -1009,9 +1089,21 @@ class TenantService:
 
     @staticmethod
     async def get_academic_structure(tenant_id: str, user_role: str | list[str]) -> dict:
-        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin", "admin", "manager", "teacher", "level:read", "level:manage", "school:read"}):
+        if not TenantService._has_intersection(
+            user_role,
+            {
+                "school_admin",
+                "super_admin",
+                "admin",
+                "manager",
+                "teacher",
+                "level:read",
+                "level:manage",
+                "school:read",
+            },
+        ):
             raise PermissionError("Insufficient permissions to view structure.")
-        
+
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
         return await repo.get_academic_structure()
@@ -1031,7 +1123,7 @@ class TenantService:
     # =========================================================================
     @staticmethod
     async def create_resource_type(
-        tenant_id: str, name: str, category: str, is_custom: bool = False, created_by_user_id = None
+        tenant_id: str, name: str, category: str, is_custom: bool = False, created_by_user_id=None
     ) -> int:
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
@@ -1043,17 +1135,19 @@ class TenantService:
     ) -> None:
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
-        
+
         async with repo.pool.acquire() as conn:
             async with conn.transaction():
                 # Re-check status is draft or resource_planning
                 event = await repo.get_event_by_id(event_id)
                 if not event or event.get("status", "draft") not in ("draft", "resource_planning"):
-                    raise ValueError("Resources can only be modified on draft or resource planning events")
-                
+                    raise ValueError(
+                        "Resources can only be modified on draft or resource planning events"
+                    )
+
                 # Delete existing resources for event
                 await repo.delete_resources_for_event(event_id)
-                
+
                 # Insert new resources
                 for r in resources_list:
                     await repo.create_resource(
@@ -1070,19 +1164,19 @@ class TenantService:
     ) -> int:
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
-        
+
         resource = await repo.get_resource_by_id(resource_id)
         if not resource:
             raise ValueError("Resource not found")
-            
+
         # Allow pricing for planning/draft/proposed/approved events
         event = await repo.get_event_by_id(resource["event_id"])
         if not event or event.get("status", "draft") in ("published", "cancelled"):
             raise ValueError("Pricing cannot be updated for published or cancelled events")
-            
+
         quantity = resource["quantity"]
         total_cost = float(unit_price) * int(quantity)
-        
+
         return await repo.set_resource_cost(
             resource_id=resource_id,
             unit_price=unit_price,
@@ -1095,10 +1189,11 @@ class TenantService:
     async def get_resource_summary(tenant_id: str, event_id: int) -> dict:
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
-        
+
         resources = await repo.get_resources_for_event(event_id)
 
         from app.domains.school.repository import SchoolRepository
+
         school_profile = await SchoolRepository(pool).get_profile_row()
         currency = (school_profile or {}).get("currency") or "JOD"
 
@@ -1116,22 +1211,24 @@ class TenantService:
                 unit_price = 0.0
                 total_cost = 0.0
                 set_by_user_id = None
-                
-            lines.append({
-                "id": r["id"],
-                "resource_type_id": r["resource_type_id"],
-                "resource_type_name": r["resource_type_name"],
-                "resource_type_category": r["resource_type_category"],
-                "description": r["description"],
-                "quantity": r["quantity"],
-                "added_by_user_id": r["added_by_user_id"],
-                "updated_by_user_id": r["updated_by_user_id"],
-                "unit_price": unit_price,
-                "total_cost": total_cost,
-                "set_by_user_id": set_by_user_id,
-            })
+
+            lines.append(
+                {
+                    "id": r["id"],
+                    "resource_type_id": r["resource_type_id"],
+                    "resource_type_name": r["resource_type_name"],
+                    "resource_type_category": r["resource_type_category"],
+                    "description": r["description"],
+                    "quantity": r["quantity"],
+                    "added_by_user_id": r["added_by_user_id"],
+                    "updated_by_user_id": r["updated_by_user_id"],
+                    "unit_price": unit_price,
+                    "total_cost": total_cost,
+                    "set_by_user_id": set_by_user_id,
+                }
+            )
             cost_sum += total_cost
-            
+
         return {
             "event_id": event_id,
             "resources": lines,
@@ -1152,7 +1249,9 @@ class TenantService:
     @staticmethod
     def check_event_permission(user, event: dict, action: str) -> bool:
         user_roles = getattr(user, "roles", None) or [getattr(user, "role", "student")]
-        is_owner = int(parse_id(event.get("created_by") or 0)) == int(parse_id(getattr(user, "id", -1) or -1))
+        is_owner = int(parse_id(event.get("created_by") or 0)) == int(
+            parse_id(getattr(user, "id", -1) or -1)
+        )
         status = event.get("status") or "draft"
 
         # Super admin and school admin override
@@ -1161,7 +1260,11 @@ class TenantService:
 
         if action == "read":
             if status == "draft":
-                mapped_teacher_ids = [parse_id(m.get("head_teacher_id")) for m in (event.get("class_mappings") or []) if m.get("head_teacher_id") is not None]
+                mapped_teacher_ids = [
+                    parse_id(m.get("head_teacher_id"))
+                    for m in (event.get("class_mappings") or [])
+                    if m.get("head_teacher_id") is not None
+                ]
                 if is_owner or parse_id(getattr(user, "id", None)) in mapped_teacher_ids:
                     return True
                 return False
@@ -1169,9 +1272,16 @@ class TenantService:
                 if role in ("parent", "student") and status == "published":
                     return True
                 if role in ("teacher", "event_teacher"):
-                    if status in ("published", "approved", "proposed", "pricing_review", "final_review", "ready_to_publish"):
+                    if status in (
+                        "published",
+                        "approved",
+                        "proposed",
+                        "pricing_review",
+                        "final_review",
+                        "ready_to_publish",
+                    ):
                         return True
-                if role in ("manager", "finance") and status != "draft":
+                if role == "manager" and status != "draft":
                     return True
                 if role in ("school_admin", "super_admin", "admin"):
                     return True
@@ -1182,16 +1292,29 @@ class TenantService:
             if status != "draft":
                 return False
             for role in user_roles:
-                if role in ("teacher", "event_teacher", "school_admin", "super_admin", "admin") and (is_owner or role in ("school_admin", "super_admin", "admin")):
+                if role in (
+                    "teacher",
+                    "event_teacher",
+                    "school_admin",
+                    "super_admin",
+                    "admin",
+                ) and (is_owner or role in ("school_admin", "super_admin", "admin")):
                     return True
             if "event:edit" in user_roles and is_owner:
                 return True
             return False
         elif action in ("manager_decision", "approve", "review"):
-            if ("event:review" in user_roles or any(r in user_roles for r in ("manager", "school_admin", "super_admin", "admin"))) and status == "proposed":
+            if (
+                "event:review" in user_roles
+                or any(r in user_roles for r in ("manager", "school_admin", "super_admin", "admin"))
+            ) and status == "proposed":
                 return True
         elif action in ("publish", "teacher_publish"):
-            if ("event:publish" in user_roles or (any(r in user_roles for r in ("teacher", "event_teacher")) and is_owner) or any(r in user_roles for r in ("school_admin", "super_admin", "admin"))) and status in ("approved", "ready_to_publish"):
+            if (
+                "event:publish" in user_roles
+                or (any(r in user_roles for r in ("teacher", "event_teacher")) and is_owner)
+                or any(r in user_roles for r in ("school_admin", "super_admin", "admin"))
+            ) and status in ("approved", "ready_to_publish"):
                 return True
 
         return False
@@ -1206,13 +1329,13 @@ class TenantService:
     ) -> dict:
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
-        
+
         event = await repo.get_event_by_id(event_id)
         if not event:
             raise ValueError("Event not found")
-            
+
         current_status = event.get("status") or "draft"
-        
+
         TRANSITIONS = {
             # (current_status, action) -> (next_status, required_role)
             # Step 1: Teacher submits draft for Manager approval (draft -> proposed)
@@ -1220,7 +1343,6 @@ class TenantService:
             ("draft", "propose"): ("proposed", "teacher"),
             ("draft", "submit_to_manager"): ("proposed", "teacher"),
             ("draft", "submit_to_event_teacher"): ("proposed", "teacher"),
-
             # Step 2: Manager accepts or rejects the proposal (proposed -> approved | draft)
             # NOTE: there is deliberately NO proposed -> published shortcut. Publishing
             # must go through 'approved' so that published_at is stamped and the
@@ -1230,7 +1352,6 @@ class TenantService:
             ("proposed", "approve"): ("approved", "manager"),
             ("proposed", "manager_reject"): ("draft", "manager"),
             ("proposed", "reject"): ("draft", "manager"),
-
             # Step 3: Teacher publishes approved event to students & parents (approved -> published)
             # Manager retains a publish override on an already-approved event.
             ("approved", "teacher_publish"): ("published", "teacher"),
@@ -1238,49 +1359,64 @@ class TenantService:
             ("approved", "submit"): ("published", "teacher"),
             ("approved", "manager_publish"): ("published", "manager"),
         }
-        
+
         key = (current_status, action)
         if key not in TRANSITIONS:
             raise ValueError(f"Action '{action}' is not allowed in status '{current_status}'")
-            
+
         next_status, required_role = TRANSITIONS[key]
-        
+
         # Verify role (allow school_admin & super_admin override)
         actor_roles = getattr(actor, "roles", None) or [getattr(actor, "role", "student")]
         allowed = {"school_admin", "super_admin", required_role}
         if required_role == "teacher":
             allowed.add("event_teacher")
         if not any(r in actor_roles for r in allowed):
-            raise PermissionError(f"Role '{actor.role}' is not authorized to perform action '{action}'")
-            
+            raise PermissionError(
+                f"Role '{actor.role}' is not authorized to perform action '{action}'"
+            )
+
         # Verify preconditions
         if action in ("submit_for_approval", "propose", "submit_to_event_teacher"):
-            if int(parse_id(event["created_by"])) != int(parse_id(actor.id)) and not any(r in actor_roles for r in ("school_admin", "super_admin")):
+            if int(parse_id(event["created_by"])) != int(parse_id(actor.id)) and not any(
+                r in actor_roles for r in ("school_admin", "super_admin")
+            ):
                 raise PermissionError("Only the event creator can submit it for approval")
-                
-            mappings = await repo.get_event_class_mappings(event_id) if hasattr(repo, "get_event_class_mappings") else None
+
+            mappings = (
+                await repo.get_event_class_mappings(event_id)
+                if hasattr(repo, "get_event_class_mappings")
+                else None
+            )
             if not mappings:
                 mappings = event.get("class_mappings") or []
             if not mappings:
                 raise ValueError("At least one class must be selected before submitting")
-                
+
         elif action in ("manager_reject", "reject"):
             if not reason or not reason.strip():
                 raise ValueError(f"A non-empty reason is required for action '{action}'")
-                
+
         # Apply updates and side effects
         update_fields = {"status": next_status}
         now_time = datetime.now(UTC)
-        
-        if action in ("submit_for_approval", "propose", "submit_to_manager", "submit_to_event_teacher"):
+
+        if action in (
+            "submit_for_approval",
+            "propose",
+            "submit_to_manager",
+            "submit_to_event_teacher",
+        ):
             update_fields["submitted_at"] = now_time
             update_fields["rejection_reason"] = None
             # Calculate predicted attendance before submitting
             mappings = event.get("class_mappings") or []
             class_ids = [m["class_id"] for m in mappings]
             if class_ids:
-                update_fields["predicted_attendance"] = await TenantService.get_predicted_attendance(tenant_id, class_ids)
-            
+                update_fields["predicted_attendance"] = (
+                    await TenantService.get_predicted_attendance(tenant_id, class_ids)
+                )
+
             # Notify managers
             managers = await repo.get_all_managers()
             for m in managers:
@@ -1339,29 +1475,6 @@ class TenantService:
                             title_override=f"Your child's school trip '{event['title']}' is now open for enrollment!",
                         )
 
-        elif action == "finance_submit":
-            update_fields["finance_priced_at"] = now_time
-            update_fields["finance_reviewer_id"] = actor.id
-
-            
-            # Compute events.total_cost
-            resources = await repo.get_resources_for_event(event_id)
-            tot_cost = 0.0
-            for r in resources:
-                cost = await repo.get_resource_cost_by_resource_id(r["id"])
-                if cost:
-                    tot_cost += float(cost["total_cost"])
-            update_fields["total_cost"] = tot_cost
-            
-            # Notify managers
-            managers = await repo.get_all_managers()
-            for m in managers:
-                await repo.create_notification(
-                    event_id=event_id,
-                    recipient_user_id=m["id"],
-                    title_override=f"Event '{event['title']}' priced by finance, ready for final review",
-                )
-                
         elif action == "manager_publish":
             update_fields["published_at"] = now_time
             # Notify parents & students of targeted classes
@@ -1370,7 +1483,7 @@ class TenantService:
             if class_ids:
                 students = await repo.pool.fetch(
                     "SELECT id FROM students WHERE class_id = ANY($1)",
-                    [parse_id(cid) for cid in class_ids]
+                    [parse_id(cid) for cid in class_ids],
                 )
                 for s in students:
                     await repo.create_notification(
@@ -1379,8 +1492,7 @@ class TenantService:
                         title_override=f"New Event Published: '{event['title']}'",
                     )
                     parents = await repo.pool.fetch(
-                        "SELECT parent_id FROM student_parent_map WHERE student_id = $1",
-                        s["id"]
+                        "SELECT parent_id FROM student_parent_map WHERE student_id = $1", s["id"]
                     )
                     for p in parents:
                         await repo.create_notification(
@@ -1388,18 +1500,7 @@ class TenantService:
                             recipient_user_id=p["parent_id"],
                             title_override=f"New Child Event: '{event['title']}' has been published!",
                         )
-                        
-        elif action == "manager_return_to_finance":
-            # Revert to finance approval status
-            # Notify finance
-            finance_users = await repo.get_all_finance_users()
-            for f in finance_users:
-                await repo.create_notification(
-                    event_id=event_id,
-                    recipient_user_id=f["id"],
-                    title_override=f"Event '{event['title']}' returned to finance for repricing. Reason: {reason}",
-                )
-                
+
         # Persist event status updates
         await repo.pool.execute(
             """
@@ -1418,8 +1519,16 @@ class TenantService:
             """,
             update_fields.get("status"),
             update_fields.get("predicted_attendance"),
-            parse_id(update_fields["manager_reviewer_id"]) if "manager_reviewer_id" in update_fields else None,
-            parse_id(update_fields["finance_reviewer_id"]) if "finance_reviewer_id" in update_fields else None,
+            (
+                parse_id(update_fields["manager_reviewer_id"])
+                if "manager_reviewer_id" in update_fields
+                else None
+            ),
+            (
+                parse_id(update_fields["finance_reviewer_id"])
+                if "finance_reviewer_id" in update_fields
+                else None
+            ),
             update_fields.get("total_cost"),
             update_fields.get("submitted_at"),
             update_fields.get("manager_approved_at"),
@@ -1429,17 +1538,20 @@ class TenantService:
             parse_id(event_id),
         )
 
-        
         return await repo.get_event_by_id(event_id)
 
     # =========================================================================
     # User Roles & Dynamic Permissions Matrix
     # =========================================================================
     @staticmethod
-    async def get_tenant_users_permissions(tenant_id: str, user_role: str | list[str]) -> list[dict]:
+    async def get_tenant_users_permissions(
+        tenant_id: str, user_role: str | list[str]
+    ) -> list[dict]:
         """Fetch all users in the tenant with their assigned roles and permissions (admin only)."""
         if not TenantService._has_intersection(user_role, {"school_admin", "super_admin", "admin"}):
-            raise PermissionError("Only school administrators can access the user permissions matrix")
+            raise PermissionError(
+                "Only school administrators can access the user permissions matrix"
+            )
         pool = await get_db_pool(tenant_id)
         user_repo = UserRepository(pool)
         return await user_repo.get_all_tenant_users()
@@ -1454,8 +1566,12 @@ class TenantService:
         user_role: str | list[str],
     ) -> dict:
         """Update a tenant user's primary role, multiple composite roles, and custom permissions."""
-        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin", "admin", "user:invite"}):
-            raise PermissionError("Only school administrators can update user roles and permissions")
+        if not TenantService._has_intersection(
+            user_role, {"school_admin", "super_admin", "admin", "user:invite"}
+        ):
+            raise PermissionError(
+                "Only school administrators can update user roles and permissions"
+            )
         pool = await get_db_pool(tenant_id)
         user_repo = UserRepository(pool)
         updated = await user_repo.update_user_roles_and_permissions(
@@ -1481,7 +1597,7 @@ class TenantService:
                     async with cp_pool.acquire() as conn_cp:
                         await conn_cp.execute(
                             "INSERT INTO super_admins (email, password_hash) VALUES ($1, 'managed') ON CONFLICT DO NOTHING",
-                            user_email
+                            user_email,
                         )
                 except Exception as _e:
                     print(f"[update_tenant_user_permissions] Warning super_admins insert: {_e}")
@@ -1490,35 +1606,53 @@ class TenantService:
             try:
                 async with pool.acquire() as conn_t:
                     user_display_name = user_email.split("@")[0].replace(".", " ").title()
-                    if primary_role in ("teacher", "event_teacher", "school_admin", "manager", "finance", "admin"):
+                    if primary_role in (
+                        "teacher",
+                        "event_teacher",
+                        "school_admin",
+                        "manager",
+                        "admin",
+                    ):
                         await conn_t.execute(
                             "INSERT INTO teachers (id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING",
                             target_id,
-                            user_display_name
+                            user_display_name,
                         )
                     elif primary_role == "student":
                         c_id = await conn_t.fetchval("SELECT id FROM class LIMIT 1")
                         if c_id is None:
                             l_id = await conn_t.fetchval("SELECT level_id FROM levels LIMIT 1")
                             if l_id is None:
-                                l_id = await conn_t.fetchval("INSERT INTO levels (name) VALUES ('Grade 1') RETURNING level_id")
+                                l_id = await conn_t.fetchval(
+                                    "INSERT INTO levels (name) VALUES ('Grade 1') RETURNING level_id"
+                                )
                             t_id = await conn_t.fetchval("SELECT id FROM teachers LIMIT 1")
                             if t_id is None:
-                                t_u = await conn_t.fetchval("INSERT INTO users (email, role, password_hash) VALUES ($1, 'teacher', 'managed') RETURNING id", f"head_teacher_{tenant_id}@school.com")
-                                t_id = await conn_t.fetchval("INSERT INTO teachers (id, name) VALUES ($1, 'Head Teacher') RETURNING id", t_u)
-                            c_id = await conn_t.fetchval("INSERT INTO class (name, level_id, head_teacher_id) VALUES ('Default Class', $1, $2) RETURNING id", l_id, t_id)
+                                t_u = await conn_t.fetchval(
+                                    "INSERT INTO users (email, role, password_hash) VALUES ($1, 'teacher', 'managed') RETURNING id",
+                                    f"head_teacher_{tenant_id}@school.com",
+                                )
+                                t_id = await conn_t.fetchval(
+                                    "INSERT INTO teachers (id, name) VALUES ($1, 'Head Teacher') RETURNING id",
+                                    t_u,
+                                )
+                            c_id = await conn_t.fetchval(
+                                "INSERT INTO class (name, level_id, head_teacher_id) VALUES ('Default Class', $1, $2) RETURNING id",
+                                l_id,
+                                t_id,
+                            )
                         await conn_t.execute(
                             "INSERT INTO students (id, name, class_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
                             target_id,
                             user_display_name,
-                            c_id
+                            c_id,
                         )
                     elif primary_role == "parent":
                         try:
                             await conn_t.execute(
                                 "INSERT INTO parenets (id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING",
                                 target_id,
-                                user_display_name
+                                user_display_name,
                             )
                         except Exception:
                             pass
@@ -1528,11 +1662,17 @@ class TenantService:
             # 4. Synchronize role with Keycloak identity provider
             try:
                 from app.core.keycloak_admin import update_user_role_in_keycloak
+
                 update_user_role_in_keycloak(user_email, primary_role, tenant_id)
             except Exception as _e:
-                print(f"[update_tenant_user_permissions] Warning Keycloak update for {user_email}: {_e}")
+                print(
+                    f"[update_tenant_user_permissions] Warning Keycloak update for {user_email}: {_e}"
+                )
 
-        _log_audit(user_id, f"UPDATE_PERMISSIONS: role={primary_role}, roles={roles}, perms_count={len(permissions)}")
+        _log_audit(
+            user_id,
+            f"UPDATE_PERMISSIONS: role={primary_role}, roles={roles}, perms_count={len(permissions)}",
+        )
         return updated
 
     @staticmethod
@@ -1550,7 +1690,11 @@ class TenantService:
         which is itself restricted to super_admin). Deleting your own account
         through this endpoint is always blocked.
         """
-        roles = set(user_role) if isinstance(user_role, (list, tuple, set)) else ({user_role} if user_role else set())
+        roles = (
+            set(user_role)
+            if isinstance(user_role, (list, tuple, set))
+            else ({user_role} if user_role else set())
+        )
         is_super = "super_admin" in roles
         is_school_admin = bool(roles.intersection({"school_admin", "admin"}))
 
@@ -1587,14 +1731,18 @@ class TenantService:
                 cp_repo = ControlPlaneRepository(cp_pool)
                 await cp_repo.remove_user_tenant_map(user_email, tenant_id)
             except Exception as _e:
-                print(f"[delete_tenant_user] Warning user_tenant_map cleanup for {user_email}: {_e}")
+                print(
+                    f"[delete_tenant_user] Warning user_tenant_map cleanup for {user_email}: {_e}"
+                )
             try:
                 from app.core.keycloak_admin import delete_user_from_keycloak
+
                 delete_user_from_keycloak(user_email)
             except Exception as _e:
                 print(f"[delete_tenant_user] Warning Keycloak cleanup for {user_email}: {_e}")
 
-        _log_audit(requesting_user_id, f"DELETE_USER: target_id={target_user_id}, target_email={user_email}")
+        _log_audit(
+            requesting_user_id,
+            f"DELETE_USER: target_id={target_user_id}, target_email={user_email}",
+        )
         return deleted
-
-

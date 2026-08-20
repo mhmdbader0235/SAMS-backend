@@ -9,7 +9,7 @@ from app.domains.tenant.tenant_repository import TenantRepository
 
 @pytest.mark.asyncio
 async def test_workflow_routes(test_client: AsyncClient, db_pool: asyncpg.Pool):
-    # Register manager & finance users
+    # Register manager & teacher users
     # Password invite code is SCHOOL-STAFF-2026
     r = await test_client.post("/api/v1/auth/register", json={
         "email": "teacher_wf@school.com",
@@ -32,16 +32,6 @@ async def test_workflow_routes(test_client: AsyncClient, db_pool: asyncpg.Pool):
     m_token = r.json()["access_token"]
     
     r = await test_client.post("/api/v1/auth/register", json={
-        "email": "finance_wf@school.com",
-        "password": "password",
-        "tenant_id": "tenant_a",
-        "role": "finance",
-        "invite_code": "SCHOOL-STAFF-2026"
-    })
-    assert r.status_code == 200
-    f_token = r.json()["access_token"]
-
-    r = await test_client.post("/api/v1/auth/register", json={
         "email": "et_wf@school.com",
         "password": "password",
         "tenant_id": "tenant_a",
@@ -54,7 +44,6 @@ async def test_workflow_routes(test_client: AsyncClient, db_pool: asyncpg.Pool):
     # Retrieve headers
     t_headers = {"Authorization": f"Bearer {t_token}"}
     m_headers = {"Authorization": f"Bearer {m_token}"}
-    f_headers = {"Authorization": f"Bearer {f_token}"}
     et_headers = {"Authorization": f"Bearer {et_token}"}
 
     # Fetch resource types
