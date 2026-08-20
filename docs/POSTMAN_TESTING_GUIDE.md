@@ -9,7 +9,7 @@ This guide walks you through importing the ready-to-use **SchoolDesk Postman Col
 1. Open **Postman**.
 2. Click **Import** (top left).
 3. Drag & drop or select the collection file:
-   [`doumind-backend/docs/SchoolDesk_API_Postman_Collection.json`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/doumind-backend/docs/SchoolDesk_API_Postman_Collection.json)
+   [`back/docs/SchoolDesk_API_Postman_Collection.json`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/docs/SchoolDesk_API_Postman_Collection.json)
 4. Click **Import**. You will see the **SchoolDesk Enterprise API Collection** with 4 organized folders in your Postman sidebar.
 
 ---

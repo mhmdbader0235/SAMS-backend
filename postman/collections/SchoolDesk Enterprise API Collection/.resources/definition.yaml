@@ -2,7 +2,7 @@ $kind: collection
 name: SchoolDesk Enterprise API Collection
 description: Comprehensive Postman Collection for SchoolDesk multi-tenant FastAPI backend with Keycloak RBAC, event planning lifecycle, and enrollment workflows.
 variables:
-  baseUrl: http://localhost:8000
+  baseUrl: http://localhost:9080
   tenantId: tenant_a
   invitePassphrase: regester123
   teacherToken: ""
