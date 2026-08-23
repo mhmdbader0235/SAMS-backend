@@ -144,6 +144,72 @@ class TestDynamicPermissionsApi:
         )
         assert update_resp.status_code == 403
 
+    async def test_student_with_custom_event_create_can_load_audience_data(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
+        """Regression test: a student granted only the custom event:create
+        permission could reach the event wizard's audience step (Step 2),
+        but GET /api/v1/students/classes and GET /api/v1/students both 403'd
+        for them — those endpoints only allowed staff roles or the separate
+        class:read/student:read grants, leaving the audience step permanently
+        stuck with an empty class list and no visible error."""
+        admin_token = await register_school_admin(test_client, "admin_audience@school.com")
+
+        student_reg = {
+            "email": "student_audience@school.com",
+            "password": "studentpass123",
+            "role": "student",
+            "tenant_id": "tenant_a",
+            "invite_code": "regester123"
+        }
+        student_resp = await test_client.post("/api/v1/auth/register", json=student_reg)
+        assert student_resp.status_code == 200
+        student_token = student_resp.json()["access_token"]
+
+        # Baseline: a plain student cannot list classes or students.
+        baseline_classes = await test_client.get(
+            "/api/v1/students/classes", headers={"Authorization": f"Bearer {student_token}"}
+        )
+        assert baseline_classes.status_code == 403
+        baseline_students = await test_client.get(
+            "/api/v1/students", headers={"Authorization": f"Bearer {student_token}"}
+        )
+        assert baseline_students.status_code == 403
+
+        # Admin grants the student event:create only (no class:read/student:read).
+        list_resp = await test_client.get(
+            "/api/v1/auth/users-permissions",
+            headers={"Authorization": f"Bearer {admin_token}"}
+        )
+        target_user = next(
+            (u for u in list_resp.json() if u["email"] == "student_audience@school.com"), None
+        )
+        assert target_user is not None
+        update_resp = await test_client.put(
+            f"/api/v1/auth/users/{target_user['id']}/permissions",
+            json={"role": "student", "roles": ["student"], "permissions": ["event:create"]},
+            headers={"Authorization": f"Bearer {admin_token}"}
+        )
+        assert update_resp.status_code == 200
+
+        # Fresh login to pick up the newly-granted permission.
+        login_resp = await test_client.post(
+            "/api/v1/auth/login",
+            json={"email": "student_audience@school.com", "password": "studentpass123", "tenant_id": "tenant_a"}
+        )
+        assert login_resp.status_code == 200
+        refreshed_token = login_resp.json()["access_token"]
+
+        # Now the audience step's two data calls must succeed.
+        classes_resp = await test_client.get(
+            "/api/v1/students/classes", headers={"Authorization": f"Bearer {refreshed_token}"}
+        )
+        assert classes_resp.status_code == 200
+        students_resp = await test_client.get(
+            "/api/v1/students", headers={"Authorization": f"Bearer {refreshed_token}"}
+        )
+        assert students_resp.status_code == 200
+
     async def test_update_non_existent_user_returns_404(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
         # Register admin
         admin_token = await register_school_admin(test_client, "admin_404@school.com")

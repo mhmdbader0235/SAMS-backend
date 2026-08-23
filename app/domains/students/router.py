@@ -318,6 +318,10 @@ async def list_students(
     if not (
         current_user.has_any_role("school_admin", "super_admin", "manager", "teacher")
         or current_user.has_role("student:read")
+        # Anyone allowed to create an event needs the roster to target one —
+        # granting event:create alone would otherwise leave the audience step
+        # of the event wizard permanently unusable.
+        or current_user.has_role("event:create")
     ):
         raise HTTPException(
             status_code=403,
@@ -410,6 +414,10 @@ async def list_classes(
     if not (
         current_user.has_any_role("school_admin", "super_admin", "manager", "teacher")
         or current_user.has_role("class:read")
+        # Anyone allowed to create an event needs the class list to target
+        # one — granting event:create alone would otherwise leave the
+        # audience step of the event wizard permanently unusable.
+        or current_user.has_role("event:create")
     ):
         raise HTTPException(
             status_code=403, detail="Forbidden: Students and unauthorized users cannot list classes"
