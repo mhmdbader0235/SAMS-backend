@@ -1,0 +1,119 @@
+name: CI
+
+# This repository is the backend, standalone. Paths here are relative to the
+# repo root — there is no back/ prefix and no working-directory, unlike the
+# previous monorepo workflow this was split out of.
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  backend:
+    name: Backend (lint, test, migrations)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: admin
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        # Pinned to 3.12 deliberately: asyncpg has no prebuilt wheel for 3.14
+        # yet, so a 3.14 runner would try to compile it from source and fail.
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: "app/requirements.txt"
+
+      - name: Install dependencies
+        run: pip install -r app/requirements.txt
+
+      # Advisory, not blocking: there is a pre-existing backlog of ~69 ruff
+      # findings and ~30 files black would reformat, none of them bugs (import
+      # ordering, old-style type hints, simplifiable blocks). Some are
+      # deliberate — tests/conftest.py imports after load_dotenv() on purpose,
+      # which ruff flags as E402. Tests below are the real gate. Drop these
+      # continue-on-error lines once the backlog is cleared in its own pass.
+      - name: Lint with Ruff (advisory)
+        continue-on-error: true
+        run: ruff check app/ tests/
+
+      - name: Format check with Black (advisory)
+        continue-on-error: true
+        run: black --check app/ tests/
+
+      - name: Run tests
+        env:
+          TEST_DB_HOST: localhost
+          TEST_DB_PORT: 5432
+          TEST_DB_USER: admin
+          TEST_DB_PASSWORD: test_password
+          JWT_SECRET: ci-test-secret-key-not-for-production
+          TEACHER_INVITE_CODE: SCHOOL-STAFF-2026
+        run: pytest tests/ -v --tb=short
+
+      - name: Verify Alembic migrations apply cleanly
+        # Runs against its own scratch database in the same throwaway
+        # Postgres service container (separate from doumind_test above), so
+        # this always starts from an empty database — the same state a real
+        # `alembic upgrade` hits on a brand-new environment. Covers both
+        # independent migration branches (see alembic/env.py): control_plane
+        # against the scratch DB's public schema, and a one-off tenant schema
+        # smoke test standing in for "any given tenant".
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USER: admin
+          DB_PASSWORD: test_password
+          CONTROL_PLANE_DB_NAME: alembic_ci_check
+        run: |
+          python -c "
+          import asyncio
+          import asyncpg
+
+          async def main():
+              conn = await asyncpg.connect(
+                  host='localhost', port=5432, user='admin',
+                  password='test_password', database='postgres',
+              )
+              await conn.execute('CREATE DATABASE alembic_ci_check')
+              await conn.close()
+
+          asyncio.run(main())
+          "
+          alembic upgrade control_plane@head
+          alembic -x target=tenant -x schema=ci_smoke_tenant upgrade tenant@head
+
+  opa:
+    name: OPA policy tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up OPA
+        uses: open-policy-agent/setup-opa@v2
+        with:
+          version: latest
+
+      - name: Run OPA policy tests
+        run: opa test policies/ -v
