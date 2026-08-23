@@ -24,9 +24,11 @@
 | [`run.py`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/run.py) | **Local Development Launcher**. Automates Docker volume creation, boots Docker Compose containers, and runs the FastAPI Uvicorn dev server on `http://127.0.0.1:8001` with hot-reloading. |
 | [`init.sql`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/init.sql) | **Master PostgreSQL DDL Schema Script**. Initializes control-plane tables (`tenants`, `parents`, `super_admins`, `user_tenant_map`, `user_invitations`) and isolated tenant schemas (`tenant_a`, `tenant_b`) with tables for `users`, `teachers`, `students`, `class`, `levels`, `event`, `resources`, `resource_cost`, `event_registrations`, and `invoices`. |
 | [`SAMS-realm.json`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/SAMS-realm.json) | **Keycloak 26 Realm Export JSON**. Contains pre-configured realm roles, groups, clients (`frontend`, `apisix`), and Organizations (`tenant_a` with `schoolA.com`, `tenant_b` with `schoolB.com`). |
-| [`create_keycloak_realm_json.py`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/create_keycloak_realm_json.py) | **Keycloak Realm Generator Script**. Generates `SAMS-realm.json` programmatically with `"organizationsEnabled": true` and domain mappings. |
 | [`seed_data.py`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/seed_data.py) | **Database & Keycloak Seeder Script**. Seeds demo data into PostgreSQL (`tenant_a` and `tenant_b`) and syncs all accounts directly to Keycloak Organizations via Admin REST API. |
+| [`seed_tenant_b_like_a.py`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/seed_tenant_b_like_a.py) | **Tenant B Replication Script**. Mirrors the schema and data structure from `tenant_a` to `tenant_b` for testing and development environments. |
+| [`sync_db_to_keycloak.py`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/sync_db_to_keycloak.py) | **Database to Keycloak Synchronization Script**. Iterates through all tenant schemas and syncs existing database users to Keycloak via the Admin REST API, deriving names from email addresses. |
 | [`Dockerfile`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/Dockerfile) | **Production Container Build Spec**. Multi-stage Python 3.11/3.14 build for running the FastAPI application via Uvicorn. |
+| [`README.md`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/README.md) | **Backend Project Documentation**. Overview of the backend structure, setup instructions, and development guidelines. |
 | [`pyproject.toml`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/pyproject.toml) | **Python Project Metadata & Dependencies**. Configures project dependencies (`fastapi`, `asyncpg`, `pydantic`, `pyjwt`, `passlib`, `cryptography`). |
 | [`.env`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/.env) | **Backend Runtime Environment Variables**. Contains DB connection strings, JWT secret keys, and Keycloak URLs. |
 | [`.env.example`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/.env.example) | **Environment Template Blueprint**. Template for environment variables with safe placeholder values for new developers and CI/CD pipelines. |
@@ -45,7 +47,7 @@
 
 ---
 
-## 📂 4. Backend Application Core (`back/app/core/`)
+## 📂 4. Backend Core Services (`back/app/core/`)
 
 | File Path | Description & Functional Purpose |
 | :--- | :--- |
@@ -59,8 +61,40 @@
 
 ---
 
+## 📂 5. Database Migrations (`back/alembic/`)
 
-## 📂 5. Backend Business Domains (`back/app/domains/`)
+| File Path | Description & Functional Purpose |
+| :--- | :--- |
+| [`alembic/README`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/alembic/README) | **Alembic Configuration Guide**. Documentation for running and understanding database migrations. |
+| [`alembic/env.py`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/alembic/env.py) | **Alembic Environment Configuration**. Configures migration context and context.configure settings for running migrations. |
+| [`alembic/apply_all_tenants.py`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/alembic/apply_all_tenants.py) | **Multi-Tenant Migration Applicator**. Applies tenant schema migrations across all tenant schemas in the database. |
+| [`alembic/script.py.mako`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/alembic/script.py.mako) | **Migration Template**. Mako template for generating new migration scripts. |
+| [`alembic/versions/cp_0001_control_plane_baseline.py`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/alembic/versions/cp_0001_control_plane_baseline.py) | **Control Plane Schema Baseline Migration**. Initial Alembic migration for the control-plane schema. |
+| [`alembic/versions/tenant_0001_tenant_schema_baseline.py`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/alembic/versions/tenant_0001_tenant_schema_baseline.py) | **Tenant Schema Baseline Migration**. Initial Alembic migration for all tenant schemas. |
+
+---
+
+## 📂 6. Authorization & Policy (`back/policies/`)
+
+| File Path | Description & Functional Purpose |
+| :--- | :--- |
+| [`policies/school_policy.rego`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/policies/school_policy.rego) | **Open Policy Agent (OPA) Authorization Policy**. Enforces role permission matrix, multi-tenant boundaries (`tenant_id`), and event lifecycle state rules (`draft`, `proposed`, `published`) under package `school.authz`. Contains 80+ test cases for comprehensive coverage. |
+
+---
+
+## 📂 7. Testing Infrastructure (`back/tests/`)
+
+| File Path | Description & Functional Purpose |
+| :--- | :--- |
+| [`tests/conftest.py`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/tests/conftest.py) | **Pytest Configuration & Fixtures**. Sets up test database, async fixtures, and shared test utilities for all test suites. |
+| [`tests/test_migrate.py`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/tests/test_migrate.py) | **⚠️ Live Database Migration Script**. NOT a traditional test — runs actual Alembic migrations against the test database. Requires careful execution against appropriate database environments only. |
+| [`tests/unit/`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/tests/unit/) | **Unit Tests**. Isolated tests for services, repositories, and utilities without database dependency. |
+| [`tests/integration/`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/tests/integration/) | **Integration Tests**. Tests with real database connection, testing domain endpoints and service layers. |
+| [`tests/e2e/`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/tests/e2e/) | **End-to-End QA Tests**. Full workflow testing through HTTP endpoints with real authentication flows. |
+
+---
+
+## 📂 8. Backend Business Domains (`back/app/domains/`)
 
 | File Path | Description & Functional Purpose |
 | :--- | :--- |
@@ -72,12 +106,14 @@
 | [`app/domains/tenant/user_repository.py`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/app/domains/tenant/user_repository.py) | **Tenant Users Data Access Layer**. SQL queries on `tenant_x.users` table for creation, email lookups, and profile updates. |
 | [`app/domains/events/`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/app/domains/events/) | **Event Planning & Lifecycle Domain**. Wizard endpoints, state machine transitions (`draft` ➔ `proposed` ➔ `published`), pricing calculators, and attendance predictions. |
 | [`app/domains/students/`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/app/domains/students/) | **Roster & Student Operations Domain**. Roster filtering by class, student registration, and parent-child linking. |
-| [`app/domains/billing/`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/app/domains/billing/) | **Invoicing & Billing Domain**. Invoice generation, trip payment processing, and audit logs. |
-| [`app/domains/announcements/`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/app/domains/announcements/) | **Public & School Announcements Domain**. Publishing targeted school announcements and notification broadcasts. |
+| [`app/domains/school/`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/app/domains/school/) | **School Onboarding & Setup Domain**. Three-layer domain (router, service, repository) managing school profile, campuses, contacts, and activation lifecycle with irreversible stage commits. |
+| [`app/domains/invitations/`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/app/domains/invitations/) | **User Invitation & Onboarding Domain**. Manages invitation code generation, email delivery, and user role provisioning flow. |
+| [`app/domains/notifications/`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/app/domains/notifications/) | **In-App Notifications Domain**. Handles notification feed, delivery tracking (`delivered_at`, `read_at`), and event-triggered broadcasts. |
+| [`app/domains/analytics/`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/app/domains/analytics/) | **Cross-Tenant Analytics Domain**. Aggregates metrics across all tenant schemas; restricted to `super_admin` role only. |
 
 ---
 
-## 📂 6. Frontend Application (`front/`)
+## 📂 9. Frontend Application (`front/`)
 
 | File Path | Description & Functional Purpose |
 | :--- | :--- |
