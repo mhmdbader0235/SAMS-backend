@@ -153,7 +153,11 @@ class SchoolRepository:
         return dict(row) if row else None
 
     async def delete_contact(self, contact_id: int) -> None:
-        await self.pool.execute("DELETE FROM school_contact WHERE id = $1", contact_id)
+        deleted_id = await self.pool.fetchval(
+            "DELETE FROM school_contact WHERE id = $1 RETURNING id", contact_id
+        )
+        if deleted_id is None:
+            raise ValueError(f"Contact {contact_id} not found")
 
     async def has_emergency_contact(self) -> bool:
         return bool(

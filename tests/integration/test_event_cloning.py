@@ -22,12 +22,21 @@ async def test_event_cloning_flow(test_client: AsyncClient, db_pool: asyncpg.Poo
     t_token = r.json()["access_token"]
     headers = {"Authorization": f"Bearer {t_token}"}
 
-    # 2. Get user id & Create Level & Class
+    # 2. Get teacher's user id (used below as the class's head_teacher_id)
     me_r = await test_client.get("/api/v1/auth/me", headers=headers)
     assert me_r.status_code == 200
     t_uid = int(me_r.json()["user_id"])
 
-    r_lvl = await test_client.post("/api/v1/students/levels", json={"name": "Grade 11"}, headers=headers)
+    # 2.5. Register school_admin (via a real invitation) -- moved ahead of level/
+    # class creation because a bare "teacher" can no longer create either
+    # (Academic Administration Hub territory). Assigning the teacher as
+    # head_teacher_id on the class below is still exactly how this would work
+    # in production: an admin creates the section, a teacher heads it.
+    a_token = await register_school_admin(test_client, "cloner_admin@school.com")
+    a_headers = {"Authorization": f"Bearer {a_token}"}
+
+    # 3. Create Level & Class as the school_admin
+    r_lvl = await test_client.post("/api/v1/students/levels", json={"name": "Grade 11"}, headers=a_headers)
     assert r_lvl.status_code == 200
     level_id = r_lvl.json()["level_id"]
 
@@ -35,13 +44,9 @@ async def test_event_cloning_flow(test_client: AsyncClient, db_pool: asyncpg.Poo
         "name": "11A",
         "level_id": level_id,
         "head_teacher_id": t_uid
-    }, headers=headers)
+    }, headers=a_headers)
     assert r_cls.status_code == 200
     class_id = r_cls.json()["id"]
-
-    # 2.5. Register school_admin (via a real invitation)
-    a_token = await register_school_admin(test_client, "cloner_admin@school.com")
-    a_headers = {"Authorization": f"Bearer {a_token}"}
 
     # 3. Create initial event
     dt_str = (datetime.utcnow() + timedelta(days=10)).strftime("%Y-%m-%dT%H:%M:%S")

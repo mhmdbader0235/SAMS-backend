@@ -4,11 +4,11 @@ workspace:
 
 localResources:
   collections:
-    - ../doumind-backend/docs/SchoolDesk_API_Postman_Collection.json
+    - ../doumind-backend/docs/testing/SAMS_API_Postman_Collection.json
   environments:
     - ../doumind-backend/docs/postman/environments/New
       Environment.environment.yaml
 
 cloudResources:
   collections:
-    ../postman/collections/SchoolDesk Enterprise API Collection: 09139736-9b3c-47d9-8881-8e13766d47ec
+    ../postman/collections/SAMS Enterprise API Collection: 09139736-9b3c-47d9-8881-8e13766d47ec

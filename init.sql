@@ -1,5 +1,5 @@
 -- =============================================================================
--- SchoolDesk — PostgreSQL Target Schema Initialization Script
+-- SAMS — PostgreSQL Target Schema Initialization Script
 -- Runs automatically when a new Postgres container starts (Docker init.d)
 -- Also used as the reference DDL for manual DB setup.
 -- =============================================================================
@@ -103,12 +103,14 @@ CREATE TABLE IF NOT EXISTS invitations (
 );
 
 -- User-to-tenant mapping table — used to resolve which tenant a Keycloak user belongs to
+-- PK is (email, tenant_id), not (email): one person may belong to several
+-- schools, with a different role in each. See alembic cp_0002.
 CREATE TABLE IF NOT EXISTS user_tenant_map (
     email      CITEXT      NOT NULL,
     tenant_id  VARCHAR(50) NOT NULL REFERENCES tenants(tenant_id) ON DELETE CASCADE,
     role       TEXT        NOT NULL DEFAULT 'student',
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (email)
+    PRIMARY KEY (email, tenant_id)
 );
 
 -- Audit log for pre-provisioned user invitations
@@ -169,14 +171,38 @@ CREATE TABLE IF NOT EXISTS tenant_a.parenets (
     phone TEXT   DEFAULT NULL
 );
 
+-- Academic Years (ADR 0002 / ADR 0003) -- must precede `class`, which
+-- references it. Single-pass script, so no legacy is_active phase is needed
+-- here (unlike database.py's mirror, which has to convert an already-running
+-- tenant's older boolean column).
+CREATE TABLE IF NOT EXISTS tenant_a.academic_years (
+    id             BIGSERIAL   PRIMARY KEY,
+    name           TEXT        NOT NULL,
+    status         TEXT        NOT NULL DEFAULT 'active'
+                   CHECK (status IN ('planned', 'active', 'closed')),
+    start_date     DATE        DEFAULT NULL,
+    end_date       DATE        DEFAULT NULL,
+    rolled_from_id BIGINT      DEFAULT NULL REFERENCES tenant_a.academic_years(id) ON DELETE SET NULL,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS tenant_a_one_active_academic_year
+    ON tenant_a.academic_years (status) WHERE status = 'active';
+INSERT INTO tenant_a.academic_years (name, status)
+SELECT '2026-2027', 'active'
+WHERE NOT EXISTS (SELECT 1 FROM tenant_a.academic_years);
+
 -- Table 5: class
 CREATE TABLE IF NOT EXISTS tenant_a.class (
-    id              BIGSERIAL   PRIMARY KEY,
-    name            TEXT        NOT NULL,
-    level_id        BIGINT      NOT NULL REFERENCES tenant_a.levels(level_id) ON DELETE RESTRICT,
-    head_teacher_id BIGINT      NULL REFERENCES tenant_a.teachers(id) ON DELETE RESTRICT,
-    capacity        INTEGER     NOT NULL DEFAULT 25,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id               BIGSERIAL   PRIMARY KEY,
+    name             TEXT        NOT NULL,
+    level_id         BIGINT      NOT NULL REFERENCES tenant_a.levels(level_id) ON DELETE RESTRICT,
+    head_teacher_id  BIGINT      NULL REFERENCES tenant_a.teachers(id) ON DELETE RESTRICT,
+    capacity         INTEGER     NOT NULL DEFAULT 25 CHECK (capacity > 0),
+    is_active        BOOLEAN     NOT NULL DEFAULT TRUE,
+    academic_year_id BIGINT      NOT NULL REFERENCES tenant_a.academic_years(id) ON DELETE RESTRICT,
+    section_label    TEXT        DEFAULT NULL,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (name, academic_year_id)
 );
 
 CREATE TABLE IF NOT EXISTS tenant_a.academic_settings (
@@ -203,18 +229,75 @@ CREATE INDEX IF NOT EXISTS idx_class_teacher ON tenant_a.class(head_teacher_id);
 CREATE TABLE IF NOT EXISTS tenant_a.students (
     id         BIGINT      PRIMARY KEY REFERENCES tenant_a.users(id) ON DELETE CASCADE,
     name       TEXT        NOT NULL,
-    class_id   BIGINT      NOT NULL REFERENCES tenant_a.class(id) ON DELETE RESTRICT,
+    class_id   BIGINT      REFERENCES tenant_a.class(id) ON DELETE RESTRICT,
     gender     TEXT        DEFAULT NULL,
     birth_data TEXT        DEFAULT NULL,
+    status     TEXT        NOT NULL DEFAULT 'enrolled'
+               CHECK (status IN ('enrolled', 'graduated', 'withdrawn')),
+    exited_on  DATE        DEFAULT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_students_class ON tenant_a.students(class_id);
 
+-- Table 6b: student_class_history -- append-only log of every class_id
+-- transition (including to/from NULL), so "who moved where and when" is
+-- answerable from data instead of only the current class_id snapshot.
+CREATE TABLE IF NOT EXISTS tenant_a.student_class_history (
+    id           BIGSERIAL   PRIMARY KEY,
+    student_id   BIGINT      NOT NULL REFERENCES tenant_a.students(id) ON DELETE CASCADE,
+    old_class_id BIGINT      REFERENCES tenant_a.class(id) ON DELETE SET NULL,
+    new_class_id BIGINT      REFERENCES tenant_a.class(id) ON DELETE SET NULL,
+    changed_by   BIGINT      REFERENCES tenant_a.users(id) ON DELETE SET NULL,
+    changed_at   TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_sch_student ON tenant_a.student_class_history(student_id, changed_at);
+
+-- Year Rollover (ADR 0003)
+CREATE TABLE IF NOT EXISTS tenant_a.year_rollover (
+    id           BIGSERIAL   PRIMARY KEY,
+    from_year_id BIGINT      NOT NULL REFERENCES tenant_a.academic_years(id) ON DELETE RESTRICT,
+    to_year_id   BIGINT      NOT NULL REFERENCES tenant_a.academic_years(id) ON DELETE RESTRICT,
+    state        TEXT        NOT NULL DEFAULT 'draft'
+                 CHECK (state IN ('draft', 'previewed', 'committing', 'committed')),
+    summary      JSONB       DEFAULT NULL,
+    created_by   BIGINT      REFERENCES tenant_a.users(id) ON DELETE SET NULL,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (from_year_id, to_year_id)
+);
+
+CREATE TABLE IF NOT EXISTS tenant_a.year_rollover_line (
+    id               BIGSERIAL   PRIMARY KEY,
+    rollover_id      BIGINT      NOT NULL REFERENCES tenant_a.year_rollover(id) ON DELETE CASCADE,
+    student_id       BIGINT      NOT NULL REFERENCES tenant_a.students(id) ON DELETE CASCADE,
+    from_class_id    BIGINT      REFERENCES tenant_a.class(id) ON DELETE SET NULL,
+    to_level_id      BIGINT      REFERENCES tenant_a.levels(level_id) ON DELETE SET NULL,
+    to_section_label TEXT        DEFAULT NULL,
+    to_class_id      BIGINT      REFERENCES tenant_a.class(id) ON DELETE SET NULL,
+    proposed_action  TEXT        NOT NULL CHECK (proposed_action IN ('promote', 'graduate', 'hold')),
+    override_action  TEXT        CHECK (override_action IN ('promote', 'graduate', 'hold', 'withdraw')),
+    exception_code   TEXT        CHECK (exception_code IN ('no_next_level', 'no_placement', 'over_capacity')),
+    applied_at       TIMESTAMPTZ DEFAULT NULL,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (rollover_id, student_id)
+);
+CREATE INDEX IF NOT EXISTS idx_yrl_rollover_a ON tenant_a.year_rollover_line(rollover_id);
+
 -- Table 7: student_parent_map
 CREATE TABLE IF NOT EXISTS tenant_a.student_parent_map (
-    student_id BIGINT NOT NULL REFERENCES tenant_a.students(id) ON DELETE CASCADE,
-    parent_id  BIGINT NOT NULL REFERENCES tenant_a.parenets(id) ON DELETE CASCADE,
+    student_id         BIGINT      NOT NULL REFERENCES tenant_a.students(id) ON DELETE CASCADE,
+    parent_id          BIGINT      NOT NULL REFERENCES tenant_a.parenets(id) ON DELETE CASCADE,
+    -- relationship_type is free text (mother/father/guardian/other) -- this
+    -- product has no authority to define a canonical legal taxonomy, so it
+    -- isn't an enum. can_approve defaults TRUE so every existing link keeps
+    -- behaving exactly as it does today; only a link explicitly created (or
+    -- edited) with can_approve=false is restricted from consenting to trips.
+    relationship_type  TEXT        DEFAULT NULL,
+    is_primary_contact BOOLEAN     NOT NULL DEFAULT FALSE,
+    can_approve        BOOLEAN     NOT NULL DEFAULT TRUE,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (student_id, parent_id)
 );
 
@@ -491,14 +574,35 @@ CREATE TABLE IF NOT EXISTS tenant_b.parenets (
     phone TEXT   DEFAULT NULL
 );
 
+-- Academic Years (ADR 0002 / ADR 0003) -- must precede `class`, see tenant_a above.
+CREATE TABLE IF NOT EXISTS tenant_b.academic_years (
+    id             BIGSERIAL   PRIMARY KEY,
+    name           TEXT        NOT NULL,
+    status         TEXT        NOT NULL DEFAULT 'active'
+                   CHECK (status IN ('planned', 'active', 'closed')),
+    start_date     DATE        DEFAULT NULL,
+    end_date       DATE        DEFAULT NULL,
+    rolled_from_id BIGINT      DEFAULT NULL REFERENCES tenant_b.academic_years(id) ON DELETE SET NULL,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS tenant_b_one_active_academic_year
+    ON tenant_b.academic_years (status) WHERE status = 'active';
+INSERT INTO tenant_b.academic_years (name, status)
+SELECT '2026-2027', 'active'
+WHERE NOT EXISTS (SELECT 1 FROM tenant_b.academic_years);
+
 -- Table 5: class
 CREATE TABLE IF NOT EXISTS tenant_b.class (
-    id              BIGSERIAL   PRIMARY KEY,
-    name            TEXT        NOT NULL,
-    level_id        BIGINT      NOT NULL REFERENCES tenant_b.levels(level_id) ON DELETE RESTRICT,
-    head_teacher_id BIGINT      NULL REFERENCES tenant_b.teachers(id) ON DELETE RESTRICT,
-    capacity        INTEGER     NOT NULL DEFAULT 25,
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id               BIGSERIAL   PRIMARY KEY,
+    name             TEXT        NOT NULL,
+    level_id         BIGINT      NOT NULL REFERENCES tenant_b.levels(level_id) ON DELETE RESTRICT,
+    head_teacher_id  BIGINT      NULL REFERENCES tenant_b.teachers(id) ON DELETE RESTRICT,
+    capacity         INTEGER     NOT NULL DEFAULT 25 CHECK (capacity > 0),
+    is_active        BOOLEAN     NOT NULL DEFAULT TRUE,
+    academic_year_id BIGINT      NOT NULL REFERENCES tenant_b.academic_years(id) ON DELETE RESTRICT,
+    section_label    TEXT        DEFAULT NULL,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (name, academic_year_id)
 );
 
 CREATE TABLE IF NOT EXISTS tenant_b.academic_settings (
@@ -525,18 +629,68 @@ CREATE INDEX IF NOT EXISTS idx_class_teacher_b ON tenant_b.class(head_teacher_id
 CREATE TABLE IF NOT EXISTS tenant_b.students (
     id         BIGINT      PRIMARY KEY REFERENCES tenant_b.users(id) ON DELETE CASCADE,
     name       TEXT        NOT NULL,
-    class_id   BIGINT      NOT NULL REFERENCES tenant_b.class(id) ON DELETE RESTRICT,
+    class_id   BIGINT      REFERENCES tenant_b.class(id) ON DELETE RESTRICT,
     gender     TEXT        DEFAULT NULL,
     birth_data TEXT        DEFAULT NULL,
+    status     TEXT        NOT NULL DEFAULT 'enrolled'
+               CHECK (status IN ('enrolled', 'graduated', 'withdrawn')),
+    exited_on  DATE        DEFAULT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_students_class_b ON tenant_b.students(class_id);
 
+-- Table 6b: student_class_history
+CREATE TABLE IF NOT EXISTS tenant_b.student_class_history (
+    id           BIGSERIAL   PRIMARY KEY,
+    student_id   BIGINT      NOT NULL REFERENCES tenant_b.students(id) ON DELETE CASCADE,
+    old_class_id BIGINT      REFERENCES tenant_b.class(id) ON DELETE SET NULL,
+    new_class_id BIGINT      REFERENCES tenant_b.class(id) ON DELETE SET NULL,
+    changed_by   BIGINT      REFERENCES tenant_b.users(id) ON DELETE SET NULL,
+    changed_at   TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_sch_student_b ON tenant_b.student_class_history(student_id, changed_at);
+
+-- Year Rollover (ADR 0003)
+CREATE TABLE IF NOT EXISTS tenant_b.year_rollover (
+    id           BIGSERIAL   PRIMARY KEY,
+    from_year_id BIGINT      NOT NULL REFERENCES tenant_b.academic_years(id) ON DELETE RESTRICT,
+    to_year_id   BIGINT      NOT NULL REFERENCES tenant_b.academic_years(id) ON DELETE RESTRICT,
+    state        TEXT        NOT NULL DEFAULT 'draft'
+                 CHECK (state IN ('draft', 'previewed', 'committing', 'committed')),
+    summary      JSONB       DEFAULT NULL,
+    created_by   BIGINT      REFERENCES tenant_b.users(id) ON DELETE SET NULL,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at   TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (from_year_id, to_year_id)
+);
+
+CREATE TABLE IF NOT EXISTS tenant_b.year_rollover_line (
+    id               BIGSERIAL   PRIMARY KEY,
+    rollover_id      BIGINT      NOT NULL REFERENCES tenant_b.year_rollover(id) ON DELETE CASCADE,
+    student_id       BIGINT      NOT NULL REFERENCES tenant_b.students(id) ON DELETE CASCADE,
+    from_class_id    BIGINT      REFERENCES tenant_b.class(id) ON DELETE SET NULL,
+    to_level_id      BIGINT      REFERENCES tenant_b.levels(level_id) ON DELETE SET NULL,
+    to_section_label TEXT        DEFAULT NULL,
+    to_class_id      BIGINT      REFERENCES tenant_b.class(id) ON DELETE SET NULL,
+    proposed_action  TEXT        NOT NULL CHECK (proposed_action IN ('promote', 'graduate', 'hold')),
+    override_action  TEXT        CHECK (override_action IN ('promote', 'graduate', 'hold', 'withdraw')),
+    exception_code   TEXT        CHECK (exception_code IN ('no_next_level', 'no_placement', 'over_capacity')),
+    applied_at       TIMESTAMPTZ DEFAULT NULL,
+    created_at       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (rollover_id, student_id)
+);
+CREATE INDEX IF NOT EXISTS idx_yrl_rollover_b ON tenant_b.year_rollover_line(rollover_id);
+
 -- Table 7: student_parent_map
 CREATE TABLE IF NOT EXISTS tenant_b.student_parent_map (
-    student_id BIGINT NOT NULL REFERENCES tenant_b.students(id) ON DELETE CASCADE,
-    parent_id  BIGINT NOT NULL REFERENCES tenant_b.parenets(id) ON DELETE CASCADE,
+    student_id         BIGINT      NOT NULL REFERENCES tenant_b.students(id) ON DELETE CASCADE,
+    parent_id          BIGINT      NOT NULL REFERENCES tenant_b.parenets(id) ON DELETE CASCADE,
+    relationship_type  TEXT        DEFAULT NULL,
+    is_primary_contact BOOLEAN     NOT NULL DEFAULT FALSE,
+    can_approve        BOOLEAN     NOT NULL DEFAULT TRUE,
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (student_id, parent_id)
 );
 

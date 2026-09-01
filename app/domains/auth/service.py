@@ -11,6 +11,7 @@ from uuid import UUID
 
 import jwt
 from passlib.context import CryptContext
+from passlib.exc import UnknownHashError
 
 from app.core.config import (
     JWT_EXPIRATION_MINUTES,
@@ -19,7 +20,7 @@ from app.core.config import (
     JWT_SECRET,
 )
 from app.core.database import get_control_plane_pool, get_db_pool
-from app.core.keycloak_admin import sync_user_to_keycloak
+from app.core.keycloak_admin import create_keycloak_organization, sync_user_to_keycloak
 from app.domains.tenant.control_plane_repository import ControlPlaneRepository
 from app.domains.tenant.tenant_repository import TenantRepository
 from app.domains.tenant.user_repository import UserRepository
@@ -70,8 +71,20 @@ class AuthService:
 
     @staticmethod
     def verify_password(plain_password: str, hashed_password: str) -> bool:
-        """Return True iff plain_password matches the stored hash."""
-        return _pwd_context.verify(plain_password, hashed_password)
+        """Return True iff plain_password matches the stored hash.
+
+        A stored value that isn't a recognizable bcrypt_sha256 hash (e.g. a
+        'keycloak_managed'/'managed' placeholder written by a JIT-provisioning
+        path, or any other malformed value) makes passlib raise
+        UnknownHashError instead of returning False. Left uncaught, that
+        propagates as a raw "hash could not be identified" 401 detail —
+        leaking an internal implementation detail to the client instead of
+        the same generic auth failure a wrong password produces.
+        """
+        try:
+            return _pwd_context.verify(plain_password, hashed_password)
+        except UnknownHashError:
+            return False
 
     @staticmethod
     def create_access_token(
@@ -375,8 +388,32 @@ class AuthService:
                             break
                     except Exception:
                         continue
+        # A control-plane parent may have no tenant-local `users` row yet -- the
+        # scan above only looks at tenant `users` tables -- but will have rows in
+        # parent_tenant_links. Resolve from those before giving up. Without this,
+        # the parent branch below would call create_parent_tenant_link() with
+        # whatever tenant the old "tenant_a" default named, linking the parent into
+        # the wrong school AND creating a parent user row inside it.
         if not tenant_id:
-            tenant_id = "tenant_a"
+            _parent = await cp_repo.get_parent_by_email(email)
+            if _parent:
+                _linked = await cp_repo.get_tenants_for_parent(_parent["id"])
+                if len(_linked) == 1:
+                    tenant_id = _linked[0]
+                elif len(_linked) > 1:
+                    raise ValueError(
+                        "This account is linked to more than one school. "
+                        "Specify which school to sign in to."
+                    )
+
+        # FAIL CLOSED. This used to be `tenant_id = "tenant_a"` -- the first real
+        # school -- so any login whose tenant could not be resolved was
+        # authenticated against school A's users table.
+        if not tenant_id:
+            raise ValueError(
+                "This account is not associated with a school. Ask an "
+                "administrator to invite you to one."
+            )
 
         # Check Parents (Global database checks)
         parent = await cp_repo.get_parent_by_email(email)
@@ -440,14 +477,28 @@ class AuthService:
 
     @staticmethod
     async def create_tenant(tenant_id: str, name: str) -> dict:
-        """Create a new tenant record and generate its PostgreSQL schema and tables."""
+        """Create a new tenant: control-plane row, Postgres schema, Keycloak org.
+
+        A tenant and its Keycloak Organization are provisioned together or not at
+        all. The organization alias is what Keycloak puts in the `organization`
+        claim, and that claim is how a request resolves to a tenant -- so a school
+        created without one is a school whose users authenticate successfully and
+        then fail tenant resolution on every single request. Provisioning it first
+        means a Keycloak outage refuses the create loudly instead of leaving that
+        state behind.
+        """
+        # 1. Keycloak organization first -- this is the step allowed to fail.
+        #    create_keycloak_organization raises rather than warning, and is a
+        #    no-op if the organization already exists.
+        create_keycloak_organization(tenant_id, name=name)
+
         cp_pool = await get_control_plane_pool()
         cp_repo = ControlPlaneRepository(cp_pool)
 
-        # 1. Insert tenant in control plane
+        # 2. Insert tenant in control plane
         await cp_repo.create_tenant(tenant_id=tenant_id, name=name)
 
-        # 2. Trigger schema creation and table initialization in PostgreSQL
+        # 3. Trigger schema creation and table initialization in PostgreSQL
         await get_db_pool(tenant_id)
 
         return {
@@ -560,7 +611,12 @@ class AuthService:
         return await repo.get_users_by_role("pending")
 
     @staticmethod
-    async def assign_user_role(tenant_id: str, email: str, new_role: str) -> dict:
+    async def assign_user_role(
+        tenant_id: str,
+        email: str,
+        new_role: str,
+        requesting_user_roles: str | list[str] | None = None,
+    ) -> dict:
         """Assign a new role to a pending user (or update an existing role)."""
         valid_roles = (
             "super_admin",
@@ -575,6 +631,15 @@ class AuthService:
         )
         if new_role not in valid_roles:
             raise ValueError(f"Invalid role: {new_role}")
+
+        if new_role == "super_admin":
+            caller_roles = (
+                {requesting_user_roles}
+                if isinstance(requesting_user_roles, str)
+                else set(requesting_user_roles or [])
+            )
+            if "super_admin" not in caller_roles:
+                raise PermissionError("Only a super_admin can grant the super_admin role")
 
         # 1. Update the user in the tenant DB
         db_pool = await get_db_pool(tenant_id)

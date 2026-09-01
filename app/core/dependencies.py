@@ -333,6 +333,49 @@ COMPOSITE_ROLE_PERMISSIONS: dict[str, set[str]] = {
 }
 
 
+# Role and permission tokens accepted off a JWT. Anything absent here is
+# silently dropped from the caller's role list -- so a permission missing from
+# this set can be granted in the admin UI, stored on the user row, baked into
+# the login token, and still authorize nothing (that is exactly how
+# `event:submit` came to be ungrantable). It is therefore DERIVED from
+# COMPOSITE_ROLE_PERMISSIONS -- the catalog every role is built from -- rather
+# than hand-listed, so the two cannot drift apart again. `_EXTRA_PERMISSIONS`
+# holds the tokens that are legitimate on a token but belong to no composite
+# role. This set is a typo guard, not a security boundary: the only issuer of
+# these claims is our own login path reading the user's own roles/permissions
+# columns (Keycloak tokens contribute no roles at all -- see get_current_user),
+# and the JWT signature is what makes that trustworthy.
+_ROLE_NAMES: set[str] = {
+    "super_admin",
+    "school_admin",
+    "admin",
+    "administrator",
+    "manager",
+    "teacher",
+    "event_teacher",
+    "parent",
+    "student",
+    "pending",
+}
+
+_EXTRA_PERMISSIONS: set[str] = {
+    "system:write",
+    "system:read",
+    "tenant:manage",
+    "tenant:view",
+    "academic:direct",
+    "academic:view",
+    "content:create",
+    "content:publish",
+}
+
+VALID_ROLES: set[str] = (
+    _ROLE_NAMES
+    | _EXTRA_PERMISSIONS
+    | {p for perms in COMPOSITE_ROLE_PERMISSIONS.values() for p in perms if ":" in p}
+)
+
+
 def require_permission(action: str, resource: dict | None = None):
     """FastAPI dependency guard verifying that current_user can perform `action` via OPA.
 
@@ -363,7 +406,7 @@ async def get_current_user(
 ) -> CurrentUser:
     """Decode the Bearer JWT and return a CurrentUser object.
 
-    Supports both internal SchoolDesk JWTs and Keycloak OIDC tokens passed via APISIX.
+    Supports both internal SAMS JWTs and Keycloak OIDC tokens passed via APISIX.
     Raises HTTP 401 if the token is missing or invalid.
     """
     if not credentials:
@@ -396,58 +439,6 @@ async def get_current_user(
     # Extract claims cleanly whether from Keycloak or internal JWT
     user_id = payload.get("sub")
     email = payload.get("email") or payload.get("preferred_username", "")
-
-    VALID_ROLES = {
-        # High-level Roles
-        "super_admin",
-        "school_admin",
-        "admin",
-        "administrator",
-        "manager",
-        "teacher",
-        "event_teacher",
-        "parent",
-        "student",
-        "pending",
-        # Granular Roles / Permissions
-        "system:write",
-        "system:read",
-        "tenant:manage",
-        "tenant:view",
-        "school:write",
-        "school:read",
-        "academic:direct",
-        "academic:view",
-        "user:invite",
-        "user:delete",
-        "user:link",
-        "user:view",
-        "event:create",
-        "event:edit",
-        "event:delete",
-        "event:propose",
-        "event:review",
-        "event:publish",
-        "event:clone",
-        "event:view_draft",
-        "resource:create",
-        "resource:price",
-        "resource:view",
-        "teacher:write",
-        "teacher:read",
-        "enrollment:request",
-        "enrollment:parent_approve",
-        "enrollment:teacher_approve",
-        "enrollment:cancel",
-        "enrollment:view_roster",
-        "billing:invoice",
-        "billing:pay",
-        "billing:refund",
-        "billing:audit",
-        "content:create",
-        "content:publish",
-        "announcement:manage",
-    }
 
     # Keycloak is strictly for Authentication (AuthN). We DO NOT extract authorization roles from Keycloak tokens.
     # We only check for roles if they were embedded by our own local AuthService.
@@ -484,21 +475,65 @@ async def get_current_user(
 
     final_roles_list = list(extracted_roles)
 
+    # Recognize a control-plane super_admin authenticating via Keycloak.
+    # Keycloak tokens never carry our roles (by design, above), so without
+    # this check a super_admin logging in via Keycloak SSO falls through
+    # every path below as an unrecognized "pending" user, defaults to
+    # tenant_a, and gets a bogus JIT-provisioned `users` row created there.
+    # The local-password login path (AuthService.login_user) already checks
+    # `super_admins` first and never reaches this function's fallback logic,
+    # which is why this only surfaces for Keycloak SSO.
+    if role == "pending" and email:
+        try:
+            from app.core.database import get_control_plane_pool
+
+            cp_pool = await get_control_plane_pool()
+            is_super_admin_email = await cp_pool.fetchval(
+                "SELECT 1 FROM super_admins WHERE UPPER(email) = UPPER($1)", email
+            )
+            if is_super_admin_email:
+                role = "super_admin"
+                extracted_roles.discard("pending")
+                extracted_roles.add("super_admin")
+                if "super_admin" in COMPOSITE_ROLE_PERMISSIONS:
+                    extracted_roles.update(COMPOSITE_ROLE_PERMISSIONS["super_admin"])
+                final_roles_list = list(extracted_roles)
+        except Exception as _e:
+            print(
+                f"[get_current_user] Warning: could not check super_admins for '{email}': {_e}"
+            )
+
     tenant_id = payload.get("tenant_id")
 
-    # Try Keycloak Organization / Org claims
-    if not tenant_id:
-        org = payload.get("organization") or payload.get("org") or payload.get("organizations")
-        if isinstance(org, dict):
-            tenant_id = list(org.keys())[0] if org else None
-        elif isinstance(org, list) and org:
-            first = org[0]
-            if isinstance(first, dict):
-                tenant_id = first.get("name") or first.get("id")
-            elif isinstance(first, str):
-                tenant_id = first
-        elif isinstance(org, str):
-            tenant_id = org
+    # Keycloak Organization membership -> tenant. The organization alias is the
+    # tenant_id by construction (see keycloak_admin.create_keycloak_organization).
+    #
+    # The claim is a flat ARRAY of aliases -- verified against Keycloak 26.7 with
+    # scope=organization:* -- and its order is HashSet iteration over organization
+    # UUIDs, so it is neither stable nor meaningful. Exactly one membership
+    # resolves directly; SEVERAL memberships deliberately resolve to nothing here,
+    # leaving the caller to be resolved by user_tenant_map (or, for a super_admin,
+    # by the X-Tenant-ID selection below).
+    #
+    # This previously did `org[0]`, which picked an arbitrary school for any
+    # multi-school user -- the exact failure the unordered claim invites.
+    org_aliases: list[str] = []
+    org = payload.get("organization") or payload.get("org") or payload.get("organizations")
+    if isinstance(org, dict):
+        org_aliases = [str(k) for k in org]
+    elif isinstance(org, list):
+        for item in org:
+            if isinstance(item, dict):
+                val = item.get("alias") or item.get("name") or item.get("id")
+                if val:
+                    org_aliases.append(str(val))
+            elif isinstance(item, str) and item.strip():
+                org_aliases.append(item.strip())
+    elif isinstance(org, str) and org.strip():
+        org_aliases = [org.strip()]
+
+    if not tenant_id and len(org_aliases) == 1:
+        tenant_id = org_aliases[0]
 
     # Try User Attributes claim
     if not tenant_id:
@@ -592,12 +627,96 @@ async def get_current_user(
         if req_tenant and req_tenant.strip():
             tenant_id = req_tenant.strip().lower()
 
-    # Default fallback if tenant_id could not be resolved from token, map, or header
-    if not tenant_id or tenant_id.lower() in ("sams", "schooldesk", "master"):
-        tenant_id = "tenant_a"
+    # Last-ditch cross-tenant scan. Every prior resolution step depends on
+    # user_tenant_map already having a row for this email; if it doesn't (a first
+    # Keycloak login racing the map, or a user created by some path that never
+    # wrote one), resolution used to fall through to a hardcoded tenant_a and
+    # JIT-provision a brand new 'pending' user there -- even when a real,
+    # fully-roled account for this exact email already existed in a different
+    # tenant's schema. That is the mechanism behind every stray 'pending in the
+    # wrong tenant' user found in this codebase so far (student.11@tenantb.com,
+    # student.12@tenantb.com -- see PROJECT_UNDERSTANDING.md drift log). Mirrors
+    # the same fallback AuthService.login_user does for the password-login path.
+    #
+    # This is now a SELF-HEAL for accounts that predate organization membership,
+    # not a resolution step: the tenant_a default it used to protect against is
+    # gone (see below), so without it those users would get a hard 400 rather
+    # than landing in the wrong school. It should be deleted once every user has
+    # an `organization` claim -- it opens a pool per tenant and is a
+    # tenant-enumeration primitive.
+    if (
+        (not tenant_id or tenant_id.lower() in ("sams", "schooldesk", "master"))
+        and email
+        and not is_super_admin
+    ):
+        try:
+            from app.core.database import get_db_pool as _get_db_pool
+            from app.domains.tenant.control_plane_repository import (
+                ControlPlaneRepository as _CpRepo,
+            )
 
-    # Resolve local database user ID, dynamic roles, and custom permissions for school roles
-    if email:
+            cp_pool = await get_control_plane_pool()
+            cp_repo = _CpRepo(cp_pool)
+            all_tenants = await cp_repo.get_all_tenants()
+            for t in all_tenants:
+                tid = t.get("tenant_id") or t.get("id")
+                if not tid:
+                    continue
+                try:
+                    t_pool = await _get_db_pool(tid)
+                    found = await t_pool.fetchrow(
+                        "SELECT role FROM users WHERE UPPER(email) = UPPER($1)", email.strip()
+                    )
+                except Exception:
+                    continue
+                if found:
+                    tenant_id = tid
+                    found_role = found.get("role")
+                    if found_role and found_role not in ("pending", "none", "unassigned"):
+                        role = found_role
+                        extracted_roles.add(found_role)
+                    # Self-heal: this is exactly the row that was missing.
+                    await cp_repo.upsert_user_tenant_map(email, tenant_id, role or "pending")
+                    break
+        except Exception as _e:
+            print(
+                f"[get_current_user] Warning: cross-tenant scan for '{email}' failed: {_e}"
+            )
+
+    # FAIL CLOSED. This used to read `tenant_id = "tenant_a"`.
+    #
+    # tenant_a is not a neutral placeholder -- it is the first real school. So any
+    # token whose tenant could not be resolved (a misconfigured Keycloak client, a
+    # realm named sams/schooldesk/master, a user with no user_tenant_map row and no
+    # organization membership) silently READ AND WROTE that school's data, and the
+    # JIT-provisioning block below would then create a 'pending' user inside it.
+    # An unresolvable tenant is now an error, never a guess.
+    if not tenant_id or tenant_id.lower() in ("sams", "schooldesk", "master"):
+        if is_super_admin:
+            # A super_admin genuinely has no home tenant: AuthService.login_user
+            # mints their token with tenant_id="". They choose one per request via
+            # X-Tenant-ID (handled above, and restricted to super_admin). Leaving
+            # this None keeps cross-tenant endpoints like analytics working, while
+            # tenant-scoped endpoints fail cleanly instead of defaulting into an
+            # arbitrary school. CurrentUser.tenant_id is typed `str | None`.
+            tenant_id = None
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Your account is not associated with a school. Ask an "
+                    "administrator to invite you to one."
+                ),
+            )
+
+    # Resolve local database user ID, dynamic roles, and custom permissions for
+    # school roles.
+    #
+    # `and tenant_id` guards the super_admin-with-no-selection case: tenant_id is
+    # deliberately None there, and get_db_pool(None) would raise instead of
+    # producing the clean "pick a school" behaviour that None is meant to express.
+    # Everyone else is guaranteed a tenant_id by the fail-closed check above.
+    if email and tenant_id:
         try:
             from app.core.database import get_db_pool
 
@@ -616,7 +735,16 @@ async def get_current_user(
                 if user_row:
                     user_id = str(user_row["id"])
                     db_role = user_row.get("role")
-                    if db_role in ("pending", "none", "unassigned"):
+                    # A super_admin has no real account in most tenants (see
+                    # the JIT-provisioning branch below), but if one somehow
+                    # already has a stray/legacy tenant-scoped `users` row
+                    # with role='pending' -- e.g. left over from before this
+                    # function recognized super_admins on the Keycloak path
+                    # -- that row must never downgrade a real super_admin
+                    # back to pending. super_admin overrides every other
+                    # workflow/role check in this codebase; this is that
+                    # same invariant applied here.
+                    if db_role in ("pending", "none", "unassigned") and not is_super_admin:
                         role = db_role
                         extracted_roles = {"pending"}
                     else:
@@ -657,16 +785,31 @@ async def get_current_user(
                     # "user I never created" sitting in their school.
                     pass
                 else:
-                    # JIT Auto-provision missing Keycloak user locally
+                    # JIT Auto-provision missing Keycloak user locally.
+                    # ON CONFLICT (email) DO NOTHING + fallback SELECT makes
+                    # this atomic: the preceding SELECT above and this INSERT
+                    # are two separate statements, so a concurrent request for
+                    # the same brand-new email could otherwise race here. The
+                    # unique constraint on users.email already prevented a
+                    # plain INSERT from corrupting an existing row, but it
+                    # would raise and get swallowed by this function's outer
+                    # except-and-log, silently leaving the request without a
+                    # resolved local id. This resolves to the winner's row
+                    # instead of failing.
                     local_id = await conn.fetchval(
                         """
                         INSERT INTO users (email, role, password_hash)
                         VALUES ($1, $2, 'keycloak_managed')
+                        ON CONFLICT (email) DO NOTHING
                         RETURNING id
                         """,
                         email,
                         role,
                     )
+                    if local_id is None:
+                        local_id = await conn.fetchval(
+                            "SELECT id FROM users WHERE UPPER(email) = UPPER($1)", email
+                        )
                     if local_id is not None:
                         user_id = str(local_id)
                         # Create profile record depending on role
@@ -677,32 +820,23 @@ async def get_current_user(
                                 email.split("@")[0].title(),
                             )
                         elif role == "student":
-                            # Assign student to first available class or fallback
-                            class_id = await conn.fetchval("SELECT id FROM class LIMIT 1")
-                            if class_id is None:
-                                # Create default class if none exist
-                                level_id = await conn.fetchval(
-                                    "SELECT level_id FROM levels LIMIT 1"
-                                )
-                                if level_id is None:
-                                    level_id = await conn.fetchval(
-                                        "INSERT INTO levels (name) VALUES ('Grade 1') RETURNING level_id"
-                                    )
-                                t_id = await conn.fetchval("SELECT id FROM teachers LIMIT 1")
-                                if t_id is None:
-                                    t_user = await conn.fetchval(
-                                        "INSERT INTO users (email, role, password_hash) VALUES ($1, 'teacher', 'managed') RETURNING id",
-                                        f"head_teacher_{tenant_id}@school.com",
-                                    )
-                                    t_id = await conn.fetchval(
-                                        "INSERT INTO teachers (id, name) VALUES ($1, 'Head Teacher') RETURNING id",
-                                        t_user,
-                                    )
-                                class_id = await conn.fetchval(
-                                    "INSERT INTO class (name, level_id, head_teacher_id) VALUES ('Default Class', $1, $2) RETURNING id",
-                                    level_id,
-                                    t_id,
-                                )
+                            # Assign to an existing class deterministically
+                            # if one exists; otherwise leave unassigned --
+                            # class_id is nullable for exactly this reason
+                            # (see students.class_id / StudentPlacementView's
+                            # "Unassigned" state). This used to fabricate a
+                            # fake "Grade 1" level, a fake
+                            # head_teacher_*@school.com teacher account with
+                            # no real password, and a fake "Default Class"
+                            # the moment a student SSO-authenticated before
+                            # any real structure existed -- a role with no
+                            # administrative capability was silently
+                            # creating academic structure and a staff
+                            # account as a side effect of merely
+                            # authenticating.
+                            class_id = await conn.fetchval(
+                                "SELECT id FROM class ORDER BY id ASC LIMIT 1"
+                            )
 
                             await conn.execute(
                                 "INSERT INTO students (id, name, class_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
@@ -710,6 +844,16 @@ async def get_current_user(
                                 email.split("@")[0].title(),
                                 class_id,
                             )
+                        # Ensure this JIT-provisioned user is also in user_tenant_map
+                        # so future Keycloak SSO logins can resolve their tenant correctly
+                        try:
+                            from app.core.database import get_control_plane_pool as _get_cp_pool
+                            from app.domains.tenant.control_plane_repository import ControlPlaneRepository as _CpRepo
+                            _cp_pool = await _get_cp_pool()
+                            _cp_repo = _CpRepo(_cp_pool)
+                            await _cp_repo.upsert_user_tenant_map(email, tenant_id, role)
+                        except Exception as _e:
+                            print(f"[get_current_user] Warning: could not add JIT-provisioned user to user_tenant_map: {_e}")
         except Exception as exc:
             import traceback
 
@@ -718,8 +862,28 @@ async def get_current_user(
                 f"[get_current_user] Warning: could not resolve/provision local database ID for email '{email}': {exc}"
             )
 
-    # Resolve or JIT-provision parent roles
-    if role == "parent" and email:
+    # Resolve or JIT-provision parent roles.
+    #
+    # is_keycloak is load-bearing here, not optional: this block exists only
+    # to provision a parent who authenticated via Keycloak SSO and has never
+    # been seen locally. For a local-login token, get_current_user has
+    # already fully resolved user_id/tenant_id/role from the tenant-local
+    # `users` row lookup above (or, if that row didn't exist, from
+    # AuthService.login_user's own control-plane linkage at login time) --
+    # there is nothing left to provision. Running this unconditionally used
+    # to mean *every* authenticated request from a local-login parent
+    # re-executed "ensure parent exists globally in control plane", and the
+    # first time that ran for a parent who (like every seed_data.py demo
+    # parent) only ever got a tenant-local `users` row and no
+    # public.parents row, it would find none and INSERT one with the
+    # literal placeholder password_hash 'keycloak_managed' -- which
+    # AuthService.login_user() then finds *first* on every subsequent
+    # login attempt (it checks public.parents before tenant-local users),
+    # permanently shadowing the real, working password with an
+    # unauthenticatable placeholder. Confirmed live: parent.1@tenanta.com,
+    # parent.1@tenantb.com, parent.1@tenantc.com, and parent.2@tenanta.com
+    # all ended up with exactly this phantom row.
+    if role == "parent" and email and is_keycloak:
         try:
             from app.core.database import get_control_plane_pool, get_db_pool
 
@@ -730,10 +894,27 @@ async def get_current_user(
                     "SELECT id FROM parents WHERE email = $1", email
                 )
                 if not parent_row:
+                    # ON CONFLICT (email) DO NOTHING + fallback SELECT: the
+                    # SELECT above and this INSERT are separate statements, so
+                    # a concurrent request for the same brand-new parent email
+                    # could race here. parents.email is UNIQUE, so a plain
+                    # INSERT on the loser would just raise (caught by the
+                    # outer except below) and leave that request without a
+                    # resolved parent id instead of resolving to the winner's
+                    # row -- this makes it atomic.
                     global_parent_id = await conn_cp.fetchval(
-                        "INSERT INTO parents (email, password_hash) VALUES ($1, 'keycloak_managed') RETURNING id",
+                        """
+                        INSERT INTO parents (email, password_hash)
+                        VALUES ($1, 'keycloak_managed')
+                        ON CONFLICT (email) DO NOTHING
+                        RETURNING id
+                        """,
                         email,
                     )
+                    if global_parent_id is None:
+                        global_parent_id = await conn_cp.fetchval(
+                            "SELECT id FROM parents WHERE email = $1", email
+                        )
                 else:
                     global_parent_id = parent_row["id"]
 
@@ -749,16 +930,49 @@ async def get_current_user(
             async with tenant_pool.acquire() as conn_t:
                 local_id = await conn_t.fetchval("SELECT id FROM users WHERE email = $1", email)
                 if local_id is None:
-                    local_id = await conn_t.fetchval(
-                        "INSERT INTO users (email, role, password_hash) VALUES ($1, 'parent', 'keycloak_managed') RETURNING id",
-                        email,
-                    )
-                    await conn_t.execute(
-                        "INSERT INTO parents (id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-                        local_id,
-                        email.split("@")[0].title(),
-                    )
+                    async with conn_t.transaction():
+                        local_id = await conn_t.fetchval(
+                            """
+                            INSERT INTO users (email, role, password_hash)
+                            VALUES ($1, 'parent', 'keycloak_managed')
+                            ON CONFLICT (email) DO NOTHING
+                            RETURNING id
+                            """,
+                            email,
+                        )
+                        if local_id is None:
+                            local_id = await conn_t.fetchval(
+                                "SELECT id FROM users WHERE email = $1", email
+                            )
+                        # The tenant-schema table is `parenets` (typo
+                        # preserved from the original schema), not `parents`
+                        # -- `parents` only exists in the control-plane
+                        # (public) schema, which is still reachable here
+                        # since search_path is "<tenant>, public". Writing
+                        # to it used to silently create a control-plane row
+                        # with the wrong id type and no `name` column,
+                        # raise, get swallowed by the except below, and
+                        # leave the users row committed with no matching
+                        # parenets row -- invisible to GET /parents, and a
+                        # foreign key violation (500) the moment staff tried
+                        # to link this parent to a student. Wrapped in a
+                        # transaction so any future failure here rolls back
+                        # the users insert too, instead of repeating that.
+                        await conn_t.execute(
+                            "INSERT INTO parenets (id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                            local_id,
+                            email.split("@")[0].title(),
+                        )
                 user_id = str(local_id)
+
+            # Same gap as the generic JIT-provision path above: without this,
+            # a parent JIT-provisioned here has no user_tenant_map row, so the
+            # next Keycloak SSO login can't resolve their tenant and falls
+            # back to tenant_a, re-provisioning them as a stray 'pending' user
+            # in the wrong tenant.
+            from app.domains.tenant.control_plane_repository import ControlPlaneRepository as _CpRepo
+
+            await _CpRepo(cp_pool).upsert_user_tenant_map(email, tenant_id, "parent")
         except Exception as exc:
             print(
                 f"[get_current_user] Warning: could not resolve/provision local parent for email '{email}': {exc}"
@@ -778,6 +992,30 @@ async def get_current_user(
         email=email,
         roles=final_roles_list if final_roles_list else [role],
     )
+
+
+def require_selected_tenant(current_user: CurrentUser) -> str:
+    """The caller's active tenant id, normalised, or a 400 if there isn't one.
+
+    `CurrentUser.tenant_id` is `str | None`, and None is a real, expected state: a
+    super_admin has no home tenant (login mints tenant_id="") and picks one per
+    request via X-Tenant-ID. Tenant-scoped endpoints must turn that into a clear
+    "choose a school" response rather than an AttributeError from
+    `.strip()` on None -- which is what they did when the resolver still defaulted
+    everyone to tenant_a and None could never reach them.
+
+    Every other role is guaranteed a tenant_id by the fail-closed check in
+    get_current_user, so in practice this only fires for an unselected super_admin.
+    """
+    if not current_user.tenant_id:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "No school selected. Send an X-Tenant-ID header to choose which "
+                "school to act in."
+            ),
+        )
+    return current_user.tenant_id.strip().lower()
 
 
 async def require_tenant_live(current_user: CurrentUser = Depends(get_current_user)) -> CurrentUser:

@@ -1,5 +1,5 @@
 """
-Comprehensive Unit Test Suite for SchoolDesk Dynamic Roles, Granular Permissions, and Action Verification.
+Comprehensive Unit Test Suite for SAMS Dynamic Roles, Granular Permissions, and Action Verification.
 
 Tests cover:
 1. Single composite roles and their permission sets
@@ -207,6 +207,45 @@ class TestDynamicRolesAndPermissions:
             user_role=["teacher"],
             allowed_roles={"school_admin", "super_admin", "admin"}
         ) is False
+
+    # 13b. Regression: get_current_user() never hands _has_intersection a bare
+    # role list — it flattens each composite role's granular permissions into
+    # the same list first (see dependencies.py's get_current_user). Every
+    # role shares "school:read", so a check must not treat a caller's own
+    # granular permissions as votes for roles they don't hold — that was the
+    # privilege-escalation path (a student's "school:read" resolving to
+    # "school_admin" and passing every staff/admin-only gate in the academic
+    # domain: level and class CRUD, teacher/student/manager creation,
+    # parent-student linking, class reassignment).
+    def test_tenant_service_admin_guard_rejects_flattened_non_admin_roles(self):
+        for base_role in ("student", "parent", "manager"):
+            flattened = [base_role, *COMPOSITE_ROLE_PERMISSIONS[base_role]]
+            assert "school:read" in flattened
+            assert TenantService._has_intersection(
+                user_role=flattened,
+                allowed_roles={"school_admin", "super_admin", "admin"},
+            ) is False, f"{base_role}'s flattened roles must not satisfy an admin-only gate"
+
+    def test_tenant_service_staff_guard_rejects_flattened_student_and_parent(self):
+        for base_role in ("student", "parent"):
+            flattened = [base_role, *COMPOSITE_ROLE_PERMISSIONS[base_role]]
+            assert TenantService._has_intersection(
+                user_role=flattened,
+                allowed_roles={"school_admin", "teacher"},
+            ) is False, f"{base_role}'s flattened roles must not satisfy a staff-only gate"
+
+    def test_tenant_service_admin_guard_still_accepts_flattened_admin_and_teacher(self):
+        admin_flattened = ["school_admin", "admin", *COMPOSITE_ROLE_PERMISSIONS["school_admin"]]
+        assert TenantService._has_intersection(
+            user_role=admin_flattened,
+            allowed_roles={"school_admin", "super_admin", "admin"},
+        ) is True
+
+        teacher_flattened = ["teacher", *COMPOSITE_ROLE_PERMISSIONS["teacher"]]
+        assert TenantService._has_intersection(
+            user_role=teacher_flattened,
+            allowed_roles={"school_admin", "teacher"},
+        ) is True
 
     # 14. OPA verify_opa_authorization success in CurrentUser.can()
     @pytest.mark.asyncio

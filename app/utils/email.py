@@ -15,12 +15,12 @@ def _send_email_sync(to_email: str, invite_code: str, role: str) -> None:
     html_body = f"""
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; background-color: #0f172a; color: #f1f5f9; border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.1);">
         <div style="text-align: center; margin-bottom: 24px;">
-            <h1 style="font-size: 24px; font-weight: 800; color: #10b981; margin: 0;">SchoolDesk</h1>
+            <h1 style="font-size: 24px; font-weight: 800; color: #10b981; margin: 0;">SAMS</h1>
             <p style="font-size: 14px; color: #94a3b8; margin-top: 4px;">School Event & Workspace Management</p>
         </div>
         <div style="background-color: rgba(30, 41, 59, 0.7); padding: 20px; border-radius: 12px; border: 1px solid rgba(255, 255, 255, 0.05); margin-bottom: 24px;">
             <h2 style="font-size: 18px; font-weight: 700; color: #f8fafc; margin-top: 0;">You're Invited!</h2>
-            <p style="font-size: 14px; color: #cbd5e1; line-height: 1.6;">You have been invited to join the SchoolDesk workspace as a <strong>{role.replace('_', ' ').title()}</strong>.</p>
+            <p style="font-size: 14px; color: #cbd5e1; line-height: 1.6;">You have been invited to join the SAMS workspace as a <strong>{role.replace('_', ' ').title()}</strong>.</p>
             <p style="font-size: 14px; color: #cbd5e1; line-height: 1.6;">Click the button below to complete registration and log in directly via Google SSO:</p>
             <div style="text-align: center; margin: 28px 0;">
                 <a href="{registration_link}" style="background-color: #059669; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 10px; font-weight: 700; font-size: 14px; display: inline-block; box-shadow: 0 4px 14px rgba(5, 150, 105, 0.4);">Complete Registration</a>
@@ -36,8 +36,8 @@ def _send_email_sync(to_email: str, invite_code: str, role: str) -> None:
     
     if gmail_user and gmail_password:
         msg = EmailMessage()
-        msg['Subject'] = "You're invited to SchoolDesk!"
-        msg['From'] = f"SchoolDesk <{gmail_user}>"
+        msg['Subject'] = "You're invited to SAMS!"
+        msg['From'] = f"SAMS <{gmail_user}>"
         msg['To'] = to_email
         msg.set_content("Please enable HTML to view this invitation.")
         msg.add_alternative(html_body, subtype='html')

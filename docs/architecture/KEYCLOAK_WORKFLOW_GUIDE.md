@@ -1,6 +1,6 @@
-# SchoolDesk Keycloak Integration & Multi-Role RBAC Workflow Guide
+# SAMS Keycloak Integration & Multi-Role RBAC Workflow Guide
 
-This document explains the unified authentication, authorization, and permission checking workflow for the SchoolDesk platform. It details how the **Vue 3 Frontend**, **APISIX API Gateway**, **FastAPI Backend**, and **Keycloak Identity Provider** integrate to support dynamic, multi-role RBAC.
+This document explains the unified authentication, authorization, and permission checking workflow for the SAMS platform. It details how the **Vue 3 Frontend**, **APISIX API Gateway**, **FastAPI Backend**, and **Keycloak Identity Provider** integrate to support dynamic, multi-role RBAC.
 
 ---
 
@@ -39,7 +39,7 @@ To maintain clean code, both backend and frontend use a **Capability Mapping Dec
 
 ## 3. Step-by-Step Keycloak Integration Guide
 
-To configure Keycloak to integrate with the SchoolDesk codebase, complete the following configuration steps:
+To configure Keycloak to integrate with the SAMS codebase, complete the following configuration steps:
 
 ### Step A: Define Realm Roles
 1. Open the Keycloak Admin Console.

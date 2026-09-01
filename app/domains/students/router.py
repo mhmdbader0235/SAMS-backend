@@ -1,6 +1,6 @@
 """Students and Classes router."""
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 
 from app.core.database import get_db_pool
 from app.core.dependencies import (
@@ -10,6 +10,7 @@ from app.core.dependencies import (
     require_tenant_live,
 )
 from app.core.schemas import (
+    AcademicYearCreateRequest,
     ClassCreateRequest,
     ClassResponse,
     ClassUpdateRequest,
@@ -20,6 +21,10 @@ from app.core.schemas import (
     LevelResponse,
     LevelUpdateRequest,
     ParentResponse,
+    RolloverCreateRequest,
+    RolloverLineOverrideRequest,
+    StructureImportCommitResponse,
+    StructureImportPreviewResponse,
     StructureSetupRequest,
     StudentBulkEnrollRequest,
     StudentCreateRequest,
@@ -37,9 +42,14 @@ from app.domains.tenant.user_repository import UserRepository
 
 router = APIRouter(prefix="/api/v1/students", tags=["students"])
 # Everything except the structure endpoints below is off-limits until the
-# tenant has completed Day-1 setup (see app/domains/school/) -- those two
+# tenant has completed Day-1 setup (see app/domains/school/) -- those
 # endpoints ARE the mechanism by which setup gets completed, so they must
-# stay reachable while the tenant is still in "setup" status.
+# stay reachable while the tenant is still in "setup" status. The bulk
+# import endpoints are exempt for the same reason: a brand-new tenant needs
+# to be able to import its whole grade/class structure as part of that same
+# initial setup, before activation -- create_level/create_class on
+# router_gated below are only reachable after activation and serve the
+# ad-hoc "add one more class later" case instead.
 router_gated = APIRouter(
     prefix="/api/v1/students", tags=["students"], dependencies=[Depends(require_tenant_live)]
 )
@@ -49,27 +59,33 @@ router_gated = APIRouter(
 # Levels
 # =============================================================================
 @router_gated.post(
-    "/levels", response_model=LevelResponse, summary="Create a school level (staff only)"
+    "/levels", response_model=LevelResponse, summary="Create a school level (school_admin only)"
 )
 async def create_level(
     payload: LevelCreateRequest,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> LevelResponse:
     try:
+        create_kwargs = {}
+        if payload.isced_level is not None:
+            create_kwargs["isced_level"] = payload.isced_level
+        if payload.age_band_min is not None:
+            create_kwargs["age_band_min"] = payload.age_band_min
+        if payload.age_band_max is not None:
+            create_kwargs["age_band_max"] = payload.age_band_max
+        if payload.ordinal is not None:
+            create_kwargs["ordinal"] = payload.ordinal
         level_id = await TenantService.create_level(
             tenant_id=current_user.tenant_id,
             name=payload.name,
             user_role=current_user.roles,
-        )
-        return LevelResponse(
-            level_id=level_id,
-            name=payload.name,
-            isced_level=payload.isced_level,
-            age_band_min=payload.age_band_min,
-            age_band_max=payload.age_band_max,
-            ordinal=payload.ordinal,
             is_active=payload.is_active,
+            **create_kwargs,
         )
+        pool = await get_db_pool(current_user.tenant_id)
+        repo = TenantRepository(pool)
+        lvl_info = await repo.get_level_by_id(level_id)
+        return LevelResponse(**lvl_info)
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
     except Exception as exc:
@@ -118,6 +134,8 @@ async def update_level(
         return LevelResponse(**res)
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -129,11 +147,16 @@ async def delete_level(
 ) -> dict:
     try:
         await TenantService.delete_level(
-            tenant_id=current_user.tenant_id, level_id=level_id, user_role=current_user.roles
+            tenant_id=current_user.tenant_id,
+            level_id=level_id,
+            user_role=current_user.roles,
+            changed_by=current_user.id,
         )
         return {"status": "ok", "message": f"Level {level_id} deleted successfully"}
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -143,7 +166,7 @@ async def get_academic_structure(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
     try:
-        tenant_id = current_user.tenant_id or "tenant_a"
+        tenant_id = current_user.tenant_id
         return await TenantService.get_academic_structure(
             tenant_id=tenant_id,
             user_role=current_user.roles,
@@ -160,15 +183,72 @@ async def setup_academic_structure(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
     try:
-        tenant_id = current_user.tenant_id or "tenant_a"
+        tenant_id = current_user.tenant_id
         await TenantService.save_academic_structure(
             tenant_id=tenant_id,
             payload=payload.model_dump(),
             user_role=current_user.roles,
+            changed_by=current_user.id,
         )
         return {"status": "ok", "message": "Academic structure configured successfully"}
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post(
+    "/structure/import/preview",
+    response_model=StructureImportPreviewResponse,
+    summary="Validate a grades+classes import file without writing anything",
+)
+async def preview_structure_import(
+    file: UploadFile = File(...),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> StructureImportPreviewResponse:
+    try:
+        raw_bytes = await file.read()
+        result = await TenantService.preview_structure_import(
+            tenant_id=current_user.tenant_id,
+            filename=file.filename or "",
+            content_type=file.content_type,
+            raw_bytes=raw_bytes,
+            user_role=current_user.roles,
+        )
+        return StructureImportPreviewResponse(**result)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.post(
+    "/structure/import/commit",
+    response_model=StructureImportCommitResponse,
+    summary="Apply a grades+classes import file (partial-success, additive-only, safe to re-run)",
+)
+async def commit_structure_import(
+    file: UploadFile = File(...),
+    current_user: CurrentUser = Depends(get_current_user),
+) -> StructureImportCommitResponse:
+    try:
+        raw_bytes = await file.read()
+        result = await TenantService.commit_structure_import(
+            tenant_id=current_user.tenant_id,
+            filename=file.filename or "",
+            content_type=file.content_type,
+            raw_bytes=raw_bytes,
+            user_role=current_user.roles,
+        )
+        return StructureImportCommitResponse(**result)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -221,7 +301,16 @@ async def create_manager(
     payload: StaffUserCreateRequest,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> StaffUserResponse:
-    if not (current_user.has_role("school_admin") or current_user.has_role("super_admin")):
+    # user:create is a real, cataloged permission (COMPOSITE_ROLE_PERMISSIONS
+    # in dependencies.py / store.js) that an admin can grant a specific user
+    # via Manage Permissions without changing their base role -- unlike
+    # create_school_admin below, creating a manager is not privilege-adjacent
+    # enough to withhold that escape hatch.
+    if not (
+        current_user.has_role("school_admin")
+        or current_user.has_role("super_admin")
+        or current_user.has_role("user:create")
+    ):
         raise HTTPException(
             status_code=403, detail="Only school_admin or super_admin can create managers"
         )
@@ -234,6 +323,40 @@ async def create_manager(
             user_role=current_user.roles,
         )
         return StaffUserResponse(id=user_id, email=payload.email, role="manager")
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router_gated.post(
+    "/school-admins",
+    response_model=StaffUserResponse,
+    summary="Create a school_admin user directly (school_admin/super_admin only)",
+)
+async def create_school_admin(
+    payload: StaffUserCreateRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> StaffUserResponse:
+    # Deliberately NO user:create escape hatch here, unlike create_manager
+    # above. Minting a new school_admin is privilege-adjacent -- a delegated
+    # user:create grant letting a manager create a peer-level admin account
+    # would be a real escalation path, not a convenience.
+    if not (current_user.has_role("school_admin") or current_user.has_role("super_admin")):
+        raise HTTPException(
+            status_code=403, detail="Only school_admin or super_admin can create school admins"
+        )
+    try:
+        user_id = await TenantService.create_staff_user(
+            tenant_id=current_user.tenant_id,
+            email=payload.email,
+            password=payload.password,
+            role="school_admin",
+            user_role=current_user.roles,
+        )
+        return StaffUserResponse(id=user_id, email=payload.email, role="school_admin")
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
@@ -299,6 +422,7 @@ async def create_student(
             gender=payload.gender,
             birth_data=payload.birth_data,
             user_role=current_user.roles,
+            changed_by=current_user.id,
         )
         # Fetch student details
         s_info = await TenantService.get_student_by_id(current_user.tenant_id, student_id)
@@ -346,6 +470,9 @@ async def link_parent_student(
             parent_id=payload.parent_id,
             user_role=current_user.roles,
             user_id=current_user.id,
+            relationship_type=payload.relationship_type,
+            is_primary_contact=payload.is_primary_contact,
+            can_approve=payload.can_approve,
         )
         return {"status": "ok", "message": "Student linked to parent"}
     except PermissionError as exc:
@@ -383,7 +510,7 @@ async def list_linked_students(
 # =============================================================================
 # Classes
 # =============================================================================
-@router_gated.post("/classes", response_model=ClassResponse, summary="Create a class (staff only)")
+@router_gated.post("/classes", response_model=ClassResponse, summary="Create a class (school_admin only)")
 async def create_class(
     payload: ClassCreateRequest,
     current_user: CurrentUser = Depends(get_current_user),
@@ -395,6 +522,7 @@ async def create_class(
             level_id=payload.level_id,
             head_teacher_id=payload.head_teacher_id,
             capacity=payload.capacity,
+            is_active=payload.is_active,
             user_role=current_user.roles,
         )
         pool = await get_db_pool(current_user.tenant_id)
@@ -403,6 +531,8 @@ async def create_class(
         return ClassResponse(**c_info)
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -429,27 +559,66 @@ async def list_classes(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+@router_gated.get(
+    "/classes/{class_id}", response_model=ClassResponse, summary="Get a single class by id"
+)
+async def get_class(
+    class_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> ClassResponse:
+    if not (
+        current_user.has_any_role("school_admin", "super_admin", "manager", "teacher")
+        or current_user.has_role("class:read")
+    ):
+        raise HTTPException(status_code=403, detail="Forbidden: cannot view this class")
+    pool = await get_db_pool(current_user.tenant_id)
+    repo = TenantRepository(pool)
+    c_info = await repo.get_class_by_id(class_id)
+    if not c_info:
+        raise HTTPException(status_code=404, detail=f"Class {class_id} not found")
+    return ClassResponse(**c_info)
+
+
 @router_gated.put(
-    "/classes/{class_id}", response_model=ClassResponse, summary="Update class details"
+    "/classes/{class_id}", response_model=ClassResponse, summary="Update class details (school_admin only)"
 )
 async def update_class(
     class_id: int,
     payload: ClassUpdateRequest,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> ClassResponse:
-    if not current_user.has_any_role("school_admin", "super_admin", "teacher"):
-        raise HTTPException(status_code=403, detail="Only staff can update classes")
+    # Academic Administration Hub territory -- a bare "teacher" or "manager"
+    # must not reach this. class:update is a real, cataloged permission an
+    # admin can grant a specific user via Manage Permissions. The real check
+    # also lives in TenantService.update_class (it had none before); kept
+    # here too so a disallowed caller gets a fast 403 without a DB round-trip.
+    if not (
+        current_user.has_any_role("school_admin", "super_admin")
+        or current_user.has_role("class:update")
+    ):
+        raise HTTPException(status_code=403, detail="Only school admins can update classes")
     try:
+        # head_teacher_id needs three states -- "not mentioned" (leave it
+        # alone), "explicit null" (clear it, the class has no head teacher),
+        # and "a real id". A plain Optional field can't tell the first two
+        # apart once parsed, so check which fields the client actually sent.
+        update_kwargs = {}
+        if "head_teacher_id" in payload.model_fields_set:
+            update_kwargs["head_teacher_id"] = payload.head_teacher_id
+
         updated = await TenantService.update_class(
             tenant_id=current_user.tenant_id,
             class_id=class_id,
             name=payload.name,
             level_id=payload.level_id,
-            head_teacher_id=payload.head_teacher_id,
             capacity=payload.capacity,
+            is_active=payload.is_active,
             user_role=current_user.roles,
+            **update_kwargs,
         )
         return ClassResponse(**updated)
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except Exception as exc:
@@ -466,21 +635,48 @@ async def delete_class(
             tenant_id=current_user.tenant_id,
             class_id=class_id,
             user_role=current_user.roles,
+            changed_by=current_user.id,
         )
         return {"status": "ok", "message": f"Class {class_id} deleted successfully"}
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router_gated.get("/classes/{class_id}/students", summary="List students in a class")
+@router_gated.get("/classes/{class_id}/students", summary="List students in a class (staff only)")
 async def get_class_students(
     class_id: int,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[dict]:
+    if not current_user.has_any_role("school_admin", "super_admin", "manager", "teacher"):
+        raise HTTPException(
+            status_code=403,
+            detail="Forbidden: Students and unauthorized users cannot view class rosters",
+        )
     try:
         return await TenantService.get_students_for_class(current_user.tenant_id, class_id)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router_gated.get(
+    "/{student_id}/class-history", summary="Placement history for a student (staff only)"
+)
+async def get_student_class_history(
+    student_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> list[dict]:
+    try:
+        return await TenantService.get_class_history(
+            tenant_id=current_user.tenant_id,
+            student_id=student_id,
+            user_role=current_user.roles,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -497,32 +693,40 @@ async def reassign_student_class(
             student_id=student_id,
             new_class_id=payload.class_id,
             user_role=current_user.roles,
+            changed_by=current_user.id,
         )
         return {"status": "ok", "message": f"Student {student_id} reassigned successfully"}
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
 
-@router_gated.post(
-    "/bulk-enroll", summary="Bulk enroll/reassign students to a class section"
-)
+@router_gated.post("/bulk-enroll", summary="Bulk enroll/reassign students to a class section")
 async def bulk_reassign_students(
     payload: StudentBulkEnrollRequest,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
     try:
-        count = await TenantService.bulk_reassign_students(
+        result = await TenantService.bulk_reassign_students(
             tenant_id=current_user.tenant_id,
             student_ids=payload.student_ids,
             new_class_id=payload.class_id,
             user_role=current_user.roles,
+            changed_by=current_user.id,
         )
+        count = result["updated_count"]
+        missing = result["missing_student_ids"]
+        message = f"Successfully enrolled {count} students."
+        if missing:
+            message += f" {len(missing)} student id(s) were not found and were skipped: {missing}."
         return {
             "status": "ok",
             "enrolled_count": count,
-            "message": f"Successfully enrolled {count} students.",
+            "missing_student_ids": missing,
+            "message": message,
         }
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
@@ -544,6 +748,13 @@ async def enroll_student(
     parent_id = None
     teacher_id = None
 
+    # A teacher enrolling a student on their own class roster is treated as
+    # a direct decision, not a request -- it lands straight on
+    # approved_by_teacher and skips parent approval. This was reverted back
+    # to this behavior per explicit product decision (2026-08-31): the
+    # earlier "require explicit parent approval" change was tried and then
+    # walked back, see docs/05-traceability/04-drift-log.md. teacher_id is
+    # still recorded so who enrolled the student stays auditable.
     if current_user.has_role("parent"):
         # Check if student is linked to the parent
         parent_id = parse_id(current_user.id)
@@ -551,7 +762,15 @@ async def enroll_student(
         repo = TenantRepository(pool)
         linked = await repo.is_student_linked_to_parent(payload.student_id, parent_id)
         if linked:
-            state = "approved_by_parent"
+            can_approve = await repo.can_parent_approve_for_student(payload.student_id, parent_id)
+            if can_approve:
+                state = "approved_by_parent"
+            else:
+                # Linked but not authorized to consent for this student --
+                # the request still needs an approving parent's decision,
+                # same as if the student had submitted it themselves.
+                state = "requested_by_student"
+                parent_id = None
         elif current_user.has_role("teacher"):
             state = "approved_by_teacher"
             teacher_id = parse_id(current_user.id)
@@ -620,11 +839,15 @@ async def update_enrollment_approval(
     current_state = details["state"]
 
     is_parent_decision = False
+    parent_linked_but_not_authorized = False
     if current_user.has_role("parent"):
         parent_id = parse_id(current_user.id)
-        linked = await repo.is_student_linked_to_parent(details["student_id"], parent_id)
-        if linked:
+        if await repo.can_parent_approve_for_student(details["student_id"], parent_id):
             is_parent_decision = True
+        else:
+            parent_linked_but_not_authorized = await repo.is_student_linked_to_parent(
+                details["student_id"], parent_id
+            )
 
     if is_parent_decision:
         parent_id = parse_id(current_user.id)
@@ -655,6 +878,11 @@ async def update_enrollment_approval(
                 status_code=400,
                 detail="Teacher can only transition enrollment to approved_by_teacher or rejected_by_teacher",
             )
+    elif parent_linked_but_not_authorized:
+        raise HTTPException(
+            status_code=403,
+            detail="This parent is linked to the student but is not authorized to approve or reject their enrollments",
+        )
     else:
         raise HTTPException(status_code=403, detail="Unauthorized role for approval")
 
@@ -684,7 +912,7 @@ async def cancel_enrollment(
 
     try:
         await TenantService.cancel_enrollment(
-            tenant_id=current_user.tenant_id or "tenant_a",
+            tenant_id=current_user.tenant_id,
             enrollment_id=enrollment_id,
             user_id=current_user.id,
             user_role=current_user.roles,
@@ -751,5 +979,150 @@ async def get_health(
         raise HTTPException(status_code=403, detail=str(exc))
     except HTTPException:
         raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# =============================================================================
+# Academic Years & Year Rollover (ADR 0002 / ADR 0003)
+# =============================================================================
+@router_gated.post("/academic-years", summary="Define a future academic year (school admin only)")
+async def create_academic_year(
+    payload: AcademicYearCreateRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    try:
+        return await TenantService.create_academic_year(
+            tenant_id=current_user.tenant_id,
+            name=payload.name,
+            start_date=payload.start_date,
+            end_date=payload.end_date,
+            user_role=current_user.roles,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router_gated.get("/academic-years", summary="List academic years")
+async def list_academic_years(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> list[dict]:
+    try:
+        return await TenantService.list_academic_years(current_user.tenant_id)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router_gated.post("/rollovers", summary="Generate a year-rollover plan (school admin only)")
+async def create_rollover(
+    payload: RolloverCreateRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    try:
+        return await TenantService.generate_rollover_plan(
+            tenant_id=current_user.tenant_id,
+            from_year_id=payload.from_year_id,
+            to_year_id=payload.to_year_id,
+            created_by=current_user.id,
+            user_role=current_user.roles,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router_gated.get("/rollovers/{rollover_id}", summary="Get a rollover plan and its lines")
+async def get_rollover(
+    rollover_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    try:
+        return await TenantService.get_rollover(
+            tenant_id=current_user.tenant_id,
+            rollover_id=rollover_id,
+            user_role=current_user.roles,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router_gated.put(
+    "/rollovers/lines/{line_id}",
+    summary="Override a single rollover line's action (school admin only)",
+)
+async def override_rollover_line(
+    line_id: int,
+    payload: RolloverLineOverrideRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    try:
+        return await TenantService.override_rollover_line(
+            tenant_id=current_user.tenant_id,
+            line_id=line_id,
+            override_action=payload.override_action,
+            to_level_id=payload.to_level_id,
+            to_section_label=payload.to_section_label,
+            user_role=current_user.roles,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router_gated.post(
+    "/rollovers/{rollover_id}/preview",
+    summary="Recompute and lock in a rollover plan for commit (school admin only)",
+)
+async def preview_rollover(
+    rollover_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    try:
+        return await TenantService.preview_rollover(
+            tenant_id=current_user.tenant_id,
+            rollover_id=rollover_id,
+            user_role=current_user.roles,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router_gated.post(
+    "/rollovers/{rollover_id}/commit",
+    summary="Commit a previewed rollover plan (school admin only, irreversible)",
+)
+async def commit_rollover(
+    rollover_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    try:
+        return await TenantService.commit_rollover(
+            tenant_id=current_user.tenant_id,
+            rollover_id=rollover_id,
+            changed_by=current_user.id,
+            user_role=current_user.roles,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

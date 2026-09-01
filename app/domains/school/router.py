@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api/v1/school", tags=["school"])
 @router.get("/setup-state", response_model=SchoolSetupStateResponse, summary="Get the tenant's onboarding progress")
 async def get_setup_state(current_user: CurrentUser = Depends(get_current_user)) -> SchoolSetupStateResponse:
     try:
-        state = await SchoolService.get_setup_state(current_user.tenant_id or "tenant_a")
+        state = await SchoolService.get_setup_state(current_user.tenant_id)
         return SchoolSetupStateResponse(**state)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
@@ -32,7 +32,7 @@ async def get_setup_state(current_user: CurrentUser = Depends(get_current_user))
 @router.get("/profile", response_model=SchoolProfileResponse, summary="Get school profile, campuses, and contacts")
 async def get_profile(current_user: CurrentUser = Depends(get_current_user)) -> SchoolProfileResponse:
     try:
-        bundle = await SchoolService.get_profile_bundle(current_user.tenant_id or "tenant_a")
+        bundle = await SchoolService.get_profile_bundle(current_user.tenant_id)
         return SchoolProfileResponse(**bundle)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
@@ -45,11 +45,11 @@ async def update_profile(
 ) -> SchoolProfileResponse:
     try:
         await SchoolService.update_profile(
-            current_user.tenant_id or "tenant_a",
+            current_user.tenant_id,
             payload.model_dump(exclude_unset=True),
             current_user.roles,
         )
-        bundle = await SchoolService.get_profile_bundle(current_user.tenant_id or "tenant_a")
+        bundle = await SchoolService.get_profile_bundle(current_user.tenant_id)
         return SchoolProfileResponse(**bundle)
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
@@ -64,7 +64,7 @@ async def upsert_campus(
 ) -> dict:
     try:
         return await SchoolService.upsert_campus(
-            current_user.tenant_id or "tenant_a",
+            current_user.tenant_id,
             payload.model_dump(exclude={"id"}, exclude_unset=True),
             current_user.roles,
         )
@@ -77,7 +77,7 @@ async def upsert_campus(
 @router.get("/campuses", summary="List campuses")
 async def list_campuses(current_user: CurrentUser = Depends(get_current_user)) -> list[dict]:
     try:
-        return await SchoolService.list_campuses(current_user.tenant_id or "tenant_a")
+        return await SchoolService.list_campuses(current_user.tenant_id)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -89,7 +89,7 @@ async def create_contact(
 ) -> dict:
     try:
         return await SchoolService.create_contact(
-            current_user.tenant_id or "tenant_a",
+            current_user.tenant_id,
             payload.model_dump(exclude={"id"}),
             current_user.roles,
         )
@@ -102,7 +102,7 @@ async def create_contact(
 @router.get("/contacts", summary="List school contacts")
 async def list_contacts(current_user: CurrentUser = Depends(get_current_user)) -> list[dict]:
     try:
-        return await SchoolService.list_contacts(current_user.tenant_id or "tenant_a")
+        return await SchoolService.list_contacts(current_user.tenant_id)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -115,7 +115,7 @@ async def update_contact(
 ) -> dict:
     try:
         return await SchoolService.update_contact(
-            current_user.tenant_id or "tenant_a",
+            current_user.tenant_id,
             contact_id,
             payload.model_dump(exclude={"id"}),
             current_user.roles,
@@ -134,10 +134,12 @@ async def delete_contact(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
     try:
-        await SchoolService.delete_contact(current_user.tenant_id or "tenant_a", contact_id, current_user.roles)
+        await SchoolService.delete_contact(current_user.tenant_id, contact_id, current_user.roles)
         return {"status": "ok"}
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -149,8 +151,8 @@ async def delete_contact(
 )
 async def commit_profile(current_user: CurrentUser = Depends(get_current_user)) -> SchoolProfileResponse:
     try:
-        await SchoolService.commit_profile(current_user.tenant_id or "tenant_a", current_user.roles)
-        bundle = await SchoolService.get_profile_bundle(current_user.tenant_id or "tenant_a")
+        await SchoolService.commit_profile(current_user.tenant_id, current_user.roles)
+        bundle = await SchoolService.get_profile_bundle(current_user.tenant_id)
         return SchoolProfileResponse(**bundle)
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
@@ -167,8 +169,8 @@ async def commit_profile(current_user: CurrentUser = Depends(get_current_user)) 
 )
 async def activate(current_user: CurrentUser = Depends(get_current_user)) -> SchoolProfileResponse:
     try:
-        await SchoolService.activate(current_user.tenant_id or "tenant_a", current_user.roles)
-        bundle = await SchoolService.get_profile_bundle(current_user.tenant_id or "tenant_a")
+        await SchoolService.activate(current_user.tenant_id, current_user.roles)
+        bundle = await SchoolService.get_profile_bundle(current_user.tenant_id)
         return SchoolProfileResponse(**bundle)
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))

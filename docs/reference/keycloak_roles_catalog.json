@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "SchoolDesk Enterprise Keycloak Roles & Permissions Catalog",
+  "title": "SAMS Enterprise Keycloak Roles & Permissions Catalog",
   "version": "2.1.0",
   "description": "Comprehensive role-based access control (RBAC) and fine-grained permission catalog ready for Keycloak realm import and FastAPI authorization enforcement. NOTE: each role carries a 'phase' field. Only phase 1 roles are active and supported; phase 2 roles are planned and must not be built on. See .agents/AGENTS.md section 4 for the real state of each phase 2 role in the codebase.",
   "phases": {

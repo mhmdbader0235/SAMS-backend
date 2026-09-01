@@ -1,6 +1,6 @@
 # 🛡️ Enterprise Roles & Fine-Grained Permissions Catalog
 
-This document serves as the master architectural reference and catalog for all high-level **Composite Roles** and **Granular Permission Objects** supported by **SchoolDesk**.
+This document serves as the master architectural reference and catalog for all high-level **Composite Roles** and **Granular Permission Objects** supported by **SAMS**.
 
 All permission objects defined here are enforced by:
 1. **Open Policy Agent (OPA - Sole AuthZ Engine)**: Defined in [`policies/school_policy.rego`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/policies/school_policy.rego).

@@ -3,7 +3,7 @@ package school.authz
 import rego.v1
 
 # =============================================================================
-# SchoolDesk (Doumind) Master OPA Authorization Policy (Rego v1)
+# SAMS (Doumind) Master OPA Authorization Policy (Rego v1)
 # Package: school.authz
 # Default Decision: DENY
 # Supports Dual-Mode Evaluation:

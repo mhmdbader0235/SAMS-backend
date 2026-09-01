@@ -21,6 +21,7 @@ from app.core.schemas import (
     ResourceTypeResponse,
     TicketPriceUpdate,
 )
+from app.domains.events.service import EventService
 from app.domains.tenant.service import TenantService
 from app.domains.tenant.tenant_repository import TenantRepository, parse_id
 
@@ -36,20 +37,14 @@ async def list_events(
     if not current_user.tenant_id and not current_user.has_role("super_admin"):
         raise HTTPException(status_code=400, detail="Tenant context required")
 
-    tenant_id = current_user.tenant_id or "tenant_a"
+    tenant_id = current_user.tenant_id
     try:
         events = await TenantService.get_events_for_user(
             tenant_id=tenant_id,
             user_id=current_user.id,
             user_role=current_user.roles,
         )
-        if not current_user.has_any_role("manager", "school_admin"):
-            for ev in events:
-                ev["total_cost"] = None
-        # Only manager and school_admin can see school_subsidy
-        if not current_user.has_any_role("manager", "school_admin"):
-            for ev in events:
-                ev["school_subsidy"] = None
+        events = [EventService.mask_financials(ev, current_user) for ev in events]
         return EventsListResponse(events=[EventResponse(**ev) for ev in events])
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
@@ -69,9 +64,8 @@ async def create_event(
             detail="Only staff or users with event:create permission can create events",
         )
 
-    # Only school_admin and manager can set school subsidy; everyone else always gets 0
     can_see_subsidy = current_user.has_any_role("school_admin", "manager")
-    subsidy = payload.school_subsidy if can_see_subsidy else 0.0
+    subsidy = EventService.resolve_subsidy(payload.school_subsidy, current_user)
 
     try:
         mappings = [m.dict() for m in payload.class_mappings]
@@ -152,6 +146,8 @@ async def delete_event(
         if not existing:
             raise HTTPException(status_code=404, detail="Event not found")
         await repo.delete_event(event_id)
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -297,10 +293,13 @@ async def create_custom_resource_type(
 ) -> ResourceTypeResponse:
     if not current_user.tenant_id:
         raise HTTPException(status_code=400, detail="Tenant context required")
-    if not current_user.has_any_role("teacher", "school_admin", "manager"):
+    if not (
+        current_user.has_any_role("teacher", "school_admin", "manager")
+        or current_user.has_role("resource_type:create")
+    ):
         raise HTTPException(
             status_code=403,
-            detail="Only teachers, admins, and managers can create custom resource types",
+            detail="Only teachers, admins, managers, and users with resource_type:create permission can create custom resource types",
         )
 
     try:
@@ -387,55 +386,19 @@ async def update_resource_line(
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
 
-        class Actor:
-            def __init__(self, id, role, roles=None):
-                self.id = id
-                self.role = role
-                self.roles = roles or [role]
-
-        actor = Actor(current_user.id, current_user.role, current_user.roles)
-        editable = (
-            TenantService.check_event_permission(actor, event, "edit_draft")
-            or TenantService.check_event_permission(actor, event, "edit_resources")
-            or bool(actor.roles.intersection({"school_admin", "manager"}))
-        )
-        if not editable:
+        if not EventService.is_editable(current_user, event):
             raise HTTPException(
                 status_code=403,
                 detail="Access denied. Resource lines can only be edited by the event owner "
                 "while in draft, or by manager/admin while under review.",
             )
 
-        merged = {
-            "resource_type_id": (
-                payload.resource_type_id
-                if payload.resource_type_id is not None
-                else resource["resource_type_id"]
-            ),
-            "description": (
-                payload.description if payload.description is not None else resource["description"]
-            ),
-            "quantity": payload.quantity if payload.quantity is not None else resource["quantity"],
-        }
-        await repo.update_resource(
+        await EventService.update_resource_line(
+            tenant_id=current_user.tenant_id,
             resource_id=resource_id,
-            resource_type_id=merged["resource_type_id"],
-            description=merged["description"],
-            quantity=merged["quantity"],
-            updated_by_user_id=current_user.id,
+            actor=current_user,
+            updates=payload.dict(),
         )
-
-        if payload.quantity is not None:
-            cost_info = await repo.get_resource_cost_by_resource_id(resource_id)
-            if cost_info:
-                new_total = float(cost_info["unit_price"]) * int(merged["quantity"])
-                await repo.set_resource_cost(
-                    resource_id=resource_id,
-                    unit_price=float(cost_info["unit_price"]),
-                    total_cost=new_total,
-                    currency=cost_info["currency"],
-                    set_by_user_id=current_user.id,
-                )
 
         return {"status": "success"}
     except HTTPException:
@@ -480,7 +443,7 @@ async def get_event(
     if not current_user.tenant_id and current_user.role != "super_admin":
         raise HTTPException(status_code=400, detail="Tenant context required")
 
-    tenant_id = current_user.tenant_id or "tenant_a"
+    tenant_id = current_user.tenant_id
     try:
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
@@ -488,21 +451,10 @@ async def get_event(
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
 
-        class Actor:
-            def __init__(self, id, role, roles=None):
-                self.id = id
-                self.role = role
-                self.roles = roles or [role]
-
-        actor = Actor(current_user.id, current_user.role, current_user.roles)
-        if not TenantService.check_event_permission(actor, event, "read"):
+        if not TenantService.check_event_permission(current_user, event, "read"):
             raise HTTPException(status_code=403, detail="Access denied")
 
-        if not current_user.has_any_role("manager", "school_admin"):
-            event["total_cost"] = None
-        # Only manager and school_admin can see school_subsidy
-        if not current_user.has_any_role("manager", "school_admin"):
-            event["school_subsidy"] = None
+        event = EventService.mask_financials(event, current_user)
 
         return EventResponse(**event)
     except HTTPException:
@@ -527,30 +479,11 @@ async def update_event(
         if not existing_event:
             raise ValueError("Event not found")
 
-        class Actor:
-            def __init__(self, id, role, roles=None):
-                self.id = id
-                self.role = role
-                self.roles = roles or [role]
+        EventService.require_editable(current_user, existing_event)
 
-        actor = Actor(current_user.id, current_user.role, current_user.roles)
-        if (
-            not TenantService.check_event_permission(actor, existing_event, "edit_draft")
-            and not TenantService.check_event_permission(actor, existing_event, "edit_resources")
-            and not actor.roles.intersection({"school_admin", "manager"})
-        ):
-            raise PermissionError(
-                "Access denied. Event can only be modified in draft status by its owner, or in resource planning by event teacher."
-            )
-
-        # Only school_admin and manager can update school subsidy; everyone else keeps existing value
-        if (
-            current_user.has_any_role("school_admin", "manager")
-            and payload.school_subsidy is not None
-        ):
-            subsidy = payload.school_subsidy
-        else:
-            subsidy = float(existing_event.get("school_subsidy", 0.0))
+        subsidy = EventService.resolve_subsidy(
+            payload.school_subsidy, current_user, existing_event.get("school_subsidy", 0.0)
+        )
 
         mappings = [m.dict() for m in payload.class_mappings]
         event = await TenantService.update_event_full(
@@ -616,18 +549,7 @@ async def patch_event(
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
 
-        class Actor:
-            def __init__(self, id, role, roles=None):
-                self.id = id
-                self.role = role
-                self.roles = roles or [role]
-
-        actor = Actor(current_user.id, current_user.role, current_user.roles)
-        if (
-            not TenantService.check_event_permission(actor, event, "edit_draft")
-            and not TenantService.check_event_permission(actor, event, "edit_resources")
-            and not actor.roles.intersection({"school_admin", "manager"})
-        ):
+        if not EventService.is_editable(current_user, event):
             raise HTTPException(
                 status_code=403,
                 detail="Access denied. Event can only be modified in draft status by its owner, or in resource planning by event teacher.",
@@ -650,6 +572,8 @@ async def patch_event(
             date_val=date_val,
         )
         return EventResponse(**updated_event)
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -671,18 +595,7 @@ async def select_audience(
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
 
-        class Actor:
-            def __init__(self, id, role, roles=None):
-                self.id = id
-                self.role = role
-                self.roles = roles or [role]
-
-        actor = Actor(current_user.id, current_user.role, current_user.roles)
-        if (
-            not TenantService.check_event_permission(actor, event, "edit_draft")
-            and not TenantService.check_event_permission(actor, event, "edit_resources")
-            and not actor.roles.intersection({"school_admin", "manager"})
-        ):
+        if not EventService.is_editable(current_user, event):
             raise HTTPException(
                 status_code=403,
                 detail="Access denied. Event can only be modified in draft status by its owner, or in resource planning by event teacher.",
@@ -714,6 +627,8 @@ async def select_audience(
 
         predicted = await TenantService.get_predicted_attendance(current_user.tenant_id, class_ids)
         return {"predicted_attendance": predicted}
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -752,18 +667,7 @@ async def set_event_resources(
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
 
-        class Actor:
-            def __init__(self, id, role, roles=None):
-                self.id = id
-                self.role = role
-                self.roles = roles or [role]
-
-        actor = Actor(current_user.id, current_user.role, current_user.roles)
-        if (
-            not TenantService.check_event_permission(actor, event, "edit_draft")
-            and not TenantService.check_event_permission(actor, event, "edit_resources")
-            and not actor.roles.intersection({"school_admin", "manager"})
-        ):
+        if not EventService.is_editable(current_user, event):
             raise HTTPException(
                 status_code=403,
                 detail="Access denied. Event can only be modified in draft status by its owner, or in resource planning by event teacher.",
@@ -802,14 +706,7 @@ async def get_event_resources(
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
 
-        class Actor:
-            def __init__(self, id, role, roles=None):
-                self.id = id
-                self.role = role
-                self.roles = roles or [role]
-
-        actor = Actor(current_user.id, current_user.role, current_user.roles)
-        if not TenantService.check_event_permission(actor, event, "read"):
+        if not TenantService.check_event_permission(current_user, event, "read"):
             raise HTTPException(status_code=403, detail="Access denied")
 
         summary = await TenantService.get_resource_summary(current_user.tenant_id, event_id)
@@ -829,15 +726,6 @@ async def submit_event(
         raise HTTPException(status_code=400, detail="Tenant context required")
 
     try:
-
-        class Actor:
-            def __init__(self, id, role, roles=None):
-                self.id = id
-                self.role = role
-                self.roles = roles or [role]
-
-        actor = Actor(current_user.id, current_user.role, current_user.roles)
-
         pool = await get_db_pool(current_user.tenant_id)
         repo = TenantRepository(pool)
         event = await repo.get_event_by_id(event_id)
@@ -845,28 +733,17 @@ async def submit_event(
             raise HTTPException(status_code=404, detail="Event not found")
 
         ev_status = event.get("status") or "draft"
-
-        # Only the draft → proposed submission is needed in the simplified workflow:
-        # draft ──(teacher)──► proposed ──(manager)──► approved ──(teacher)──► published
-        if ev_status == "draft" and current_user.has_any_role("teacher", "school_admin"):
-            action = "submit_for_approval"
-        elif ev_status in ("approved", "ready_to_publish") and current_user.has_any_role(
-            "teacher", "school_admin", "manager"
-        ):
-            action = "teacher_publish"
-        else:
-            raise PermissionError(
-                f"Cannot submit event in '{ev_status}' status. "
-                "Only draft events can be submitted for manager approval."
-            )
+        action = EventService.resolve_submit_action(ev_status, current_user)
 
         updated_event = await TenantService.transition_event(
             tenant_id=current_user.tenant_id,
             event_id=event_id,
             action=action,
-            actor=actor,
+            actor=current_user,
         )
         return EventResponse(**updated_event)
+    except HTTPException:
+        raise
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except PermissionError as exc:
@@ -885,22 +762,13 @@ async def manager_decision(
         raise HTTPException(status_code=400, detail="Tenant context required")
 
     try:
-
-        class Actor:
-            def __init__(self, id, role, roles=None):
-                self.id = id
-                self.role = role
-                self.roles = roles or [role]
-
-        actor = Actor(current_user.id, current_user.role, current_user.roles)
-
         action = "manager_approve" if payload.decision == "approve" else "manager_reject"
 
         updated_event = await TenantService.transition_event(
             tenant_id=current_user.tenant_id,
             event_id=event_id,
             action=action,
-            actor=actor,
+            actor=current_user,
             reason=payload.reason,
         )
         return EventResponse(**updated_event)
@@ -932,22 +800,13 @@ async def teacher_publish_event(
         )
 
     try:
-
-        class Actor:
-            def __init__(self, id, role, roles=None):
-                self.id = id
-                self.role = role
-                self.roles = roles or [role]
-
-        actor = Actor(current_user.id, current_user.role, current_user.roles)
-
-        action = "manager_publish" if current_user.has_role("manager") else "teacher_publish"
+        action = EventService.resolve_publish_action(current_user)
 
         updated_event = await TenantService.transition_event(
             tenant_id=current_user.tenant_id,
             event_id=event_id,
             action=action,
-            actor=actor,
+            actor=current_user,
         )
         return EventResponse(**updated_event)
     except ValueError as exc:
@@ -970,15 +829,6 @@ async def event_teacher_decision(
         raise HTTPException(status_code=400, detail="Tenant context required")
 
     try:
-
-        class Actor:
-            def __init__(self, id, role, roles=None):
-                self.id = id
-                self.role = role
-                self.roles = roles or [role]
-
-        actor = Actor(current_user.id, current_user.role, current_user.roles)
-
         if payload.decision != "reject":
             raise ValueError(
                 "Event teacher can only reject/return to draft here. Use /submit to approve."
@@ -988,7 +838,7 @@ async def event_teacher_decision(
             tenant_id=current_user.tenant_id,
             event_id=event_id,
             action="event_teacher_reject",
-            actor=actor,
+            actor=current_user,
             reason=payload.reason,
         )
         return EventResponse(**updated_event)
@@ -1017,37 +867,13 @@ async def update_ticket_prices(
         )
 
     try:
-        pool = await get_db_pool(current_user.tenant_id)
-        repo = TenantRepository(pool)
-        event = await repo.get_event_by_id(event_id)
-        if not event:
-            raise HTTPException(status_code=404, detail="Event not found")
-
-        class Actor:
-            def __init__(self, id, role, roles=None):
-                self.id = id
-                self.role = role
-                self.roles = roles or [role]
-
-        actor = Actor(current_user.id, current_user.role, current_user.roles)
-        if not TenantService.check_event_permission(actor, event, "read"):
-            raise HTTPException(
-                status_code=403,
-                detail="Access denied. A manager cannot price a trip they cannot yet see "
-                "-- wait for the teacher to submit it.",
-            )
-
-        for item in payload:
-            await pool.execute(
-                "UPDATE event_class_map SET ticket_price = $1 WHERE id = $2 AND event_id = $3",
-                item.ticket_price,
-                item.class_map_id,
-                event_id,
-            )
-
+        items = [{"ticket_price": p.ticket_price, "class_map_id": p.class_map_id} for p in payload]
+        await EventService.update_ticket_prices(current_user.tenant_id, event_id, current_user, items)
         return {"status": "success"}
-    except HTTPException:
-        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 
@@ -1070,37 +896,12 @@ async def update_event_subsidy(
         )
 
     try:
-        pool = await get_db_pool(current_user.tenant_id)
-        repo = TenantRepository(pool)
-        event = await repo.get_event_by_id(event_id)
-        if not event:
-            raise HTTPException(status_code=404, detail="Event not found")
-
-        class Actor:
-            def __init__(self, id, role, roles=None):
-                self.id = id
-                self.role = role
-                self.roles = roles or [role]
-
-        actor = Actor(current_user.id, current_user.role, current_user.roles)
-        if not (
-            current_user.has_role("super_admin")
-            or TenantService.check_event_permission(actor, event, "read")
-        ):
-            raise HTTPException(
-                status_code=403,
-                detail="Access denied. A manager cannot set subsidy on a trip they cannot yet see "
-                "-- wait for the teacher to submit it.",
-            )
-
         subsidy = float(payload.get("school_subsidy", 0.0))
-        await pool.execute(
-            "UPDATE event SET school_subsidy = $1 WHERE id = $2",
-            subsidy,
-            event_id,
-        )
+        await EventService.update_subsidy(current_user.tenant_id, event_id, current_user, subsidy)
         return {"status": "success", "school_subsidy": subsidy}
-    except HTTPException:
-        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))

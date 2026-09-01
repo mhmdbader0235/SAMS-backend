@@ -136,8 +136,41 @@ async def _initialize_control_plane_tables(pool: asyncpg.Pool) -> None:
                 tenant_id  VARCHAR(50) NOT NULL REFERENCES tenants(tenant_id) ON DELETE CASCADE,
                 role       TEXT        NOT NULL DEFAULT 'student',
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (email)
+                PRIMARY KEY (email, tenant_id)
             );
+            """
+        )
+
+        # Widen an already-existing user_tenant_map from PRIMARY KEY (email) to
+        # (email, tenant_id). This has to live here as well as in Alembic
+        # (cp_0002): the CREATE above is IF NOT EXISTS, so an existing database
+        # keeps whatever key it already had, and upsert_user_tenant_map's
+        # ON CONFLICT (email, tenant_id) raises
+        # "no unique or exclusion constraint matching the ON CONFLICT
+        # specification" against the old single-column key. Every membership
+        # write would 500 until the constraint matches, so the two must move
+        # together. Safe to re-run, and safe on the old key because
+        # PRIMARY KEY (email) guaranteed at most one row per email.
+        await pool.execute(
+            """
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1
+                    FROM   pg_constraint c
+                    JOIN   pg_class t ON t.oid = c.conrelid
+                    JOIN   pg_namespace n ON n.oid = t.relnamespace
+                    WHERE  c.conname = 'user_tenant_map_pkey'
+                    AND    t.relname = 'user_tenant_map'
+                    AND    n.nspname = current_schema()
+                    AND    c.contype = 'p'
+                    AND    array_length(c.conkey, 1) = 1
+                ) THEN
+                    ALTER TABLE user_tenant_map DROP CONSTRAINT user_tenant_map_pkey;
+                    ALTER TABLE user_tenant_map ADD CONSTRAINT user_tenant_map_pkey
+                        PRIMARY KEY (email, tenant_id);
+                END IF;
+            END $$;
             """
         )
 
@@ -194,33 +227,17 @@ async def _initialize_control_plane_tables(pool: asyncpg.Pool) -> None:
 # =============================================================================
 # Tenant Table Initialization
 # =============================================================================
-async def _initialize_tenant_tables(pool: asyncpg.Pool, tenant_id: str = "tenant_a") -> None:
+# tenant_id is required, with no default. It used to default to "tenant_a" -- the
+# first real school -- and this function issues CREATE SCHEMA, DDL and destructive
+# ALTERs against whatever schema it is handed, so an accidental call with the
+# argument omitted would have operated on a live tenant. Every existing caller
+# already passes it explicitly.
+async def _initialize_tenant_tables(pool: asyncpg.Pool, tenant_id: str) -> None:
     """Create all tables in a newly provisioned tenant schema."""
     async with pool.acquire() as conn:
         # Ensure schema exists and isolate search_path to tenant schema during DDL execution
         await conn.execute(f'CREATE SCHEMA IF NOT EXISTS "{tenant_id}";')
         await conn.execute(f'SET search_path TO "{tenant_id}", public;')
-        # Check if legacy tables exist. If so, drop them to avoid conflicts with new schema
-        has_legacy = await conn.fetchval(
-            """
-            SELECT EXISTS (
-                SELECT 1 
-                FROM information_schema.tables 
-                WHERE table_name = 'grade_levels' OR table_name = 'classes'
-            )
-            """
-        )
-        if has_legacy:
-            print("[database] Legacy table schema detected. Dropping old tables to recreate clean new schema...")
-            await conn.execute(
-                """
-                DROP TABLE IF EXISTS 
-                    comments, enrollments, notes, users, grade_levels, students, classes, attendance, events, 
-                    event_grade_level_targets, event_class_targets, event_student_targets, notifications, 
-                    student_health_and_records, levels, class, teachers, parenets, cost_budget, event, 
-                    event_class_map, enrollment, payments, event_feedback CASCADE;
-                """
-            )
 
         # Extensions
         await conn.execute("CREATE EXTENSION IF NOT EXISTS citext;")
@@ -351,6 +368,10 @@ async def _initialize_tenant_tables(pool: asyncpg.Pool, tenant_id: str = "tenant
                 parent_id  BIGINT NOT NULL REFERENCES parenets(id) ON DELETE CASCADE,
                 PRIMARY KEY (student_id, parent_id)
             );
+            ALTER TABLE student_parent_map ADD COLUMN IF NOT EXISTS relationship_type TEXT DEFAULT NULL;
+            ALTER TABLE student_parent_map ADD COLUMN IF NOT EXISTS is_primary_contact BOOLEAN NOT NULL DEFAULT FALSE;
+            ALTER TABLE student_parent_map ADD COLUMN IF NOT EXISTS can_approve BOOLEAN NOT NULL DEFAULT TRUE;
+            ALTER TABLE student_parent_map ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
             """
         )
 
@@ -538,6 +559,141 @@ async def _initialize_tenant_tables(pool: asyncpg.Pool, tenant_id: str = "tenant
             DROP TABLE IF EXISTS cost_budget CASCADE;
             ALTER TABLE students ALTER COLUMN class_id DROP NOT NULL;
             ALTER TABLE class ADD COLUMN IF NOT EXISTS capacity INTEGER DEFAULT 25;
+            ALTER TABLE class ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+            UPDATE class SET capacity = 25 WHERE capacity IS NULL OR capacity <= 0;
+            ALTER TABLE class ALTER COLUMN capacity SET NOT NULL;
+            ALTER TABLE class DROP CONSTRAINT IF EXISTS class_capacity_positive;
+            ALTER TABLE class ADD CONSTRAINT class_capacity_positive CHECK (capacity > 0);
+            """
+        )
+
+        # 21b. student_class_history -- append-only log of every class_id
+        # transition, so placement moves have a "who/when/from/to" record
+        # instead of only the current snapshot on students.class_id.
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS student_class_history (
+                id           BIGSERIAL   PRIMARY KEY,
+                student_id   BIGINT      NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+                old_class_id BIGINT      REFERENCES class(id) ON DELETE SET NULL,
+                new_class_id BIGINT      REFERENCES class(id) ON DELETE SET NULL,
+                changed_by   BIGINT      REFERENCES users(id) ON DELETE SET NULL,
+                changed_at   TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_sch_student ON student_class_history(student_id, changed_at);
+            """
+        )
+
+        # 21c/21d. academic_years / class.academic_year_id (ADR 0002) plus year
+        # rollover (ADR 0003), as ONE coherent block -- an earlier version of
+        # this function (this session's ADR 0002 pass) shipped 21c with a
+        # boolean `is_active` column; a still-earlier tenant may have run that
+        # version already. `status` is the only lifecycle representation from
+        # here on, so the legacy shape is converted (and disarms itself, since
+        # the conversion drops the column its own IF guard checks for) before
+        # anything below assumes `status` exists. Guarded throughout with
+        # `IF NOT EXISTS` / `WHERE ... IS NULL` because, unlike an Alembic
+        # revision, this function re-runs on every tenant pool access after
+        # every backend restart.
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS academic_years (
+                id         BIGSERIAL   PRIMARY KEY,
+                name       TEXT        NOT NULL,
+                status     TEXT,
+                start_date DATE        DEFAULT NULL,
+                end_date   DATE        DEFAULT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1 FROM information_schema.columns
+                    WHERE table_schema = current_schema()
+                      AND table_name = 'academic_years'
+                      AND column_name = 'is_active'
+                ) THEN
+                    UPDATE academic_years SET status = CASE WHEN is_active THEN 'active' ELSE 'closed' END;
+                    DROP INDEX IF EXISTS one_active_academic_year;
+                    ALTER TABLE academic_years DROP COLUMN is_active;
+                END IF;
+            END $$;
+
+            INSERT INTO academic_years (name, status)
+            SELECT
+                COALESCE(
+                    (SELECT academic_year FROM academic_settings ORDER BY id DESC LIMIT 1),
+                    '2026-2027'
+                ),
+                'active'
+            WHERE NOT EXISTS (SELECT 1 FROM academic_years);
+
+            ALTER TABLE academic_years ALTER COLUMN status SET NOT NULL;
+            ALTER TABLE academic_years DROP CONSTRAINT IF EXISTS academic_years_status_check;
+            ALTER TABLE academic_years ADD CONSTRAINT academic_years_status_check
+                CHECK (status IN ('planned', 'active', 'closed'));
+            CREATE UNIQUE INDEX IF NOT EXISTS one_active_academic_year
+                ON academic_years (status) WHERE status = 'active';
+            ALTER TABLE academic_years ADD COLUMN IF NOT EXISTS rolled_from_id BIGINT
+                REFERENCES academic_years(id) ON DELETE SET NULL;
+
+            ALTER TABLE class
+                ADD COLUMN IF NOT EXISTS academic_year_id BIGINT
+                    REFERENCES academic_years(id) ON DELETE RESTRICT;
+
+            UPDATE class
+            SET academic_year_id = (SELECT id FROM academic_years WHERE status = 'active' LIMIT 1)
+            WHERE academic_year_id IS NULL;
+
+            ALTER TABLE class ALTER COLUMN academic_year_id SET NOT NULL;
+            CREATE INDEX IF NOT EXISTS idx_class_academic_year ON class(academic_year_id);
+
+            ALTER TABLE class DROP CONSTRAINT IF EXISTS class_name_academic_year_unique;
+            ALTER TABLE class ADD CONSTRAINT class_name_academic_year_unique UNIQUE (name, academic_year_id);
+
+            -- Best-effort from either live naming convention: "<Grade> - <Section>"
+            -- (the Curriculum Ladder Wizard) or "<Grade> Section <Section>"
+            -- (seed_data.py) -- confirmed as a real divergence by testing against
+            -- the actually-running app's seeded tenant_a data.
+            ALTER TABLE class ADD COLUMN IF NOT EXISTS section_label TEXT;
+            UPDATE class SET section_label = TRIM(SUBSTRING(name FROM '(?i)(?:-|Section)\\s*(\\S+)\\s*$'))
+            WHERE section_label IS NULL AND name ~ '(?i)(?:-|Section)\\s*\\S+\\s*$';
+
+            ALTER TABLE students ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'enrolled';
+            ALTER TABLE students DROP CONSTRAINT IF EXISTS students_status_check;
+            ALTER TABLE students ADD CONSTRAINT students_status_check
+                CHECK (status IN ('enrolled', 'graduated', 'withdrawn'));
+            ALTER TABLE students ADD COLUMN IF NOT EXISTS exited_on DATE;
+
+            CREATE TABLE IF NOT EXISTS year_rollover (
+                id           BIGSERIAL   PRIMARY KEY,
+                from_year_id BIGINT      NOT NULL REFERENCES academic_years(id) ON DELETE RESTRICT,
+                to_year_id   BIGINT      NOT NULL REFERENCES academic_years(id) ON DELETE RESTRICT,
+                state        TEXT        NOT NULL DEFAULT 'draft'
+                             CHECK (state IN ('draft', 'previewed', 'committing', 'committed')),
+                summary      JSONB       DEFAULT NULL,
+                created_by   BIGINT      REFERENCES users(id) ON DELETE SET NULL,
+                created_at   TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at   TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (from_year_id, to_year_id)
+            );
+
+            CREATE TABLE IF NOT EXISTS year_rollover_line (
+                id               BIGSERIAL   PRIMARY KEY,
+                rollover_id      BIGINT      NOT NULL REFERENCES year_rollover(id) ON DELETE CASCADE,
+                student_id       BIGINT      NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+                from_class_id    BIGINT      REFERENCES class(id) ON DELETE SET NULL,
+                to_level_id      BIGINT      REFERENCES levels(level_id) ON DELETE SET NULL,
+                to_section_label TEXT        DEFAULT NULL,
+                to_class_id      BIGINT      REFERENCES class(id) ON DELETE SET NULL,
+                proposed_action  TEXT        NOT NULL CHECK (proposed_action IN ('promote', 'graduate', 'hold')),
+                override_action  TEXT        CHECK (override_action IN ('promote', 'graduate', 'hold', 'withdraw')),
+                exception_code   TEXT        CHECK (exception_code IN ('no_next_level', 'no_placement', 'over_capacity')),
+                applied_at       TIMESTAMPTZ DEFAULT NULL,
+                created_at       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE (rollover_id, student_id)
+            );
+            CREATE INDEX IF NOT EXISTS idx_yrl_rollover ON year_rollover_line(rollover_id);
             """
         )
 
@@ -617,21 +773,73 @@ async def _initialize_tenant_tables(pool: asyncpg.Pool, tenant_id: str = "tenant
             """
         )
 
-        # 20. Seed resource types if not present
-        has_system_types = await conn.fetchval("SELECT EXISTS(SELECT 1 FROM resource_types WHERE is_custom = false)")
-        if not has_system_types:
-            await conn.execute(
-                """
-                INSERT INTO resource_types (name, category, is_custom, created_by_user_id, is_active)
-                VALUES
-                ('20-Seat Bus', 'transport', false, NULL, true),
-                ('40-Seat Bus', 'transport', false, NULL, true),
-                ('Male Supervisor', 'staffing', false, NULL, true),
-                ('Female Supervisor', 'staffing', false, NULL, true),
-                ('Kids Meal', 'meals', false, NULL, true),
-                ('Adult Meal', 'meals', false, NULL, true);
-                """
+        # 20. Seed default (non-custom) resource types, one CATEGORY at a time
+        # so a tenant provisioned before a category existed in this seed (the
+        # "staffing" rows below were added after some tenants were already
+        # provisioned) gets that category backfilled on its next connection,
+        # instead of being stuck with an empty "Staffing" section in the
+        # wizard forever. The old version of this block only checked "does
+        # ANY system resource type exist for this tenant" -- once true, it
+        # never ran again for that tenant, no matter which categories were
+        # actually present.
+        #
+        # Guarding per-CATEGORY (not per exact name) is deliberate: some
+        # tenants already have transport/meals rows seeded under older names
+        # ("Bus (20-seat)" vs. this list's "20-Seat Bus", "Kid Meal" vs.
+        # "Kids Meal"). Guarding per-name would insert a second, differently
+        # named row alongside each existing one instead of leaving an
+        # already-populated category alone.
+        _DEFAULT_RESOURCE_TYPES = [
+            ('20-Seat Bus', 'transport'),
+            ('40-Seat Bus', 'transport'),
+            ('Male Supervisor', 'staffing'),
+            ('Female Supervisor', 'staffing'),
+            ('Kids Meal', 'meals'),
+            ('Adult Meal', 'meals'),
+        ]
+        for _category in {c for _, c in _DEFAULT_RESOURCE_TYPES}:
+            _category_has_rows = await conn.fetchval(
+                "SELECT EXISTS(SELECT 1 FROM resource_types WHERE category = $1 AND is_custom = false)",
+                _category,
             )
+            if _category_has_rows:
+                continue
+            for _name, _row_category in _DEFAULT_RESOURCE_TYPES:
+                if _row_category != _category:
+                    continue
+                await conn.execute(
+                    """
+                    INSERT INTO resource_types (name, category, is_custom, created_by_user_id, is_active)
+                    VALUES ($1, $2, false, NULL, true)
+                    """,
+                    _name,
+                    _row_category,
+                )
+
+        # 21. Every registered super_admin gets a real, visible row in this
+        # tenant's own `users` table (role='super_admin'), so they show up in
+        # ManageUsersView / the permissions matrix like any other staff
+        # account, and so tenant-scoped FKs that reference users(id) --
+        # event.created_by, resource_cost.set_by_user_id, and similar
+        # reviewer/actor columns -- have a real row to point at if a
+        # super_admin ever performs one of those actions while inspecting
+        # this tenant. `public.super_admins` is readable here because a
+        # tenant connection's search_path always includes `public` (see
+        # CLAUDE.md's tenancy notes) -- schema-qualified below to be explicit
+        # rather than rely on search_path ordering. Guarded by NOT EXISTS so
+        # this stays a no-op on every later call for a tenant that already
+        # has the row (this function reruns on every fresh-process first
+        # touch of a tenant, not just on tenant creation).
+        await conn.execute(
+            """
+            INSERT INTO users (email, role, password_hash)
+            SELECT sa.email, 'super_admin', sa.password_hash
+            FROM public.super_admins sa
+            WHERE NOT EXISTS (
+                SELECT 1 FROM users u WHERE u.email = sa.email
+            )
+            """
+        )
 
 
 

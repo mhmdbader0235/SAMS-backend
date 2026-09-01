@@ -1,6 +1,6 @@
 # 📖 Complete Codebase File & Folder Dictionary
 
-> **Project Name**: SchoolDesk / Doumind (Multi-Tenant School Administration System)  
+> **Project Name**: SAMS / Doumind (Multi-Tenant School Administration System)  
 > **Architecture**: Vue 3 (SPA) + FastAPI (Async Python) + PostgreSQL (Multi-Schema Isolation) + Keycloak 26 (OIDC & Organizations) + Nginx (DMZ) + Apache APISIX (API Gateway)
 
 ---
@@ -24,9 +24,7 @@
 | [`run.py`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/run.py) | **Local Development Launcher**. Automates Docker volume creation, boots Docker Compose containers, and runs the FastAPI Uvicorn dev server on `http://127.0.0.1:8001` with hot-reloading. |
 | [`init.sql`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/init.sql) | **Master PostgreSQL DDL Schema Script**. Initializes control-plane tables (`tenants`, `parents`, `super_admins`, `user_tenant_map`, `user_invitations`) and isolated tenant schemas (`tenant_a`, `tenant_b`) with tables for `users`, `teachers`, `students`, `class`, `levels`, `event`, `resources`, `resource_cost`, `event_registrations`, and `invoices`. |
 | [`SAMS-realm.json`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/SAMS-realm.json) | **Keycloak 26 Realm Export JSON**. Contains pre-configured realm roles, groups, clients (`frontend`, `apisix`), and Organizations (`tenant_a` with `schoolA.com`, `tenant_b` with `schoolB.com`). |
-| [`seed_data.py`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/seed_data.py) | **Database & Keycloak Seeder Script**. Seeds demo data into PostgreSQL (`tenant_a` and `tenant_b`) and syncs all accounts directly to Keycloak Organizations via Admin REST API. |
-| [`seed_tenant_b_like_a.py`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/seed_tenant_b_like_a.py) | **Tenant B Replication Script**. Mirrors the schema and data structure from `tenant_a` to `tenant_b` for testing and development environments. |
-| [`sync_db_to_keycloak.py`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/sync_db_to_keycloak.py) | **Database to Keycloak Synchronization Script**. Iterates through all tenant schemas and syncs existing database users to Keycloak via the Admin REST API, deriving names from email addresses. |
+| [`seed_data.py`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/seed_data.py) | **Database & Keycloak Seeder Script**. Seeds ~85 users per tenant (`tenant_a`, `tenant_b`, `tenant_c` — teachers, students, parents, admin, manager) covering levels/classes, events across every lifecycle state with enrollments/payments/resources, school profile/campus/contact, and every `super_admin` in every tenant, syncing every account to Keycloak via `sync_user_to_keycloak()`. This is now the single seed script — the older `seed_tenant_b_like_a.py` (pure-SQL clone) and `sync_db_to_keycloak.py` (standalone reconciliation) have been removed; both are superseded by this one file. |
 | [`Dockerfile`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/Dockerfile) | **Production Container Build Spec**. Multi-stage Python 3.11/3.14 build for running the FastAPI application via Uvicorn. |
 | [`README.md`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/README.md) | **Backend Project Documentation**. Overview of the backend structure, setup instructions, and development guidelines. |
 | [`pyproject.toml`](file:///c:/Users/mb883/OneDrive/Desktop/tests/TestAiDoumind-main%201/back/pyproject.toml) | **Python Project Metadata & Dependencies**. Configures project dependencies (`fastapi`, `asyncpg`, `pydantic`, `pyjwt`, `passlib`, `cryptography`). |

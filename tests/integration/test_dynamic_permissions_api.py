@@ -285,7 +285,16 @@ class TestDeleteUser:
         sa_reg = await test_client.post("/api/v1/auth/register", json={
             "email": "root_sa@desk.com", "password": "pass", "role": "super_admin", "invite_code": SUPER_ADMIN_BOOTSTRAP_CODE
         })
-        sa_headers = {"Authorization": f"Bearer {sa_reg.json()['access_token']}"}
+        # A super_admin has no home tenant, so a tenant-scoped endpoint needs an
+        # explicit X-Tenant-ID. This used to work without one only because
+        # unresolved tenants silently defaulted to tenant_a -- which happens to be
+        # where register_school_admin puts its admin, so the test passed by
+        # coincidence rather than by asking for the right school. Tenant selection
+        # is now stated outright.
+        sa_headers = {
+            "Authorization": f"Bearer {sa_reg.json()['access_token']}",
+            "X-Tenant-ID": "tenant_a",
+        }
 
         users = (await test_client.get("/api/v1/auth/users-permissions", headers=sa_headers)).json()
         target = next(u for u in users if u["email"] == "admin_deletable@school.com")
@@ -309,3 +318,254 @@ class TestDeleteUser:
             "/api/v1/auth/users/999999", headers={"Authorization": f"Bearer {admin_token}"}
         )
         assert del_resp.status_code == 404
+
+
+class TestManagerAcademicHubBlockedUnlessGranted:
+    """Regression suite: the Manage Users page and the Academic Administration
+    Hub (grades, class sections, curriculum wizard) are school_admin/super_admin
+    only. A bare "manager" role must 403 on every write action those pages
+    expose, but an admin can extend access to a SPECIFIC manager one action at
+    a time via Manage Permissions (PUT /auth/users/{id}/permissions) -- the
+    grant is scoped to exactly the permission given, not a blanket unlock.
+    """
+
+    async def _register_manager(self, test_client: AsyncClient, email: str) -> str:
+        admin_token = await register_school_admin(test_client, f"admin_for_{email}")
+        reg = await test_client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": email, "password": "managerpass123", "role": "manager",
+                "tenant_id": "tenant_a", "invite_code": "SCHOOL-STAFF-2026",
+            },
+        )
+        assert reg.status_code == 200, reg.text
+        return admin_token, reg.json()["access_token"]
+
+    async def _grant_permission(self, test_client, admin_token, email, permission):
+        list_resp = await test_client.get(
+            "/api/v1/auth/users-permissions",
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        target = next(u for u in list_resp.json() if u["email"] == email)
+        update_resp = await test_client.put(
+            f"/api/v1/auth/users/{target['id']}/permissions",
+            json={"role": "manager", "roles": ["manager"], "permissions": [permission]},
+            headers={"Authorization": f"Bearer {admin_token}"},
+        )
+        assert update_resp.status_code == 200, update_resp.text
+        # Fresh login to pick up the newly-granted permission -- CurrentUser.roles
+        # is resolved from the DB at login/token-mint time, not re-read per request.
+        login_resp = await test_client.post(
+            "/api/v1/auth/login",
+            json={"email": email, "password": "managerpass123", "tenant_id": "tenant_a"},
+        )
+        assert login_resp.status_code == 200
+        return login_resp.json()["access_token"]
+
+    async def test_manager_baseline_403_on_every_admin_hub_write(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
+        admin_token, mgr_token = await self._register_manager(test_client, "mgr_baseline@school.com")
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+        mgr_headers = {"Authorization": f"Bearer {mgr_token}"}
+
+        # Set up a level+class as admin so update_class has something to act on.
+        lvl = await test_client.post("/api/v1/students/levels", json={"name": "Grade 6"}, headers=admin_headers)
+        assert lvl.status_code == 200
+        lvl_id = lvl.json()["level_id"]
+        cls = await test_client.post(
+            "/api/v1/students/classes",
+            json={"name": "6A", "level_id": lvl_id},
+            headers=admin_headers,
+        )
+        assert cls.status_code == 200
+        class_id = cls.json()["id"]
+
+        create_level_resp = await test_client.post(
+            "/api/v1/students/levels", json={"name": "Grade 7"}, headers=mgr_headers
+        )
+        assert create_level_resp.status_code == 403
+
+        create_class_resp = await test_client.post(
+            "/api/v1/students/classes",
+            json={"name": "7A", "level_id": lvl_id},
+            headers=mgr_headers,
+        )
+        assert create_class_resp.status_code == 403
+
+        update_class_resp = await test_client.put(
+            f"/api/v1/students/classes/{class_id}",
+            json={"name": "6A Renamed"},
+            headers=mgr_headers,
+        )
+        assert update_class_resp.status_code == 403
+
+        create_manager_resp = await test_client.post(
+            "/api/v1/students/managers",
+            json={"email": "another_manager@school.com", "password": "pass"},
+            headers=mgr_headers,
+        )
+        assert create_manager_resp.status_code == 403
+
+        create_admin_resp = await test_client.post(
+            "/api/v1/students/school-admins",
+            json={"email": "rogue_admin@school.com", "password": "pass"},
+            headers=mgr_headers,
+        )
+        assert create_admin_resp.status_code == 403
+
+    async def test_manager_granted_level_create_can_create_a_level_only(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
+        admin_token, _ = await self._register_manager(test_client, "mgr_level_create@school.com")
+        granted_token = await self._grant_permission(
+            test_client, admin_token, "mgr_level_create@school.com", "level:create"
+        )
+        granted_headers = {"Authorization": f"Bearer {granted_token}"}
+
+        lvl_resp = await test_client.post(
+            "/api/v1/students/levels", json={"name": "Grade 8"}, headers=granted_headers
+        )
+        assert lvl_resp.status_code == 200
+        lvl_id = lvl_resp.json()["level_id"]
+
+        # The grant is scoped to level:create only -- class:create is a
+        # different permission, so this must still 403.
+        cls_resp = await test_client.post(
+            "/api/v1/students/classes",
+            json={"name": "8A", "level_id": lvl_id},
+            headers=granted_headers,
+        )
+        assert cls_resp.status_code == 403
+
+    async def test_manager_granted_class_create_can_create_a_class_only(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
+        admin_token, _ = await self._register_manager(test_client, "mgr_class_create@school.com")
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+        lvl = await test_client.post("/api/v1/students/levels", json={"name": "Grade 9"}, headers=admin_headers)
+        lvl_id = lvl.json()["level_id"]
+
+        granted_token = await self._grant_permission(
+            test_client, admin_token, "mgr_class_create@school.com", "class:create"
+        )
+        granted_headers = {"Authorization": f"Bearer {granted_token}"}
+
+        cls_resp = await test_client.post(
+            "/api/v1/students/classes",
+            json={"name": "9A", "level_id": lvl_id},
+            headers=granted_headers,
+        )
+        assert cls_resp.status_code == 200
+        class_id = cls_resp.json()["id"]
+
+        # class:create does not imply class:update.
+        update_resp = await test_client.put(
+            f"/api/v1/students/classes/{class_id}",
+            json={"name": "9A Renamed"},
+            headers=granted_headers,
+        )
+        assert update_resp.status_code == 403
+
+    async def test_manager_granted_class_update_can_update_a_class_only(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
+        admin_token, _ = await self._register_manager(test_client, "mgr_class_update@school.com")
+        admin_headers = {"Authorization": f"Bearer {admin_token}"}
+        lvl = await test_client.post("/api/v1/students/levels", json={"name": "Grade 10"}, headers=admin_headers)
+        cls = await test_client.post(
+            "/api/v1/students/classes",
+            json={"name": "10A", "level_id": lvl.json()["level_id"]},
+            headers=admin_headers,
+        )
+        class_id = cls.json()["id"]
+
+        granted_token = await self._grant_permission(
+            test_client, admin_token, "mgr_class_update@school.com", "class:update"
+        )
+        granted_headers = {"Authorization": f"Bearer {granted_token}"}
+
+        update_resp = await test_client.put(
+            f"/api/v1/students/classes/{class_id}",
+            json={"name": "10A Renamed"},
+            headers=granted_headers,
+        )
+        assert update_resp.status_code == 200
+        assert update_resp.json()["name"] == "10A Renamed"
+
+    async def test_manager_granted_user_create_can_create_manager_but_not_school_admin(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
+        """user:create is deliberately narrower than the admin role itself --
+        it opens create_manager (a lesser-privileged staff account) but NOT
+        create_school_admin, which stays strictly school_admin/super_admin so
+        a delegated grant can never mint a peer-level admin account."""
+        admin_token, _ = await self._register_manager(test_client, "mgr_user_create@school.com")
+        granted_token = await self._grant_permission(
+            test_client, admin_token, "mgr_user_create@school.com", "user:create"
+        )
+        granted_headers = {"Authorization": f"Bearer {granted_token}"}
+
+        create_manager_resp = await test_client.post(
+            "/api/v1/students/managers",
+            json={"email": "delegated_new_manager@school.com", "password": "pass"},
+            headers=granted_headers,
+        )
+        assert create_manager_resp.status_code == 200
+        assert create_manager_resp.json()["role"] == "manager"
+
+        create_admin_resp = await test_client.post(
+            "/api/v1/students/school-admins",
+            json={"email": "delegated_new_admin@school.com", "password": "pass"},
+            headers=granted_headers,
+        )
+        assert create_admin_resp.status_code == 403
+
+    async def test_manager_granted_user_link_can_link_a_parent_and_student(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
+        """user:link is the real, cataloged permission behind the sidebar's
+        "System Admin" link (whose actual feature is parent-student linking,
+        see ManageAdminView.vue) -- it existed in COMPOSITE_ROLE_PERMISSIONS
+        but was never checked anywhere until now, so granting it previously
+        did nothing."""
+        admin_token, mgr_token = await self._register_manager(test_client, "mgr_user_link@school.com")
+        mgr_headers = {"Authorization": f"Bearer {mgr_token}"}
+
+        student_reg = await test_client.post("/api/v1/auth/register", json={
+            "email": "student_for_link@school.com", "password": "pass", "role": "student",
+            "tenant_id": "tenant_a", "invite_code": "regester123",
+        })
+        assert student_reg.status_code == 200
+        student_id = int((await test_client.get(
+            "/api/v1/auth/me", headers={"Authorization": f"Bearer {student_reg.json()['access_token']}"}
+        )).json()["user_id"])
+
+        parent_reg = await test_client.post("/api/v1/auth/register", json={
+            "email": "parent_for_link@school.com", "password": "pass", "role": "parent",
+            "tenant_id": "tenant_a", "invite_code": "regester123",
+        })
+        assert parent_reg.status_code == 200
+        parent_id = int((await test_client.get(
+            "/api/v1/auth/me", headers={"Authorization": f"Bearer {parent_reg.json()['access_token']}"}
+        )).json()["user_id"])
+
+        # Baseline: this same bare manager cannot link.
+        baseline_resp = await test_client.post(
+            "/api/v1/students/link-parent",
+            json={"student_id": student_id, "parent_id": parent_id},
+            headers=mgr_headers,
+        )
+        assert baseline_resp.status_code == 403
+
+        granted_token = await self._grant_permission(
+            test_client, admin_token, "mgr_user_link@school.com", "user:link"
+        )
+        granted_headers = {"Authorization": f"Bearer {granted_token}"}
+
+        link_resp = await test_client.post(
+            "/api/v1/students/link-parent",
+            json={"student_id": student_id, "parent_id": parent_id},
+            headers=granted_headers,
+        )
+        assert link_resp.status_code == 200

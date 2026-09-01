@@ -1,5 +1,5 @@
 """
-Randomised black-box QA suite: 50 real user processes against a live SchoolDesk stack.
+Randomised black-box QA suite: 50 real user processes against a live SAMS stack.
 
 WHAT THIS IS
 ------------

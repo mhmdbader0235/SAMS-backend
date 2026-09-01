@@ -15,7 +15,7 @@ from app.core.database import get_control_plane_pool, get_db_pool
 from app.core.keycloak_admin import sync_user_to_keycloak
 from app.domains.auth.service import AuthService
 from app.domains.tenant.control_plane_repository import ControlPlaneRepository
-from app.domains.tenant.tenant_repository import TenantRepository, parse_id
+from app.domains.tenant.tenant_repository import UNSET, TenantRepository, parse_id
 from app.domains.tenant.user_repository import UserRepository
 
 _fernet = Fernet(ENCRYPTION_KEY.encode())
@@ -80,6 +80,16 @@ class TenantService:
         if "admin" in roles:
             roles.add("school_admin")
 
+        # Forward expansion only: if the caller holds a composite role (e.g.
+        # "teacher"), grant the granular permissions that role carries (e.g.
+        # "class:read"), so `reqs` can be either role names or permission
+        # strings. There must be no reverse direction here — walking a
+        # granular permission the caller holds (e.g. "school:read", which
+        # nearly every role has) back to "every role that could plausibly
+        # hold it" silently grants "school_admin" to anyone, which is exactly
+        # how a student token used to pass admin-only checks. See
+        # SchoolService._require_admin for the strict-membership pattern
+        # this mirrors.
         from app.core.dependencies import COMPOSITE_ROLE_PERMISSIONS
 
         expanded_roles = set(roles)
@@ -87,101 +97,51 @@ class TenantService:
             if r in COMPOSITE_ROLE_PERMISSIONS:
                 expanded_roles.update(COMPOSITE_ROLE_PERMISSIONS[r])
 
-        PERMISSION_TO_HIGH_LEVEL_ROLE_MAP = {
-            "school:write": {"school_admin"},
-            "school:read": {"school_admin", "manager", "teacher", "parent", "student"},
-            "level:create": {"school_admin", "teacher"},
-            "level:manage": {"school_admin"},
-            "level:read": {"school_admin", "manager", "teacher"},
-            "class:create": {"school_admin", "teacher"},
-            "class:edit": {"school_admin", "teacher"},
-            "class:update": {"school_admin", "teacher"},
-            "class:read": {"school_admin", "manager", "teacher"},
-            "class:assign_teacher": {"school_admin"},
-            "user:create": {"school_admin"},
-            "user:invite": {"school_admin"},
-            "user:delete": {"school_admin"},
-            "user:link": {"school_admin", "teacher"},
-            "user:view": {"school_admin", "manager", "teacher"},
-            "user:read": {"school_admin", "manager", "teacher"},
-            "user:profile_read": {"school_admin", "manager", "teacher", "parent", "student"},
-            "user:profile_edit": {"school_admin", "manager", "teacher", "parent", "student"},
-            "teacher:create": {"school_admin"},
-            "teacher:read": {"school_admin", "manager", "teacher"},
-            "teacher:write": {"school_admin", "teacher"},
-            "parent:read": {"school_admin", "manager"},
-            "student:create": {"school_admin", "teacher"},
-            "student:read": {"school_admin", "manager", "teacher"},
-            "student:view_linked": {"parent", "school_admin"},
-            "event:create": {"teacher", "school_admin"},
-            "event:read": {"school_admin", "manager", "teacher", "parent", "student"},
-            "event:view": {"school_admin", "manager", "teacher", "parent", "student"},
-            "event:edit": {"teacher", "school_admin", "event_teacher"},
-            "event:patch": {"teacher", "school_admin", "event_teacher"},
-            "event:delete": {"teacher", "school_admin", "manager", "event_teacher"},
-            "event:clone": {"teacher", "school_admin"},
-            "event:propose": {"teacher", "school_admin", "event_teacher"},
-            "event:submit": {"teacher", "school_admin", "event_teacher"},
-            "event:review": {"manager", "school_admin"},
-            "event:publish": {"manager", "school_admin", "teacher"},
-            "event:view_draft": {"school_admin", "manager", "teacher"},
-            "event:archive": {"school_admin"},
-            "event:audience_edit": {"teacher", "school_admin"},
-            "event:audience_predict": {"teacher", "manager", "school_admin"},
-            "resource:create": {"teacher", "school_admin", "manager"},
-            "resource:view": {"school_admin", "manager", "teacher"},
-            "resource:read": {"school_admin", "manager", "teacher"},
-            "resource:edit": {"teacher", "school_admin", "manager"},
-            "resource:update": {"teacher", "school_admin", "manager"},
-            "resource:delete": {"teacher", "school_admin", "manager"},
-            "resource:price": {"manager", "school_admin"},
-            "resource:set_cost": {"manager", "school_admin"},
-            "resource_type:create": {"teacher", "school_admin"},
-            "resource_type:read": {"school_admin", "manager", "teacher"},
-            "enrollment:request": {"student", "parent"},
-            "enrollment:parent_approve": {"parent"},
-            "enrollment:teacher_approve": {"teacher", "school_admin"},
-            "enrollment:cancel": {"parent", "student", "school_admin"},
-            "enrollment:view_roster": {"school_admin", "manager", "teacher"},
-            "enrollment:read": {"school_admin", "manager", "teacher", "parent", "student"},
-            "billing:invoice": {"manager", "school_admin"},
-            "billing:pay": {"parent", "manager", "school_admin"},
-            "billing:refund": {"manager", "school_admin"},
-            "billing:audit": {"manager", "school_admin"},
-            "billing:view_payment": {"parent", "manager", "school_admin"},
-            "subsidy:manage": {"manager", "school_admin"},
-            "audit:view": {"school_admin"},
-            "health:view": {"school_admin", "teacher"},
-            "health:manage": {"school_admin"},
-            "health:manage_child": {"parent"},
-            "safety:manage": {"school_admin"},
-            "announcement:manage": {"school_admin", "manager"},
-            "notification:send": {"school_admin", "manager"},
-            "notification:read": {"school_admin", "manager", "teacher", "parent", "student"},
-            "notification:mark_read": {"school_admin", "manager", "teacher", "parent", "student"},
-            "feedback:view": {"school_admin", "manager", "teacher"},
-            "feedback:create": {"teacher", "parent", "student"},
-        }
-
-        for r in list(roles):
-            if r in PERMISSION_TO_HIGH_LEVEL_ROLE_MAP:
-                expanded_roles.update(PERMISSION_TO_HIGH_LEVEL_ROLE_MAP[r])
-
         return bool(expanded_roles.intersection(reqs))
 
     # =========================================================================
     # Levels
     # =========================================================================
     @staticmethod
-    async def create_level(tenant_id: str, name: str, user_role: str | list[str]) -> int:
-        if not TenantService._has_intersection(user_role, {"school_admin", "teacher"}):
-            raise PermissionError("Only staff can create levels")
+    async def create_level(
+        tenant_id: str,
+        name: str,
+        user_role: str | list[str],
+        isced_level: int | None = None,
+        age_band_min: int | None = None,
+        age_band_max: int | None = None,
+        ordinal: int | None = None,
+        is_active: bool = True,
+    ) -> int:
+        # Grade levels are Academic Administration Hub territory -- a bare
+        # "teacher" or "manager" role must never create/restructure the grade
+        # ladder. level:create is a real, cataloged permission (dependencies.py
+        # / store.js COMPOSITE_ROLE_PERMISSIONS) an admin can grant a specific
+        # user via Manage Permissions, without changing their base role. This
+        # mirrors update_level/delete_level below, which already excluded
+        # teacher/manager; create_level was the one inconsistent sibling.
+        if not TenantService._has_intersection(user_role, {"school_admin", "level:create"}):
+            raise PermissionError("Only school admins can create levels")
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
-        existing = await repo.get_level_by_name(name)
-        if existing:
-            return existing["level_id"]
-        return await repo.create_level(name)
+        # A name collision is idempotent-by-name, not a no-op: apply whatever
+        # fields the caller actually specified (None means "not specified",
+        # same convention update_level already uses) to the existing row,
+        # instead of silently discarding them and handing back stale values
+        # under a 200 as if the request had actually been applied.
+        # upsert_level_by_name is this same branch, extracted to
+        # tenant_repository.py so the bulk import path (TenantService.
+        # commit_structure_import) shares this exact logic instead of
+        # duplicating it.
+        level_id, _action = await repo.upsert_level_by_name(
+            name,
+            isced_level=isced_level,
+            age_band_min=age_band_min,
+            age_band_max=age_band_max,
+            ordinal=ordinal,
+            is_active=is_active,
+        )
+        return level_id
 
     @staticmethod
     async def get_all_levels(tenant_id: str) -> list[dict]:
@@ -200,7 +160,11 @@ class TenantService:
         name: str,
         user_role: str | list[str],
     ) -> int:
-        if not TenantService._has_intersection(user_role, {"school_admin", "teacher"}):
+        # A bare "teacher" role must NOT be able to register other teachers --
+        # only school_admin, or a teacher explicitly granted the "teacher:create"
+        # permission via Manage Permissions, may do this. See
+        # docs/05-traceability/02-invariants.md.
+        if not TenantService._has_intersection(user_role, {"school_admin", "teacher:create"}):
             raise PermissionError("Only staff can register teachers")
 
         pool = await get_db_pool(tenant_id)
@@ -225,11 +189,29 @@ class TenantService:
         role: str,
         user_role: str | list[str],
     ) -> int:
-        if not TenantService._has_intersection(user_role, "school_admin"):
-            raise PermissionError("Only school admins can register staff users")
-
-        if role != "manager":
+        if role not in ("manager", "school_admin"):
             raise ValueError("Invalid staff role")
+
+        # The permission escape hatch depends on WHICH role is being created --
+        # this function is shared by create_manager and create_school_admin
+        # (students/router.py), and their router-level checks are already
+        # asymmetric for exactly this reason. Both used to reach this single
+        # `{"school_admin"}` check regardless of target role, silently
+        # discarding the router's own "manager creation may be delegated via
+        # user:create" decision -- a caller who passed the router gate with a
+        # granted user:create permission still 403'd here.
+        if role == "manager":
+            allowed = {"school_admin", "user:create"}
+        else:
+            # role == "school_admin": deliberately NO user:create escape
+            # hatch. Minting a peer-level admin account must stay strictly
+            # admin-only -- a delegated grant letting a manager create a
+            # school_admin would be a real escalation path, not a
+            # convenience. Mirrors create_school_admin's router-level check.
+            allowed = {"school_admin"}
+
+        if not TenantService._has_intersection(user_role, allowed):
+            raise PermissionError("Only school admins can register staff users")
 
         pool = await get_db_pool(tenant_id)
         user_repo = UserRepository(pool)
@@ -271,8 +253,12 @@ class TenantService:
         gender: str | None,
         birth_data: str | None,
         user_role: str | list[str],
+        changed_by=None,
     ) -> int:
-        if not TenantService._has_intersection(user_role, {"school_admin", "teacher"}):
+        # Same rule as create_teacher: a bare "teacher" role does not get to
+        # register student accounts. Only school_admin, or a teacher explicitly
+        # granted "student:create" via Manage Permissions, may do this.
+        if not TenantService._has_intersection(user_role, {"school_admin", "student:create"}):
             raise PermissionError("Only staff can register students")
 
         pool = await get_db_pool(tenant_id)
@@ -292,7 +278,20 @@ class TenantService:
             class_id=class_id,
             gender=gender,
             birth_data=birth_data,
+            changed_by=changed_by,
         )
+
+    @staticmethod
+    async def get_class_history(
+        tenant_id: str, student_id: int, user_role: str | list[str] = ""
+    ) -> list[dict]:
+        if not TenantService._has_intersection(
+            user_role, {"school_admin", "super_admin", "admin", "teacher", "manager"}
+        ):
+            raise PermissionError("Only staff can view a student's placement history")
+        pool = await get_db_pool(tenant_id)
+        repo = TenantRepository(pool)
+        return await repo.get_class_history(student_id)
 
     @staticmethod
     async def get_all_students(tenant_id: str) -> list[dict]:
@@ -308,9 +307,23 @@ class TenantService:
 
     @staticmethod
     async def link_student_parent(
-        tenant_id: str, student_id, parent_id, user_role: str | list[str], user_id=None
+        tenant_id: str,
+        student_id,
+        parent_id,
+        user_role: str | list[str],
+        user_id=None,
+        relationship_type: str | None = None,
+        is_primary_contact: bool = False,
+        can_approve: bool = True,
     ) -> None:
-        if not TenantService._has_intersection(user_role, {"school_admin", "teacher"}):
+        # user:link is a real, cataloged permission (COMPOSITE_ROLE_PERMISSIONS
+        # in dependencies.py / store.js) that an admin can grant a specific
+        # user via Manage Permissions -- it was previously listed there but
+        # never actually checked anywhere, so granting it did nothing. It
+        # grants the same unrestricted linking school_admin has (the
+        # own-class-only scoping just below only applies to the literal
+        # "teacher" role, not to this permission).
+        if not TenantService._has_intersection(user_role, {"school_admin", "teacher", "user:link"}):
             raise PermissionError("Only school admins and teachers can link students and parents")
 
         pool = await get_db_pool(tenant_id)
@@ -323,11 +336,17 @@ class TenantService:
             student = await repo.get_student_by_id(student_id)
             if not student:
                 raise ValueError("Student not found")
-            class_info = await repo.get_class_by_head_teacher(user_id)
-            if not class_info or class_info["id"] != student["class_id"]:
+            teacher_classes = await repo.get_classes_by_head_teacher(user_id)
+            if not any(c["id"] == student["class_id"] for c in teacher_classes):
                 raise PermissionError("You can only link parents to students in your own class")
 
-        await repo.add_student_parent_link(student_id, parent_id)
+        await repo.add_student_parent_link(
+            student_id,
+            parent_id,
+            relationship_type=relationship_type,
+            is_primary_contact=is_primary_contact,
+            can_approve=can_approve,
+        )
 
     @staticmethod
     async def get_linked_students_for_parent(tenant_id: str, parent_id) -> list[dict]:
@@ -345,19 +364,47 @@ class TenantService:
         level_id: int,
         head_teacher_id=None,
         capacity: int = 25,
+        is_active: bool = True,
         user_role: str | list[str] = "",
     ) -> int:
+        # Creating a class section is Academic Administration Hub territory --
+        # "add a class to a grade" must never be reachable by a bare "teacher"
+        # or "manager" role. super_admin/admin are redundant with
+        # _has_intersection's own super_admin bypass above, kept here for
+        # readability; class:create is the real, cataloged permission
+        # (replacing the earlier placeholder "class:write", which had no
+        # catalog entry) an admin can grant a specific user via Manage
+        # Permissions, same shape as teacher:create/student:create elsewhere
+        # in this file.
         if not TenantService._has_intersection(
-            user_role, {"school_admin", "super_admin", "admin", "teacher", "class:write"}
+            user_role, {"school_admin", "super_admin", "admin", "class:create"}
         ):
-            raise PermissionError("Only staff can create classes")
+            raise PermissionError("Only school admins can create classes")
 
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
-        existing = await repo.get_class_by_name_and_level(name, level_id)
-        if existing:
-            return existing["id"]
-        return await repo.create_class(name, level_id, head_teacher_id, capacity=capacity)
+
+        level = await repo.get_level_by_id(level_id)
+        if not level:
+            raise ValueError(f"Level {level_id} not found")
+        if not level["is_active"]:
+            raise ValueError(f"Cannot add a section to a deactivated level: {level['name']}")
+
+        # upsert_class_by_name_and_level: a name collision now UPDATEs the
+        # existing row's capacity/head_teacher/is_active instead of silently
+        # keeping stale values under a 200 (the old behavior). head_teacher_id
+        # not being specified (None, this method's own "not given" default)
+        # means UNSET -- don't touch whatever head teacher a colliding row
+        # already has -- never an explicit clear; clearing a head teacher is
+        # exclusively update_class's job via its own UNSET/None distinction.
+        class_id, _action = await repo.upsert_class_by_name_and_level(
+            name,
+            level_id,
+            head_teacher_id=head_teacher_id if head_teacher_id is not None else UNSET,
+            capacity=capacity,
+            is_active=is_active,
+        )
+        return class_id
 
     @staticmethod
     async def get_all_classes(tenant_id: str) -> list[dict]:
@@ -366,10 +413,10 @@ class TenantService:
         return await repo.get_all_classes()
 
     @staticmethod
-    async def get_class_by_head_teacher(tenant_id: str, teacher_id) -> dict | None:
+    async def get_classes_by_head_teacher(tenant_id: str, teacher_id) -> list[dict]:
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
-        return await repo.get_class_by_head_teacher(teacher_id)
+        return await repo.get_classes_by_head_teacher(teacher_id)
 
     @staticmethod
     async def update_class(
@@ -377,35 +424,62 @@ class TenantService:
         class_id: int,
         name: str | None = None,
         level_id: int | None = None,
-        head_teacher_id=None,
+        head_teacher_id=UNSET,
         capacity: int | None = None,
+        is_active: bool | None = None,
         user_role: str | list[str] = "",
     ) -> dict:
+        # This service method had NO permission check of its own -- the only
+        # gate was an inline has_any_role() at the router (students/router.py),
+        # which also (incorrectly) allowed a bare "teacher". Every sibling
+        # mutation here (create_class, delete_class, update_level, delete_level)
+        # checks inside the service; this one didn't, so any future caller that
+        # invoked it directly would have bypassed authorization entirely.
+        # class:update is the real, cataloged permission escape hatch,
+        # mirroring the router-level check in students/router.py.
+        if not TenantService._has_intersection(
+            user_role, {"school_admin", "super_admin", "admin", "class:update"}
+        ):
+            raise PermissionError("Only school admins can update classes")
+
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
+
+        if level_id is not None:
+            level = await repo.get_level_by_id(level_id)
+            if not level:
+                raise ValueError(f"Level {level_id} not found")
+            if not level["is_active"]:
+                raise ValueError(f"Cannot move a section to a deactivated level: {level['name']}")
+
         return await repo.update_class(
             class_id,
             name=name,
             level_id=level_id,
             head_teacher_id=head_teacher_id,
             capacity=capacity,
+            is_active=is_active,
         )
 
     @staticmethod
-    async def delete_class(tenant_id: str, class_id: int, user_role: str | list[str] = "") -> bool:
+    async def delete_class(
+        tenant_id: str, class_id: int, user_role: str | list[str] = "", changed_by=None
+    ) -> bool:
         if not TenantService._has_intersection(user_role, {"school_admin", "super_admin", "admin"}):
             raise PermissionError("Only school admins can delete classes")
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
-        return await repo.delete_class(class_id)
+        return await repo.delete_class(class_id, changed_by=changed_by)
 
     @staticmethod
-    async def delete_level(tenant_id: str, level_id: int, user_role: str | list[str] = "") -> bool:
+    async def delete_level(
+        tenant_id: str, level_id: int, user_role: str | list[str] = "", changed_by=None
+    ) -> bool:
         if not TenantService._has_intersection(user_role, {"school_admin", "super_admin", "admin"}):
             raise PermissionError("Only school admins can delete levels")
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
-        return await repo.delete_level(level_id)
+        return await repo.delete_level(level_id, changed_by=changed_by)
 
     @staticmethod
     async def update_level(
@@ -441,15 +515,23 @@ class TenantService:
 
     @staticmethod
     async def reassign_student_class(
-        tenant_id: str, student_id, new_class_id: int | None, user_role: str | list[str] = ""
+        tenant_id: str,
+        student_id,
+        new_class_id: int | None,
+        user_role: str | list[str] = "",
+        changed_by=None,
     ) -> bool:
+        # Single-student reassignment is the Student Placement tab of the
+        # Academic Administration Hub -- apiReassignStudentClass is called from
+        # nowhere else in the frontend, so tightening this has no effect
+        # outside that page. A bare "teacher" is deliberately excluded.
         if not TenantService._has_intersection(
-            user_role, {"school_admin", "super_admin", "admin", "teacher", "student:manage"}
+            user_role, {"school_admin", "super_admin", "admin", "student:manage"}
         ):
-            raise PermissionError("Only staff can reassign student classes")
+            raise PermissionError("Only school admins can reassign student classes")
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
-        return await repo.reassign_student_class(student_id, new_class_id)
+        return await repo.reassign_student_class(student_id, new_class_id, changed_by=changed_by)
 
     @staticmethod
     async def bulk_reassign_students(
@@ -457,14 +539,17 @@ class TenantService:
         student_ids: list[int],
         new_class_id: int | None,
         user_role: str | list[str] = "",
-    ) -> int:
+        changed_by=None,
+    ) -> dict:
+        # Same as reassign_student_class above -- bulk reassignment is Student
+        # Placement tab territory only, "teacher" excluded on purpose.
         if not TenantService._has_intersection(
-            user_role, {"school_admin", "super_admin", "admin", "teacher", "student:manage"}
+            user_role, {"school_admin", "super_admin", "admin", "student:manage"}
         ):
-            raise PermissionError("Only staff can reassign student classes")
+            raise PermissionError("Only school admins can reassign student classes")
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
-        return await repo.bulk_reassign_students(student_ids, new_class_id)
+        return await repo.bulk_reassign_students(student_ids, new_class_id, changed_by=changed_by)
 
     # =========================================================================
     # Events & Targets
@@ -628,25 +713,30 @@ class TenantService:
         if "school_admin" in roles or "event_teacher" in roles or "manager" in roles:
             pass
         elif "teacher" in roles:
-            # Verify teacher is a head teacher of a class
-            teacher_class = await repo.get_class_by_head_teacher(user_id)
-            if not teacher_class:
+            # Verify teacher is a head teacher of a class. A teacher can
+            # legitimately head more than one class (no uniqueness
+            # constraint), so this must check membership across all of
+            # them, not assume a single "the" class.
+            teacher_classes = await repo.get_classes_by_head_teacher(user_id)
+            if not teacher_classes:
                 raise PermissionError("Teacher is not a head teacher of any class")
-            teacher_class_id = teacher_class["id"]
+            teacher_class_ids = {parse_id(c["id"]) for c in teacher_classes}
 
-            # Load the existing event to verify if this teacher's class is targeted
+            # Load the existing event to verify if any of this teacher's
+            # classes is targeted
             existing_event = await repo.get_event_by_id(event_id)
             if not existing_event:
                 raise ValueError("Event not found")
 
             target_class_ids = {int(m["class_id"]) for m in existing_event["class_mappings"]}
-            if int(teacher_class_id) not in target_class_ids:
+            if not (teacher_class_ids & target_class_ids):
                 raise PermissionError("Access denied. Event is not mapped to your class.")
 
-            # Filter class mappings to only allow updating their own class's mapping
+            # Filter class mappings to only allow updating this teacher's own
+            # classes' mappings (all of them, not just one).
             filtered_mappings = []
             for mapping in class_mappings:
-                if parse_id(mapping["class_id"]) == parse_id(teacher_class_id):
+                if parse_id(mapping["class_id"]) in teacher_class_ids:
                     filtered_mappings.append(mapping)
 
             class_mappings = filtered_mappings
@@ -696,17 +786,13 @@ class TenantService:
         already_added = set()
 
         if "teacher" in roles:
-            teacher_class = await repo.get_class_by_head_teacher(actor.id)
-            teacher_class_id = teacher_class["id"] if teacher_class else None
+            teacher_classes = await repo.get_classes_by_head_teacher(actor.id)
+            teacher_class_ids = {c["id"] for c in teacher_classes}
             events = await repo.get_all_events()
             for ev in events:
                 if ev["id"] not in already_added:
-                    if TenantService.check_event_permission(actor, ev, "read") or (
-                        teacher_class_id
-                        and any(
-                            m.get("class_id") == teacher_class_id
-                            for m in ev.get("class_mappings", [])
-                        )
+                    if TenantService.check_event_permission(actor, ev, "read") or any(
+                        m.get("class_id") in teacher_class_ids for m in ev.get("class_mappings", [])
                     ):
                         filtered_events.append(ev)
                         already_added.add(ev["id"])
@@ -779,6 +865,14 @@ class TenantService:
         class_map = await repo.get_class_map_by_id(event_class_map_id)
         if not class_map:
             raise ValueError("Event class mapping not found")
+
+        # 1b. An event's audience is only real once it's published -- a
+        # draft/proposed/approved trip hasn't been announced to any class
+        # yet, so there is nothing a student, parent, or teacher could be
+        # legitimately requesting/approving enrollment into.
+        event = await repo.get_event_by_id(class_map["event_id"])
+        if not event or event.get("status") != "published":
+            raise ValueError("Enrollment is only allowed for published events")
 
         # 2. Fetch student details
         student = await repo.get_student_by_id(student_id)
@@ -893,9 +987,15 @@ class TenantService:
         if "school_admin" in roles or "teacher" in roles:
             pass
         elif "parent" in roles:
-            linked = await repo.is_student_linked_to_parent(student_id, user_id)
-            if not linked:
-                raise PermissionError("Parents can only cancel their linked children's enrollments")
+            # Cancelling is the same authority as approving -- a linked
+            # contact without can_approve must not be able to pull a trip a
+            # custodial parent already committed to, any more than they
+            # could have approved it in the first place.
+            can_approve = await repo.can_parent_approve_for_student(student_id, user_id)
+            if not can_approve:
+                raise PermissionError(
+                    "Only a parent authorized to approve for this student can cancel their enrollments"
+                )
         elif "student" in roles:
             if int(student_id) != int(user_id):
                 raise PermissionError("Students can only cancel their own enrollments")
@@ -1052,7 +1152,7 @@ class TenantService:
 
     @staticmethod
     async def save_academic_structure(
-        tenant_id: str, payload: dict, user_role: str | list[str]
+        tenant_id: str, payload: dict, user_role: str | list[str], changed_by=None
     ) -> None:
         if not TenantService._has_intersection(
             user_role,
@@ -1085,7 +1185,80 @@ class TenantService:
                     "Grades and class sections can still be edited."
                 )
 
-        await repo.save_academic_structure(payload)
+        await repo.save_academic_structure(payload, changed_by=changed_by)
+
+    # Import writes both levels and classes in one call, so it's gated like
+    # save_academic_structure above (also a bulk academic-structure write) --
+    # an OR of the relevant permissions, not requiring all of them at once,
+    # consistent with _has_intersection's existing semantics. Adds
+    # class:create, which save_academic_structure's own set is missing
+    # despite writing classes too -- not perpetuating that gap here.
+    _IMPORT_PERMISSIONS = {
+        "school_admin",
+        "super_admin",
+        "admin",
+        "level:create",
+        "level:manage",
+        "class:create",
+        "school:write",
+    }
+
+    @staticmethod
+    async def preview_structure_import(
+        tenant_id: str,
+        filename: str,
+        content_type: str | None,
+        raw_bytes: bytes,
+        user_role: str | list[str],
+    ) -> dict:
+        """Validate an uploaded grades+classes file and report what would
+        happen, without writing anything. Stateless by design: the caller
+        re-uploads the same file for commit_structure_import below rather
+        than this holding any server-side session -- nothing like that
+        exists elsewhere in this codebase, and re-parsing a capped-size file
+        twice is cheap."""
+        if not TenantService._has_intersection(user_role, TenantService._IMPORT_PERMISSIONS):
+            raise PermissionError("Insufficient permissions to import academic structure.")
+
+        from app.domains.students.import_parser import detect_file_kind, parse_import_file
+
+        kind = detect_file_kind(filename, content_type)
+        rows = parse_import_file(raw_bytes, kind)
+
+        pool = await get_db_pool(tenant_id)
+        repo = TenantRepository(pool)
+        result = await repo.preview_import_rows(rows)
+        result["filename"] = filename
+        return result
+
+    @staticmethod
+    async def commit_structure_import(
+        tenant_id: str,
+        filename: str,
+        content_type: str | None,
+        raw_bytes: bytes,
+        user_role: str | list[str],
+    ) -> dict:
+        """Apply an uploaded grades+classes file. Partial success: rows that
+        validate are applied, rows that don't are skipped and reported --
+        not an all-or-nothing transaction, matching bulk_reassign_students'
+        existing found/missing convention elsewhere in this file. Additive
+        only: never deletes a class or grade the file doesn't mention --
+        deliberately does NOT reuse save_academic_structure, which deletes
+        any class section not present in the payload it's given."""
+        if not TenantService._has_intersection(user_role, TenantService._IMPORT_PERMISSIONS):
+            raise PermissionError("Insufficient permissions to import academic structure.")
+
+        from app.domains.students.import_parser import detect_file_kind, parse_import_file
+
+        kind = detect_file_kind(filename, content_type)
+        rows = parse_import_file(raw_bytes, kind)
+
+        pool = await get_db_pool(tenant_id)
+        repo = TenantRepository(pool)
+        result = await repo.import_academic_rows(rows)
+        result["filename"] = filename
+        return result
 
     @staticmethod
     async def get_academic_structure(tenant_id: str, user_role: str | list[str]) -> dict:
@@ -1366,11 +1539,33 @@ class TenantService:
 
         next_status, required_role = TRANSITIONS[key]
 
+        # The granular permission that authorizes each action on its own, for an
+        # actor who does not hold the composite role the transition names. This
+        # is how a non-teacher who has been granted event:submit (a student, say)
+        # submits their own draft. It does not widen who may act on whose event:
+        # the creator-only precondition below still applies to every submit, and
+        # the manager/publish actions keep their own status guards.
+        ACTION_PERMISSIONS = {
+            "submit_for_approval": ("event:submit", "event:propose"),
+            "propose": ("event:submit", "event:propose"),
+            "submit_to_manager": ("event:submit", "event:propose"),
+            "submit_to_event_teacher": ("event:submit", "event:propose"),
+            "manager_approve": ("event:review",),
+            "approve": ("event:review",),
+            "manager_reject": ("event:review",),
+            "reject": ("event:review",),
+            "teacher_publish": ("event:publish",),
+            "publish": ("event:publish",),
+            "submit": ("event:publish",),
+            "manager_publish": ("event:publish",),
+        }
+
         # Verify role (allow school_admin & super_admin override)
         actor_roles = getattr(actor, "roles", None) or [getattr(actor, "role", "student")]
         allowed = {"school_admin", "super_admin", required_role}
         if required_role == "teacher":
             allowed.add("event_teacher")
+        allowed.update(ACTION_PERMISSIONS.get(action, ()))
         if not any(r in actor_roles for r in allowed):
             raise PermissionError(
                 f"Role '{actor.role}' is not authorized to perform action '{action}'"
@@ -1572,8 +1767,22 @@ class TenantService:
             raise PermissionError(
                 "Only school administrators can update user roles and permissions"
             )
+        if primary_role == "super_admin" or "super_admin" in (roles or []):
+            if not TenantService._has_intersection(user_role, {"super_admin"}):
+                raise PermissionError("Only a super_admin can grant the super_admin role")
         pool = await get_db_pool(tenant_id)
         user_repo = UserRepository(pool)
+
+        # Snapshot the pre-update roles so a demotion away from super_admin
+        # can be detected below -- update_user_roles_and_permissions is a
+        # full overwrite and returns only the NEW row, so this is the only
+        # place that still knows what the user was before this call.
+        existing = await user_repo.get_user_by_id(user_id)
+        was_super_admin = bool(existing) and (
+            existing.get("role") == "super_admin"
+            or "super_admin" in (existing.get("roles") or [])
+        )
+
         updated = await user_repo.update_user_roles_and_permissions(
             user_id=user_id,
             primary_role=primary_role,
@@ -1585,6 +1794,22 @@ class TenantService:
 
         user_email = updated.get("email")
         target_id = updated.get("id")
+
+        # Demoting a super_admin through this screen must revoke control-plane
+        # authority too -- public.super_admins is checked BEFORE any tenant
+        # table on login (AuthService.login_user / get_current_user), so
+        # leaving that row behind after clearing the tenant-local role would
+        # let the user keep logging in as super_admin regardless of what this
+        # update just set. Mirrors the same cleanup delete_tenant_user does
+        # when a super_admin is deleted outright.
+        is_still_super_admin = primary_role == "super_admin" or "super_admin" in (roles or [])
+        if was_super_admin and not is_still_super_admin and user_email:
+            try:
+                cp_pool = await get_control_plane_pool()
+                cp_repo = ControlPlaneRepository(cp_pool)
+                await cp_repo.remove_super_admin(user_email)
+            except Exception as _e:
+                print(f"[update_tenant_user_permissions] Warning super_admins removal: {_e}")
 
         # 1. Update user_tenant_map in control plane
         if user_email:
@@ -1734,10 +1959,32 @@ class TenantService:
                 print(
                     f"[delete_tenant_user] Warning user_tenant_map cleanup for {user_email}: {_e}"
                 )
+            # A super_admin target also has a row in the control-plane
+            # `super_admins` table -- AuthService.login_user and
+            # get_current_user's super_admin check consult THAT table first,
+            # before any tenant `users` row is read. Deleting only the
+            # tenant-local mirror above left a "deleted" super_admin fully
+            # able to log in as super_admin exactly as before.
+            if "super_admin" in target_roles:
+                try:
+                    cp_pool = await get_control_plane_pool()
+                    cp_repo = ControlPlaneRepository(cp_pool)
+                    removed = await cp_repo.remove_super_admin(user_email)
+                    if not removed:
+                        print(
+                            f"[delete_tenant_user] {user_email} had role super_admin "
+                            f"but no matching public.super_admins row was found to remove"
+                        )
+                except Exception as _e:
+                    print(f"[delete_tenant_user] Warning super_admins cleanup for {user_email}: {_e}")
             try:
                 from app.core.keycloak_admin import delete_user_from_keycloak
 
-                delete_user_from_keycloak(user_email)
+                if not delete_user_from_keycloak(user_email):
+                    print(
+                        f"[delete_tenant_user] Keycloak cleanup did not remove {user_email} "
+                        f"from Keycloak — see keycloak_admin warnings above for the reason"
+                    )
             except Exception as _e:
                 print(f"[delete_tenant_user] Warning Keycloak cleanup for {user_email}: {_e}")
 
@@ -1746,3 +1993,233 @@ class TenantService:
             f"DELETE_USER: target_id={target_user_id}, target_email={user_email}",
         )
         return deleted
+
+    # =========================================================================
+    # Academic Years & Year Rollover (ADR 0002 / ADR 0003)
+    # =========================================================================
+    @staticmethod
+    async def create_academic_year(
+        tenant_id: str,
+        name: str,
+        start_date=None,
+        end_date=None,
+        user_role: str | list[str] = "",
+    ) -> dict:
+        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin"}):
+            raise PermissionError("Only a school admin can define an academic year")
+        pool = await get_db_pool(tenant_id)
+        repo = TenantRepository(pool)
+        year_id = await repo.create_academic_year(name, start_date, end_date)
+        return await repo.get_academic_year_by_id(year_id)
+
+    @staticmethod
+    async def list_academic_years(tenant_id: str) -> list[dict]:
+        pool = await get_db_pool(tenant_id)
+        repo = TenantRepository(pool)
+        return await repo.get_all_academic_years()
+
+    @staticmethod
+    async def generate_rollover_plan(
+        tenant_id: str,
+        from_year_id: int,
+        to_year_id: int,
+        created_by=None,
+        user_role: str | list[str] = "",
+    ) -> dict:
+        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin"}):
+            raise PermissionError("Only a school admin can run year rollover")
+        pool = await get_db_pool(tenant_id)
+        repo = TenantRepository(pool)
+
+        from_year = await repo.get_academic_year_by_id(from_year_id)
+        to_year = await repo.get_academic_year_by_id(to_year_id)
+        if not from_year:
+            raise ValueError(f"Academic year {from_year_id} not found")
+        if not to_year:
+            raise ValueError(f"Academic year {to_year_id} not found")
+        if from_year["status"] != "active":
+            raise ValueError("Rollover can only be planned from the currently active academic year")
+        if to_year["status"] != "planned":
+            raise ValueError(
+                "The target academic year must be 'planned' (not yet active or closed)"
+            )
+
+        rollover = await repo.create_year_rollover(from_year_id, to_year_id, created_by)
+        await TenantService._recompute_rollover_lines(repo, rollover["id"], from_year_id)
+        return await TenantService.get_rollover(tenant_id, rollover["id"], user_role=user_role)
+
+    @staticmethod
+    async def _recompute_rollover_lines(
+        repo: TenantRepository, rollover_id: int, from_year_id: int
+    ) -> None:
+        """Shared by generate + preview: recompute proposed_action/exception_code
+        from scratch, but upsert (never blind-replace) so any override_action an
+        admin already set on a line survives the recompute untouched.
+
+        Clone rule (ADR 0003): a class clones forward to the next level only if
+        it is `is_active` and has a parseable `section_label`; a student whose
+        class doesn't clone forward holds rather than being guessed at.
+        """
+        facts = await repo.get_rollover_plan_facts(from_year_id)
+        # Existing lines carry whatever override an admin already set -- needed
+        # below to group capacity by each line's EFFECTIVE target, not just the
+        # engine's raw proposal (an override can move a student to a different
+        # class than the one the engine would have picked).
+        existing_lines = {
+            line["student_id"]: line for line in await repo.get_rollover_lines(rollover_id)
+        }
+
+        lines = []
+        for fact in facts:
+            if fact["to_level_id"] is None:
+                proposed_action, exception_code = "graduate", "no_next_level"
+            elif not fact["from_class_active"] or not fact["section_label"]:
+                proposed_action, exception_code = "hold", "no_placement"
+            else:
+                proposed_action, exception_code = "promote", None
+            lines.append(
+                {
+                    "student_id": fact["student_id"],
+                    "from_class_id": fact["from_class_id"],
+                    "to_level_id": fact["to_level_id"] if proposed_action == "promote" else None,
+                    "to_section_label": (
+                        fact["section_label"] if proposed_action == "promote" else None
+                    ),
+                    "proposed_action": proposed_action,
+                    "exception_code": exception_code,
+                    "_capacity": fact["from_class_capacity"],
+                }
+            )
+
+        # Non-blocking over_capacity flag: group by each line's EFFECTIVE
+        # target (an existing override's frozen to_level_id/to_section_label --
+        # see upsert_rollover_lines -- if one is set, else the engine's fresh
+        # proposal), compare the projected headcount against the capacity the
+        # target class will have. That capacity is the source class's capacity
+        # for any line whose OWN natural proposal targets that cell (what the
+        # new class inherits at commit); a target invented purely by an
+        # override, with no line naturally mapping there, falls back to the
+        # same default (25) class creation uses elsewhere in this codebase.
+        groups: dict[tuple, list[dict]] = {}
+        capacity_by_key: dict[tuple, int] = {}
+        for line in lines:
+            existing = existing_lines.get(line["student_id"])
+            override_action = existing["override_action"] if existing else None
+            effective_action = override_action or line["proposed_action"]
+            if effective_action != "promote":
+                continue
+            key = (
+                (existing["to_level_id"], existing["to_section_label"])
+                if override_action
+                else (line["to_level_id"], line["to_section_label"])
+            )
+            groups.setdefault(key, []).append(line)
+            if line["proposed_action"] == "promote":
+                capacity_by_key.setdefault(key, line["_capacity"] or 25)
+
+        for key, group_lines in groups.items():
+            capacity = capacity_by_key.get(key, 25)
+            if len(group_lines) > capacity:
+                for line in group_lines:
+                    line["exception_code"] = "over_capacity"
+
+        for line in lines:
+            line.pop("_capacity", None)
+
+        await repo.upsert_rollover_lines(rollover_id, lines)
+
+    @staticmethod
+    async def get_rollover(
+        tenant_id: str, rollover_id: int, user_role: str | list[str] = ""
+    ) -> dict:
+        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin"}):
+            raise PermissionError("Only a school admin can view a rollover plan")
+        pool = await get_db_pool(tenant_id)
+        repo = TenantRepository(pool)
+        rollover = await repo.get_year_rollover_by_id(rollover_id)
+        if not rollover:
+            raise ValueError(f"Rollover {rollover_id} not found")
+        lines = await repo.get_rollover_lines(rollover_id)
+        rollover["lines"] = lines
+        rollover["blocking"] = [
+            line["id"]
+            for line in lines
+            if (line["override_action"] or line["proposed_action"]) == "hold"
+        ]
+        return rollover
+
+    @staticmethod
+    async def override_rollover_line(
+        tenant_id: str,
+        line_id: int,
+        override_action: str | None,
+        to_level_id: int | None = None,
+        to_section_label: str | None = None,
+        user_role: str | list[str] = "",
+    ) -> dict:
+        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin"}):
+            raise PermissionError("Only a school admin can override a rollover line")
+        if override_action is not None and override_action not in (
+            "promote",
+            "graduate",
+            "hold",
+            "withdraw",
+        ):
+            raise ValueError(f"Invalid override action: {override_action}")
+        pool = await get_db_pool(tenant_id)
+        repo = TenantRepository(pool)
+        line = await repo.get_rollover_line_by_id(line_id)
+        if not line:
+            raise ValueError(f"Rollover line {line_id} not found")
+
+        effective_level = to_level_id if to_level_id is not None else line["to_level_id"]
+        effective_section = (
+            to_section_label if to_section_label is not None else line["to_section_label"]
+        )
+        if override_action == "promote" and not (effective_level and effective_section):
+            raise ValueError(
+                "Cannot override to 'promote' without a resolved target -- "
+                "pass both to_level_id and to_section_label to resolve the placement first"
+            )
+        return await repo.set_rollover_line_override(
+            line_id, override_action, to_level_id, to_section_label
+        )
+
+    @staticmethod
+    async def preview_rollover(
+        tenant_id: str, rollover_id: int, user_role: str | list[str] = ""
+    ) -> dict:
+        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin"}):
+            raise PermissionError("Only a school admin can preview a rollover plan")
+        pool = await get_db_pool(tenant_id)
+        repo = TenantRepository(pool)
+        rollover = await repo.get_year_rollover_by_id(rollover_id)
+        if not rollover:
+            raise ValueError(f"Rollover {rollover_id} not found")
+        if rollover["state"] == "committed":
+            raise ValueError("This rollover has already been committed")
+
+        await TenantService._recompute_rollover_lines(repo, rollover_id, rollover["from_year_id"])
+
+        lines = await repo.get_rollover_lines(rollover_id)
+        blocking = [
+            line for line in lines if (line["override_action"] or line["proposed_action"]) == "hold"
+        ]
+        if blocking:
+            raise ValueError(
+                f"{len(blocking)} student(s) have no resolved placement and must be overridden "
+                f"before this rollover can advance to preview"
+            )
+
+        await repo.update_rollover_state(rollover_id, "previewed")
+        return await TenantService.get_rollover(tenant_id, rollover_id, user_role=user_role)
+
+    @staticmethod
+    async def commit_rollover(
+        tenant_id: str, rollover_id: int, changed_by=None, user_role: str | list[str] = ""
+    ) -> dict:
+        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin"}):
+            raise PermissionError("Only a school admin can commit a rollover")
+        pool = await get_db_pool(tenant_id)
+        repo = TenantRepository(pool)
+        return await repo.commit_year_rollover(rollover_id, changed_by)

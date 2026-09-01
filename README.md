@@ -1,6 +1,6 @@
 # doumind-backend
 
-> Production-ready FastAPI backend for the **SchoolDesk** school event management platform.  
+> Production-ready FastAPI backend for the **SAMS** school event management platform.  
 > Multi-tenant architecture: schema-per-tenant inside one shared PostgreSQL database — each
 > school gets its own Postgres schema, isolated via `SET search_path` (see
 > `docs/adr/0001-use-clean-architecture.md` for the full rationale and history).

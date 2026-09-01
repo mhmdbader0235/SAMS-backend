@@ -32,6 +32,13 @@ services:
     ports:
       - "8000:8080"
     volumes:
+      # NOTE: SAMS-realm.json only pre-seeds the WebAuthn Passwordless *policy*
+      # fields (RP entity name, resident key, etc). It does NOT include the
+      # browser-passwordless login flow or bind it as the active browserFlow --
+      # Keycloak organizations, and this flow/binding, don't round-trip through
+      # realm export/import (verified). A fresh boot from this file therefore
+      # has passkey policy configured but passkey LOGIN still inactive until an
+      # operator runs `python setup_passkeys.py --apply` once against this realm.
       - ./SAMS-realm.json:/opt/keycloak/data/import/SAMS-realm.json
       - keycloak_data:/opt/keycloak/data
     depends_on:

@@ -32,7 +32,7 @@ class NotificationsListResponse(BaseModel):
 async def list_notifications(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> NotificationsListResponse:
-    tenant_id = current_user.tenant_id or "tenant_a"
+    tenant_id = current_user.tenant_id
     try:
         notifs = await TenantService.get_notifications_for_user(
             tenant_id=tenant_id,
@@ -51,7 +51,7 @@ async def mark_notification_read(
     notif_id: UUID,
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
-    tenant_id = current_user.tenant_id or "tenant_a"
+    tenant_id = current_user.tenant_id
     try:
         success = await TenantService.mark_notification_read(tenant_id, notif_id)
         if not success:

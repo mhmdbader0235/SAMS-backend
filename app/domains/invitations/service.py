@@ -140,30 +140,60 @@ class InvitationService:
         kc_user_id: str,
         tenant_id: str,
     ) -> None:
-        """Add Keycloak user to matching tenant Organization."""
+        """Add the Keycloak user to the Organization backing this tenant.
+
+        Match is on EXACT alias. The previous version also accepted
+        `tenant_id in alias` / `tenant_id in name`, so `tenant_a` would match an org
+        aliased `tenant_a_backup` (or `xtenant_ab`) and quietly grant the invitee
+        membership of the wrong school -- and because the org alias is what the
+        `organization` claim carries, that is what their requests would resolve to.
+        Names are ignored entirely: only the alias reaches the token.
+
+        Raises on failure. This used to warn into a blanket `except` and continue,
+        which meant an invitation could report success while leaving the user with no
+        organization at all -- i.e. authenticated but unresolvable to any tenant.
+        """
         if not tenant_id:
-            return
-        try:
-            orgs_resp = await client.get(
-                f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/organizations",
-                headers=headers,
+            raise RuntimeError("tenant_id is required to assign organization membership")
+
+        orgs_resp = await client.get(
+            f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/organizations",
+            headers=headers,
+            params={"first": 0, "max": 1000},
+        )
+        if orgs_resp.status_code >= 300:
+            raise RuntimeError(
+                f"Could not list Keycloak organizations: HTTP {orgs_resp.status_code}"
             )
-            org_id = None
-            if orgs_resp.status_code < 300:
-                orgs_all = orgs_resp.json()
-                if isinstance(orgs_all, list):
-                    tid_val = tenant_id.lower()
-                    for org in orgs_all:
-                        alias_val = (org.get("alias") or "").lower()
-                        name_val = (org.get("name") or "").lower()
-                        if alias_val == tid_val or name_val == tid_val or tid_val in alias_val or tid_val in name_val:
-                            org_id = org.get("id")
-                            break
-            if org_id:
-                add_mem_url = f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/organizations/{org_id}/members"
-                await client.post(add_mem_url, headers=headers, json=kc_user_id)
-        except Exception as exc:
-            logger.warning(f"Could not add invited user to Keycloak Organization {tenant_id}: {exc}")
+
+        orgs_all = orgs_resp.json()
+        target = tenant_id.strip().lower()
+        org_id = None
+        if isinstance(orgs_all, list):
+            for org in orgs_all:
+                if str(org.get("alias") or "").strip().lower() == target:
+                    org_id = org.get("id")
+                    break
+
+        if not org_id:
+            raise RuntimeError(
+                f"No Keycloak organization is aliased '{tenant_id}'. A tenant without "
+                "an organization cannot be resolved from a token; provision it via "
+                "create_keycloak_organization before inviting users into it."
+            )
+
+        add_mem_url = (
+            f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/organizations/{org_id}/members"
+        )
+        # Body is the bare user id as a JSON string -- verified against Keycloak
+        # 26.7, which returns 201 for this shape.
+        mem_resp = await client.post(add_mem_url, headers=headers, json=kc_user_id)
+        # 409 = already a member, which is the desired end state.
+        if mem_resp.status_code >= 300 and mem_resp.status_code != 409:
+            raise RuntimeError(
+                f"Could not add user to organization '{tenant_id}': "
+                f"HTTP {mem_resp.status_code}"
+            )
 
     @staticmethod
     async def send_user_invitation(

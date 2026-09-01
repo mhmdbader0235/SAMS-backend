@@ -1,5 +1,5 @@
 """
-OPA (Open Policy Agent) Authorization Client for SchoolDesk (Doumind).
+OPA (Open Policy Agent) Authorization Client for SAMS (Doumind).
 
 This module provides async authorization checks by sending structured input payloads
 to the OPA policy decision endpoint (default: http://opa:8181/v1/data/school/authz/allow).

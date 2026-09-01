@@ -5,6 +5,7 @@ import pytest
 from httpx import AsyncClient
 
 from app.domains.tenant.tenant_repository import TenantRepository
+from tests.integration._helpers import register_school_admin
 
 
 @pytest.mark.asyncio
@@ -62,20 +63,25 @@ async def test_workflow_routes(test_client: AsyncClient, db_pool: asyncpg.Pool):
 
     # Create event draft
     # First, create class
-    # We must have level first
-    lvl_r = await test_client.post("/api/v1/students/levels", json={"name": "Grade 11"}, headers=t_headers)
+    # We must have level first -- via a school_admin, since a bare "teacher"
+    # can no longer create levels or classes (Academic Administration Hub
+    # territory).
+    admin_token = await register_school_admin(test_client, "wf_admin@school.com")
+    admin_headers = {"Authorization": f"Bearer {admin_token}"}
+
+    lvl_r = await test_client.post("/api/v1/students/levels", json={"name": "Grade 11"}, headers=admin_headers)
     assert lvl_r.status_code == 200
     lvl_id = lvl_r.json()["level_id"]
-    
+
     # We need teacher user id
     me_r = await test_client.get("/api/v1/auth/me", headers=t_headers)
     t_uid = int(me_r.json()["user_id"])
-    
+
     cls_r = await test_client.post("/api/v1/students/classes", json={
         "name": "11A",
         "level_id": lvl_id,
         "head_teacher_id": t_uid
-    }, headers=t_headers)
+    }, headers=admin_headers)
     assert cls_r.status_code == 200
     class_id = cls_r.json()["id"]
 

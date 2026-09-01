@@ -18,8 +18,8 @@ async def clean_db(db_pool: asyncpg.Pool):
                 "invitations", "parents", "super_admins", "event_feedback",
                 "payments", "enrollment", "event_class_map", "resource_cost",
                 "resources", "resource_types", "notifications", "student_health_and_records",
-                "student_parent_map", "students", "class", "teachers", "parenets",
-                "levels", "users"
+                "student_parent_map", "student_class_history", "students", "class", "academic_years",
+                "teachers", "parenets", "levels", "users", "academic_settings", "blackout_dates"
             ]
             for t in tables:
                 try:

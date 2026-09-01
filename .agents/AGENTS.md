@@ -1,4 +1,4 @@
-# Project Architectural Rules & Guidelines — SchoolDesk (Doumind)
+# Project Architectural Rules & Guidelines — SAMS (Doumind)
 
 > **Canonical source:** this file (`/.agents/AGENTS.md`) at the repo root.
 > `back/.agents/AGENTS.md` is a required mirror because `back/` is its own git
@@ -134,7 +134,7 @@ feature. Do not route new work through them, and do not assume they grant access
 |---|---|
 | **`finance`** | Deeply scaffolded but **non-functional end-to-end**: present in DDL role `CHECK` constraints, `VALID_ROLES`, the OPA policy (action + HTTP rules), 8 router guards, and `POST /api/v1/students/finance`. **Has NO entry in `COMPOSITE_ROLE_PERMISSIONS` on either backend or frontend.** Its workflow endpoints are dead (see below) and the Finance dashboard perspective button renders with no panel behind it. |
 | **`event_teacher`** | Scaffolded in DDL, `VALID_ROLES`, router guards, and frontend role lists. Has **zero OPA policy coverage** and **no entry in either `COMPOSITE_ROLE_PERMISSIONS`**, so it currently resolves to no capabilities. The state machine treats it as `teacher` (see aliasing below). |
-| **`school_nurse`** | **Documentation only.** Appears in `docs/keycloak_roles_catalog.json` and `docs/PERMISSIONS_CATALOG_REFERENCE.md`. No executable code anywhere. |
+| **`school_nurse`** | **Documentation only.** Appears in `docs/reference/keycloak_roles_catalog.json` and `docs/reference/PERMISSIONS_CATALOG_REFERENCE.md`. No executable code anywhere. |
 | **`auditor`** | **Documentation only.** Same as above. |
 
 ### 📋 Event Lifecycle State Machine (CANONICAL)

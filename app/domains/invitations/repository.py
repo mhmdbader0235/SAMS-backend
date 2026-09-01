@@ -58,14 +58,18 @@ class InvitationRepository:
         tenant_id: str,
         role: str,
     ) -> None:
-        """Upsert email-to-tenant mapping in control plane DB."""
+        """Upsert this user's role within one tenant, in the control plane DB.
+
+        Conflicts on (email, tenant_id) -- inviting someone to a second school
+        adds a membership instead of moving them out of the first. Mirrors
+        ControlPlaneRepository.upsert_user_tenant_map; see alembic cp_0002."""
         async with self.pool.acquire() as conn:
             await conn.execute(
                 """
                 INSERT INTO user_tenant_map (email, tenant_id, role, updated_at)
                 VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
-                ON CONFLICT (email) DO UPDATE
-                SET tenant_id = EXCLUDED.tenant_id, role = EXCLUDED.role, updated_at = CURRENT_TIMESTAMP
+                ON CONFLICT (email, tenant_id) DO UPDATE
+                SET role = EXCLUDED.role, updated_at = CURRENT_TIMESTAMP
                 """,
                 email.strip().lower(),
                 tenant_id.strip(),

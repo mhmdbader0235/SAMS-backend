@@ -10,6 +10,7 @@ from app.core.dependencies import (
     CurrentUser,
     get_current_user,
     require_permission,
+    require_selected_tenant,
     require_tenant_live,
 )
 from app.core.schemas import TokenResponse, UserLoginRequest, UserRegisterRequest
@@ -83,6 +84,13 @@ async def create_invitation(
 
     # Strict Tenant Scoping: non-super_admin can only create invitations for their own tenant
     is_super = current_user.role == "super_admin" or "super_admin" in (current_user.roles or [])
+
+    # Only an existing super_admin may mint an invitation code for super_admin.
+    if payload.role == "super_admin" and not is_super:
+        raise HTTPException(
+            status_code=403, detail="Only a super_admin can create a super_admin invitation"
+        )
+
     target_tenant = payload.tenant_id
     if not is_super and current_user.tenant_id:
         if (
@@ -156,8 +164,18 @@ async def get_invitation(code: str) -> dict:
 
 @router.post("/register", response_model=TokenResponse, summary="Register a new user")
 async def register(payload: UserRegisterRequest) -> TokenResponse:
-    tenant_id = payload.tenant_id or "tenant_a"
+    # No tenant_a default. Registration must name a school explicitly or carry an
+    # invitation that names one (register_user locks tenant/role/email from the
+    # invitation). Falling back to tenant_a meant an anonymous caller who omitted
+    # tenant_id was registered into the first real school.
+    tenant_id = payload.tenant_id
     role = payload.role or "student"
+
+    if not tenant_id and not payload.invite_code and role != "super_admin":
+        raise HTTPException(
+            status_code=400,
+            detail="An invitation code or an explicit tenant_id is required to register.",
+        )
 
     try:
         token = await AuthService.register_user(
@@ -184,7 +202,10 @@ async def register(payload: UserRegisterRequest) -> TokenResponse:
 
 @router.post("/login", response_model=TokenResponse, summary="Login and receive a JWT")
 async def login(payload: UserLoginRequest) -> TokenResponse:
-    tenant_id = payload.tenant_id or "tenant_a"
+    # Pass None through rather than defaulting to tenant_a: AuthService.login_user
+    # resolves the caller's real tenant from user_tenant_map when this is None,
+    # and defaulting here skipped that and authenticated against school A.
+    tenant_id = payload.tenant_id
 
     try:
         token = await AuthService.login_user(
@@ -287,10 +308,15 @@ async def get_profile(current_user: CurrentUser = Depends(get_current_user)) -> 
                     elif current_user.role == "teacher":
                         from app.domains.tenant.service import TenantService
 
-                        class_info = await TenantService.get_class_by_head_teacher(
+                        # ProfileResponse only has room for one class; a
+                        # teacher can head more than one, so this shows the
+                        # lowest-id one deterministically rather than
+                        # whichever the database happened to return first.
+                        teacher_classes = await TenantService.get_classes_by_head_teacher(
                             current_user.tenant_id, db_user_id
                         )
-                        if class_info:
+                        if teacher_classes:
+                            class_info = teacher_classes[0]
                             class_id = class_info.get("id")
                             class_name = (
                                 f"{class_info.get('name')} ({class_info.get('level_name')})"
@@ -349,10 +375,17 @@ async def update_profile(
     "/parent-profile", response_model=ProfileResponse, summary="Get parent profile by email"
 )
 async def get_parent_profile_by_email(
-    email: str, current_user: CurrentUser = Depends(get_current_user)
+    email: str | None = None, current_user: CurrentUser = Depends(get_current_user)
 ) -> ProfileResponse:
+    # Role check must run before the `email` presence check: `email` used to
+    # be a required query param, so FastAPI's own validation rejected a
+    # non-staff caller with a 422 "field required" before this handler ever
+    # ran, hiding the real 403 behind a confusing validation error.
     if current_user.role not in ("teacher", "school_admin"):
         raise HTTPException(status_code=403, detail="Only staff can view parent details")
+
+    if not email:
+        raise HTTPException(status_code=400, detail="email query parameter is required")
 
     try:
         cp_pool = await get_control_plane_pool()
@@ -415,7 +448,7 @@ async def list_users_permissions(
     # super_admin can influence it via X-Tenant-ID -- see get_current_user) --
     # re-reading the raw header here would let ANY caller silently retarget
     # this action at a different tenant than the one their own token grants.
-    tenant_id = (current_user.tenant_id or "tenant_a").strip().lower()
+    tenant_id = require_selected_tenant(current_user)
     try:
         from app.domains.tenant.service import TenantService
 
@@ -441,7 +474,7 @@ async def update_user_permissions(
     # super_admin can influence it via X-Tenant-ID -- see get_current_user) --
     # re-reading the raw header here would let ANY caller silently retarget
     # this action at a different tenant than the one their own token grants.
-    tenant_id = (current_user.tenant_id or "tenant_a").strip().lower()
+    tenant_id = require_selected_tenant(current_user)
     try:
         from app.domains.tenant.service import TenantService
 
@@ -477,7 +510,7 @@ async def delete_user(
     # super_admin can influence it via X-Tenant-ID -- see get_current_user) --
     # re-reading the raw header here would let ANY caller silently retarget
     # this action at a different tenant than the one their own token grants.
-    tenant_id = (current_user.tenant_id or "tenant_a").strip().lower()
+    tenant_id = require_selected_tenant(current_user)
     try:
         from app.domains.tenant.service import TenantService
 
@@ -510,7 +543,7 @@ async def get_pending_users(
     # super_admin can influence it via X-Tenant-ID -- see get_current_user) --
     # re-reading the raw header here would let ANY caller silently retarget
     # this action at a different tenant than the one their own token grants.
-    tenant_id = (current_user.tenant_id or "tenant_a").strip().lower()
+    tenant_id = require_selected_tenant(current_user)
     try:
         users = await AuthService.get_pending_users(tenant_id)
         return users
@@ -534,10 +567,14 @@ async def assign_user_role(
     # super_admin can influence it via X-Tenant-ID -- see get_current_user) --
     # re-reading the raw header here would let ANY caller silently retarget
     # this action at a different tenant than the one their own token grants.
-    tenant_id = (current_user.tenant_id or "tenant_a").strip().lower()
+    tenant_id = require_selected_tenant(current_user)
     try:
-        res = await AuthService.assign_user_role(tenant_id, email, payload.role)
+        res = await AuthService.assign_user_role(
+            tenant_id, email, payload.role, requesting_user_roles=current_user.roles
+        )
         return res
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except Exception as exc:

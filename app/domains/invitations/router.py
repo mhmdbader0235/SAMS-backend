@@ -36,6 +36,14 @@ async def create_invitation(
 
     # Strict Tenant Scoping: non-super_admin can only create invitations for their own tenant
     is_super = current_user.has_role("super_admin")
+
+    # Only an existing super_admin may invite another super_admin.
+    if payload.role == "super_admin" and not is_super:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only a super_admin can invite a user as super_admin",
+        )
+
     if not is_super and current_user.tenant_id:
         if payload.tenant_id and payload.tenant_id.strip().lower() != current_user.tenant_id.strip().lower():
             raise HTTPException(

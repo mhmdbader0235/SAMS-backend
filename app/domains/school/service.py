@@ -170,6 +170,9 @@ class SchoolService:
         repo = SchoolRepository(pool)
         profile = await repo.ensure_profile_row()
 
+        if profile.get("profile_committed_at"):
+            raise ValueError("School Information is already committed and cannot be re-submitted.")
+
         missing = [f for f in _REQUIRED_PROFILE_FIELDS if not profile.get(f)]
         if missing:
             raise ValueError(f"Missing required school information: {', '.join(missing)}")
@@ -191,6 +194,9 @@ class SchoolService:
         pool = await get_db_pool(tenant_id)
         repo = SchoolRepository(pool)
         profile = await repo.ensure_profile_row()
+
+        if profile.get("activated_at"):
+            raise ValueError("School is already activated; activation cannot be repeated or undone.")
 
         if not profile.get("profile_committed_at"):
             raise ValueError("Complete School Information before activating.")

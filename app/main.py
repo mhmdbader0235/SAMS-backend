@@ -39,13 +39,31 @@ async def event_reminders_scheduler():
 async def lifespan(application: FastAPI):  # noqa: ARG001
     """Startup / shutdown lifecycle hook."""
     import asyncio
-    print("[startup] SchoolDesk backend initialised — multi-tenant mode active.")
+    print("[startup] SAMS backend initialised — multi-tenant mode active.")
     try:
         # Initialize Control-Plane DB and seed default tenants
         await get_control_plane_pool()
         print("[startup] Control-Plane database connected and initialized.")
         from app.core.keycloak_admin import ensure_keycloak_frontend_redirect_uris
         ensure_keycloak_frontend_redirect_uris()
+
+        # Every tenant needs a Keycloak Organization aliased to its tenant_id --
+        # that alias is what the `organization` claim carries, and the claim is how
+        # a request resolves to a tenant. Organizations cannot live in
+        # SAMS-realm.json (realm export omits them entirely), so this reconcile is
+        # the provisioning path for tenants that predate the change, or whose
+        # organization was removed. Best-effort: it must not stop the API booting.
+        from app.core.keycloak_admin import ensure_keycloak_organizations
+        from app.domains.tenant.control_plane_repository import ControlPlaneRepository
+
+        cp_pool = await get_control_plane_pool()
+        tenant_rows = await ControlPlaneRepository(cp_pool).get_all_tenants()
+        tenant_ids = [t.get("tenant_id") for t in tenant_rows if t.get("tenant_id")]
+        org_summary = ensure_keycloak_organizations(tenant_ids)
+        print(
+            f"[startup] Keycloak organizations: {len(org_summary['existing'])} existing, "
+            f"{len(org_summary['created'])} created, {len(org_summary['failed'])} failed."
+        )
     except Exception as exc:
         print(f"[startup] Warning: could not initialize Control-Plane DB: {exc}")
 
@@ -73,7 +91,7 @@ async def lifespan(application: FastAPI):  # noqa: ARG001
 
 
 app = FastAPI(
-    title="SchoolDesk Backend API",
+    title="SAMS Backend API",
     version="1.0.0",
     description="Multi-tenant school event and analytics management platform.",
     lifespan=lifespan,

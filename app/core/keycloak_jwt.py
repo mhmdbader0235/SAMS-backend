@@ -128,7 +128,14 @@ class KeycloakVerifier:
         def _verify() -> dict:
             try:
                 signing_key = self._jwks_client.get_signing_key_from_jwt(token)
-            except PyJWKClientError as exc:
+            except (PyJWKClientError, jwt.PyJWTError) as exc:
+                # get_signing_key_from_jwt() parses the token header itself
+                # (jwt.get_unverified_header()) before ever reaching JWKS
+                # lookup -- a malformed token (not valid JWT structure at
+                # all) fails there with a PyJWTError (e.g. DecodeError), not
+                # a PyJWKClientError. Both must map to KeycloakTokenError so
+                # get_current_user's `except KeycloakTokenError` catches it
+                # and returns 401, instead of an unhandled 500.
                 raise KeycloakTokenError(f"Unable to resolve signing key: {exc}") from exc
 
             try:

@@ -1,6 +1,6 @@
-# Complete Guide: Nginx & Apache APISIX Architecture in SchoolDesk
+# Complete Guide: Nginx & Apache APISIX Architecture in SAMS
 
-This document provides a comprehensive explanation of how **Nginx**, **Apache APISIX**, **Keycloak**, and the **FastAPI Backend** work together in the SchoolDesk application.
+This document provides a comprehensive explanation of how **Nginx**, **Apache APISIX**, **Keycloak**, and the **FastAPI Backend** work together in the SAMS application.
 
 ---
 
