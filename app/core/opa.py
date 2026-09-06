@@ -6,7 +6,8 @@ to the OPA policy decision endpoint (default: http://opa:8181/v1/data/school/aut
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
+
 import httpx
 
 from app.core.config import OPA_URL
@@ -28,10 +29,10 @@ class OPAUnavailableError(Exception):
 async def verify_opa_authorization(
     user_id: str,
     tenant_id: str,
-    roles: List[str],
+    roles: list[str],
     action: str,
-    resource: Optional[Dict[str, Any]] = None,
-    opa_url: Optional[str] = None,
+    resource: dict[str, Any] | None = None,
+    opa_url: str | None = None,
 ) -> bool:
     """
     Query OPA policy endpoint to verify if an action on a resource is allowed.
@@ -82,10 +83,10 @@ async def verify_opa_authorization(
 async def verify_opa_http_route(
     user_id: str,
     tenant_id: str,
-    roles: List[str],
+    roles: list[str],
     method: str,
     path: str,
-    opa_url: Optional[str] = None,
+    opa_url: str | None = None,
 ) -> bool:
     """
     Query OPA policy endpoint to verify if an HTTP route request is allowed.
@@ -128,7 +129,4 @@ async def verify_opa_http_route(
                 return False
     except Exception as exc:
         logger.error(f"Error connecting to OPA endpoint at {url}: {exc}")
-        if "super_admin" in roles:
-            return True
-        return False
-
+        return "super_admin" in roles

@@ -13,7 +13,14 @@ from app.core.dependencies import (
     require_selected_tenant,
     require_tenant_live,
 )
-from app.core.schemas import TokenResponse, UserLoginRequest, UserRegisterRequest
+from app.core.schemas import (
+    TokenResponse,
+    UserLoginRequest,
+    UserPreferencesResponse,
+    UserPreferencesUpdateRequest,
+    UserRegisterRequest,
+    UserRoleUpdateRequest,
+)
 from app.domains.auth.service import AuthService
 from app.domains.tenant.control_plane_repository import ControlPlaneRepository
 from app.domains.tenant.tenant_repository import TenantRepository
@@ -231,6 +238,41 @@ async def me(
         "roles": current_user.roles,
         "email": current_user.email,
     }
+
+
+@router.get(
+    "/me/preferences",
+    response_model=UserPreferencesResponse,
+    summary="Get the caller's own locale preference overrides",
+)
+async def get_my_preferences(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> UserPreferencesResponse:
+    pool = await get_db_pool(current_user.tenant_id)
+    user_repo = UserRepository(pool)
+    prefs = await user_repo.get_user_preferences(current_user.id)
+    if prefs is None:
+        return UserPreferencesResponse()
+    return UserPreferencesResponse(**prefs)
+
+
+@router.put(
+    "/me/preferences",
+    response_model=UserPreferencesResponse,
+    summary="Set the caller's own locale preference overrides",
+)
+async def update_my_preferences(
+    payload: UserPreferencesUpdateRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> UserPreferencesResponse:
+    pool = await get_db_pool(current_user.tenant_id)
+    user_repo = UserRepository(pool)
+    prefs = await user_repo.update_user_preferences(
+        current_user.id, payload.preferred_language, payload.preferred_timezone
+    )
+    if prefs is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return UserPreferencesResponse(**prefs)
 
 
 class ProfileStudentInfo(BaseModel):
@@ -485,6 +527,7 @@ async def update_user_permissions(
             roles=payload.roles,
             permissions=payload.permissions,
             user_role=current_user.roles,
+            requesting_user_id=current_user.id,
         )
         return UserPermissionsResponse(**updated)
     except PermissionError as exc:
@@ -549,9 +592,6 @@ async def get_pending_users(
         return users
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
-
-
-from app.core.schemas import UserRoleUpdateRequest
 
 
 @router_gated.patch("/users/{email}/role", summary="Assign role to pending user (admin only)")

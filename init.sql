@@ -142,6 +142,8 @@ CREATE TABLE IF NOT EXISTS tenant_a.users (
     password_hash TEXT        NOT NULL,
     phone         VARCHAR(50) DEFAULT NULL,
     address       TEXT        DEFAULT NULL,
+    preferred_language TEXT   DEFAULT NULL,
+    preferred_timezone TEXT   DEFAULT NULL,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -315,7 +317,7 @@ CREATE TABLE IF NOT EXISTS tenant_a.event (
     description    TEXT                     NOT NULL DEFAULT '',
     address        TEXT                     DEFAULT NULL,
     event_map_id   BIGINT                   DEFAULT NULL,
-    school_subsidy NUMERIC(10, 2)           NOT NULL DEFAULT 0.00,
+    school_subsidy NUMERIC(14, 4)           NOT NULL DEFAULT 0.00,
     date           TIMESTAMPTZ              NOT NULL,
     created_by     BIGINT                   NOT NULL REFERENCES tenant_a.users(id) ON DELETE CASCADE,
     created_at     TIMESTAMPTZ              NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -323,7 +325,7 @@ CREATE TABLE IF NOT EXISTS tenant_a.event (
     predicted_attendance INTEGER            NULL,
     manager_reviewer_id BIGINT              NULL REFERENCES tenant_a.users(id),
     finance_reviewer_id BIGINT              NULL REFERENCES tenant_a.users(id),
-    total_cost     NUMERIC(12,2)            NULL,
+    total_cost     NUMERIC(14, 4)           NULL,
     submitted_at   TIMESTAMPTZ              NULL,
     manager_approved_at TIMESTAMPTZ         NULL,
     finance_priced_at TIMESTAMPTZ           NULL,
@@ -340,7 +342,7 @@ CREATE TABLE IF NOT EXISTS tenant_a.event_class_map (
     id            BIGSERIAL      PRIMARY KEY,
     event_id      BIGINT         NOT NULL REFERENCES tenant_a.event(id) ON DELETE CASCADE,
     class_id      BIGINT         NOT NULL REFERENCES tenant_a.class(id) ON DELETE CASCADE,
-    ticket_price  NUMERIC(10, 2) NOT NULL DEFAULT 0.00
+    ticket_price  NUMERIC(14, 4) NOT NULL DEFAULT 0.00
 );
 
 CREATE INDEX IF NOT EXISTS idx_ecm_event ON tenant_a.event_class_map(event_id);
@@ -365,7 +367,8 @@ CREATE INDEX IF NOT EXISTS idx_enrollment_ecm ON tenant_a.enrollment(event_class
 CREATE TABLE IF NOT EXISTS tenant_a.payments (
     id            BIGSERIAL      PRIMARY KEY,
     enrollment_id BIGINT         NOT NULL REFERENCES tenant_a.enrollment(id) ON DELETE CASCADE,
-    amount        NUMERIC(10, 2) NOT NULL,
+    amount        NUMERIC(14, 4) NOT NULL,
+    currency      VARCHAR(3)     NOT NULL DEFAULT 'USD',
     status        TEXT           NOT NULL CHECK (status IN ('pending', 'paid', 'refunded')),
     created_at    TIMESTAMPTZ    NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -432,8 +435,8 @@ CREATE TABLE IF NOT EXISTS tenant_a.resource_cost (
     id             SERIAL        PRIMARY KEY,
     event_id       BIGINT        NOT NULL REFERENCES tenant_a.event(id) ON DELETE CASCADE,
     resource_id    INTEGER       NOT NULL UNIQUE REFERENCES tenant_a.resources(id) ON DELETE CASCADE,
-    unit_price     NUMERIC(12,2) NOT NULL CHECK (unit_price >= 0),
-    total_cost     NUMERIC(12,2) NOT NULL,
+    unit_price     NUMERIC(14,4) NOT NULL CHECK (unit_price >= 0),
+    total_cost     NUMERIC(14,4) NOT NULL,
     currency       VARCHAR(3)    NOT NULL DEFAULT 'JOD',
     set_by_user_id BIGINT        NOT NULL REFERENCES tenant_a.users(id),
     updated_at     TIMESTAMPTZ   NOT NULL DEFAULT now()
@@ -511,6 +514,29 @@ CREATE TABLE IF NOT EXISTS tenant_a.school_contact (
     created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Table 19: audit_log -- immutable, tenant-scoped audit trail (ADR 0006).
+-- No PII: actor_email_hmac not the raw email, changed_fields stores field
+-- NAMES only. See alembic/versions/tenant_0005_audit_log.py.
+CREATE TABLE IF NOT EXISTS tenant_a.audit_log (
+    id                 BIGSERIAL   PRIMARY KEY,
+    occurred_at        TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    correlation_id     UUID        NULL,
+    actor_user_id      BIGINT      NULL REFERENCES tenant_a.users(id) ON DELETE SET NULL,
+    actor_email_hmac   TEXT        NULL,
+    actor_role         TEXT        NOT NULL,
+    action             TEXT        NOT NULL,
+    entity_type        TEXT        NOT NULL,
+    entity_id          TEXT        NULL,
+    outcome            TEXT        NOT NULL CHECK (outcome IN ('allow','deny','error')),
+    changed_fields     TEXT[]      NULL,
+    metadata           JSONB       NOT NULL DEFAULT '{}',
+    retention_until    DATE        NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_audit_a_occurred ON tenant_a.audit_log (occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_a_entity
+    ON tenant_a.audit_log (entity_type, entity_id, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_a_actor ON tenant_a.audit_log (actor_user_id, occurred_at DESC);
+
 -- tenant_a is a pre-existing demo/seeded school (see seed_data.py) — treat it
 -- as already onboarded so it never gets dropped into the setup wizard.
 -- curriculum_locked_at is deliberately left NULL: this seed predates the
@@ -545,6 +571,8 @@ CREATE TABLE IF NOT EXISTS tenant_b.users (
     password_hash TEXT        NOT NULL,
     phone         VARCHAR(50) DEFAULT NULL,
     address       TEXT        DEFAULT NULL,
+    preferred_language TEXT   DEFAULT NULL,
+    preferred_timezone TEXT   DEFAULT NULL,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -708,7 +736,7 @@ CREATE TABLE IF NOT EXISTS tenant_b.event (
     description    TEXT                     NOT NULL DEFAULT '',
     address        TEXT                     DEFAULT NULL,
     event_map_id   BIGINT                   DEFAULT NULL,
-    school_subsidy NUMERIC(10, 2)           NOT NULL DEFAULT 0.00,
+    school_subsidy NUMERIC(14, 4)           NOT NULL DEFAULT 0.00,
     date           TIMESTAMPTZ              NOT NULL,
     created_by     BIGINT                   NOT NULL REFERENCES tenant_b.users(id) ON DELETE CASCADE,
     created_at     TIMESTAMPTZ              NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -716,7 +744,7 @@ CREATE TABLE IF NOT EXISTS tenant_b.event (
     predicted_attendance INTEGER            NULL,
     manager_reviewer_id BIGINT              NULL REFERENCES tenant_b.users(id),
     finance_reviewer_id BIGINT              NULL REFERENCES tenant_b.users(id),
-    total_cost     NUMERIC(12,2)            NULL,
+    total_cost     NUMERIC(14, 4)           NULL,
     submitted_at   TIMESTAMPTZ              NULL,
     manager_approved_at TIMESTAMPTZ         NULL,
     finance_priced_at TIMESTAMPTZ           NULL,
@@ -733,7 +761,7 @@ CREATE TABLE IF NOT EXISTS tenant_b.event_class_map (
     id            BIGSERIAL      PRIMARY KEY,
     event_id      BIGINT         NOT NULL REFERENCES tenant_b.event(id) ON DELETE CASCADE,
     class_id      BIGINT         NOT NULL REFERENCES tenant_b.class(id) ON DELETE CASCADE,
-    ticket_price  NUMERIC(10, 2) NOT NULL DEFAULT 0.00
+    ticket_price  NUMERIC(14, 4) NOT NULL DEFAULT 0.00
 );
 
 CREATE INDEX IF NOT EXISTS idx_ecm_event_b ON tenant_b.event_class_map(event_id);
@@ -758,7 +786,8 @@ CREATE INDEX IF NOT EXISTS idx_enrollment_ecm_b ON tenant_b.enrollment(event_cla
 CREATE TABLE IF NOT EXISTS tenant_b.payments (
     id            BIGSERIAL      PRIMARY KEY,
     enrollment_id BIGINT         NOT NULL REFERENCES tenant_b.enrollment(id) ON DELETE CASCADE,
-    amount        NUMERIC(10, 2) NOT NULL,
+    amount        NUMERIC(14, 4) NOT NULL,
+    currency      VARCHAR(3)     NOT NULL DEFAULT 'USD',
     status        TEXT           NOT NULL CHECK (status IN ('pending', 'paid', 'refunded')),
     created_at    TIMESTAMPTZ    NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -825,8 +854,8 @@ CREATE TABLE IF NOT EXISTS tenant_b.resource_cost (
     id             SERIAL        PRIMARY KEY,
     event_id       BIGINT        NOT NULL REFERENCES tenant_b.event(id) ON DELETE CASCADE,
     resource_id    INTEGER       NOT NULL UNIQUE REFERENCES tenant_b.resources(id) ON DELETE CASCADE,
-    unit_price     NUMERIC(12,2) NOT NULL CHECK (unit_price >= 0),
-    total_cost     NUMERIC(12,2) NOT NULL,
+    unit_price     NUMERIC(14,4) NOT NULL CHECK (unit_price >= 0),
+    total_cost     NUMERIC(14,4) NOT NULL,
     currency       VARCHAR(3)    NOT NULL DEFAULT 'JOD',
     set_by_user_id BIGINT        NOT NULL REFERENCES tenant_b.users(id),
     updated_at     TIMESTAMPTZ   NOT NULL DEFAULT now()
@@ -903,6 +932,29 @@ CREATE TABLE IF NOT EXISTS tenant_b.school_contact (
     visible_to              TEXT[]      NOT NULL DEFAULT '{staff}',
     created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Table 19: audit_log -- immutable, tenant-scoped audit trail (ADR 0006).
+-- No PII: actor_email_hmac not the raw email, changed_fields stores field
+-- NAMES only. See alembic/versions/tenant_0005_audit_log.py.
+CREATE TABLE IF NOT EXISTS tenant_b.audit_log (
+    id                 BIGSERIAL   PRIMARY KEY,
+    occurred_at        TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    correlation_id     UUID        NULL,
+    actor_user_id      BIGINT      NULL REFERENCES tenant_b.users(id) ON DELETE SET NULL,
+    actor_email_hmac   TEXT        NULL,
+    actor_role         TEXT        NOT NULL,
+    action             TEXT        NOT NULL,
+    entity_type        TEXT        NOT NULL,
+    entity_id          TEXT        NULL,
+    outcome            TEXT        NOT NULL CHECK (outcome IN ('allow','deny','error')),
+    changed_fields     TEXT[]      NULL,
+    metadata           JSONB       NOT NULL DEFAULT '{}',
+    retention_until    DATE        NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_audit_b_occurred ON tenant_b.audit_log (occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_b_entity
+    ON tenant_b.audit_log (entity_type, entity_id, occurred_at DESC);
+CREATE INDEX IF NOT EXISTS idx_audit_b_actor ON tenant_b.audit_log (actor_user_id, occurred_at DESC);
 
 -- tenant_b is a pre-existing demo/seeded school — treat it as already
 -- onboarded so it never gets dropped into the setup wizard. curriculum_locked_at

@@ -5,13 +5,16 @@ Defines Pydantic request and response models for user invitations.
 """
 
 from datetime import datetime
+
 from pydantic import BaseModel, EmailStr, Field
 
 
 class InvitationCreateRequest(BaseModel):
     email: EmailStr = Field(..., description="Target email address for invitation")
     tenant_id: str = Field(..., description="Target tenant ID (e.g., tenant_a)")
-    role: str = Field(..., description="Target high-level role (e.g., teachers, managers, parents, student)")
+    role: str = Field(
+        ..., description="Target high-level role (e.g., teachers, managers, parents, student)"
+    )
 
 
 class InvitationResponse(BaseModel):

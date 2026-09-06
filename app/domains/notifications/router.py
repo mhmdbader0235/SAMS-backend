@@ -9,7 +9,11 @@ from pydantic import BaseModel
 from app.core.dependencies import CurrentUser, get_current_user, require_tenant_live
 from app.domains.tenant.service import TenantService
 
-router = APIRouter(prefix="/api/v1/notifications", tags=["notifications"], dependencies=[Depends(require_tenant_live)])
+router = APIRouter(
+    prefix="/api/v1/notifications",
+    tags=["notifications"],
+    dependencies=[Depends(require_tenant_live)],
+)
 
 
 class NotificationResponse(BaseModel):
@@ -28,7 +32,9 @@ class NotificationsListResponse(BaseModel):
     notifications: list[NotificationResponse]
 
 
-@router.get("", response_model=NotificationsListResponse, summary="List all notifications for the user")
+@router.get(
+    "", response_model=NotificationsListResponse, summary="List all notifications for the user"
+)
 async def list_notifications(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> NotificationsListResponse:
@@ -39,9 +45,7 @@ async def list_notifications(
             user_id=current_user.id,
             user_role=current_user.role,
         )
-        return NotificationsListResponse(
-            notifications=[NotificationResponse(**n) for n in notifs]
-        )
+        return NotificationsListResponse(notifications=[NotificationResponse(**n) for n in notifs])
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 

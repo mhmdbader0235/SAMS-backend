@@ -49,7 +49,9 @@ class EventService:
         return event
 
     @staticmethod
-    def resolve_subsidy(payload_subsidy: float | None, actor, existing_subsidy: float = 0.0) -> float:
+    def resolve_subsidy(
+        payload_subsidy: float | None, actor, existing_subsidy: float = 0.0
+    ) -> float:
         """Only school_admin/manager may set school_subsidy; everyone else keeps
         the existing value (or 0.0 on create)."""
         can_set = bool(set(getattr(actor, "roles", [])) & _SUBSIDY_VISIBLE_ROLES)
@@ -80,9 +82,7 @@ class EventService:
     # Orchestration (permission check + repository dispatch)
     # =========================================================================
     @staticmethod
-    async def update_resource_line(
-        tenant_id: str, resource_id: int, actor, updates: dict
-    ) -> None:
+    async def update_resource_line(tenant_id: str, resource_id: int, actor, updates: dict) -> None:
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
 
@@ -103,7 +103,11 @@ class EventService:
                 if updates.get("description") is not None
                 else resource["description"]
             ),
-            "quantity": updates.get("quantity") if updates.get("quantity") is not None else resource["quantity"],
+            "quantity": (
+                updates.get("quantity")
+                if updates.get("quantity") is not None
+                else resource["quantity"]
+            ),
         }
         await repo.update_resource(
             resource_id=resource_id,
@@ -124,6 +128,53 @@ class EventService:
                     currency=cost_info["currency"],
                     set_by_user_id=actor.id,
                 )
+
+    @staticmethod
+    async def add_resource_line(
+        tenant_id: str,
+        event_id: int,
+        actor,
+        resource_type_id: int,
+        description: str | None,
+        quantity: int,
+    ) -> int:
+        """Insert one resource line without touching any other line on the
+        event -- unlike the wizard's full-replace endpoint, safe to call while
+        a manager is reviewing a 'proposed' event that may already have
+        finance-priced lines on it."""
+        pool = await get_db_pool(tenant_id)
+        repo = TenantRepository(pool)
+
+        event = await repo.get_event_by_id(event_id)
+        if not event:
+            raise ValueError("Event not found")
+
+        EventService.require_editable(actor, event)
+
+        return await repo.create_resource(
+            event_id=event_id,
+            resource_type_id=resource_type_id,
+            description=description,
+            quantity=quantity,
+            added_by_user_id=actor.id,
+        )
+
+    @staticmethod
+    async def delete_resource_line(tenant_id: str, resource_id: int, actor) -> None:
+        pool = await get_db_pool(tenant_id)
+        repo = TenantRepository(pool)
+
+        resource = await repo.get_resource_by_id(resource_id)
+        if not resource:
+            raise ValueError("Resource not found")
+
+        event = await repo.get_event_by_id(resource["event_id"])
+        if not event:
+            raise ValueError("Event not found")
+
+        EventService.require_editable(actor, event)
+
+        await repo.delete_resource(resource_id)
 
     @staticmethod
     async def update_ticket_prices(tenant_id: str, event_id: int, actor, items: list[dict]) -> None:

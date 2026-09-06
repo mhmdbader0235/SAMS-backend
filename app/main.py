@@ -5,20 +5,34 @@ Uses lifespan context manager for startup/shutdown lifecycle events.
 Registers all API routers (Auth, Events, Students, Analytics).
 """
 
-from contextlib import asynccontextmanager
+import logging
+from contextlib import asynccontextmanager, suppress
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.core.database import db_manager, get_control_plane_pool
+from app.core.errors import AppError
 from app.core.keycloak_jwt import start_jwks_refresh_loop, stop_jwks_refresh_loop
+from app.core.observability import CorrelationIdMiddleware, configure_logging, get_correlation_id
 from app.domains.analytics.router import router as analytics_router
-from app.domains.auth.router import router as auth_router, router_gated as auth_gated_router
+from app.domains.audit.router import router as audit_router
+from app.domains.auth.router import router as auth_router
+from app.domains.auth.router import router_gated as auth_gated_router
 from app.domains.events.router import router as events_router
+from app.domains.invitations.router import router as invitation_router
 from app.domains.notifications.router import router as notifications_router
 from app.domains.school.router import router as school_router
-from app.domains.students.router import router as students_router, router_gated as students_gated_router
-from app.domains.invitations.router import router as invitation_router
+from app.domains.students.router import (
+    router as students_router,
+)
+from app.domains.students.router import (
+    router_gated as students_gated_router,
+)
+
+configure_logging()
+logger = logging.getLogger("app.main")
 
 
 async def event_reminders_scheduler():
@@ -26,12 +40,13 @@ async def event_reminders_scheduler():
     import asyncio
 
     from app.domains.tenant.service import TenantService
-    print("[startup] Event Reminders Scheduler loop started.")
+
+    logger.info("Event Reminders Scheduler loop started.")
     while True:
         try:
             await TenantService.check_and_send_reminders()
-        except Exception as exc:
-            print(f"[Reminders Scheduler] Error in check_and_send_reminders: {exc}")
+        except Exception:
+            logger.exception("Error in check_and_send_reminders")
         await asyncio.sleep(10)
 
 
@@ -39,12 +54,14 @@ async def event_reminders_scheduler():
 async def lifespan(application: FastAPI):  # noqa: ARG001
     """Startup / shutdown lifecycle hook."""
     import asyncio
-    print("[startup] SAMS backend initialised — multi-tenant mode active.")
+
+    logger.info("SAMS backend initialised — multi-tenant mode active.")
     try:
         # Initialize Control-Plane DB and seed default tenants
         await get_control_plane_pool()
-        print("[startup] Control-Plane database connected and initialized.")
+        logger.info("Control-Plane database connected and initialized.")
         from app.core.keycloak_admin import ensure_keycloak_frontend_redirect_uris
+
         ensure_keycloak_frontend_redirect_uris()
 
         # Every tenant needs a Keycloak Organization aliased to its tenant_id --
@@ -60,15 +77,17 @@ async def lifespan(application: FastAPI):  # noqa: ARG001
         tenant_rows = await ControlPlaneRepository(cp_pool).get_all_tenants()
         tenant_ids = [t.get("tenant_id") for t in tenant_rows if t.get("tenant_id")]
         org_summary = ensure_keycloak_organizations(tenant_ids)
-        print(
-            f"[startup] Keycloak organizations: {len(org_summary['existing'])} existing, "
-            f"{len(org_summary['created'])} created, {len(org_summary['failed'])} failed."
+        logger.info(
+            "Keycloak organizations: %d existing, %d created, %d failed.",
+            len(org_summary["existing"]),
+            len(org_summary["created"]),
+            len(org_summary["failed"]),
         )
-    except Exception as exc:
-        print(f"[startup] Warning: could not initialize Control-Plane DB: {exc}")
+    except Exception:
+        logger.exception("Warning: could not initialize Control-Plane DB")
 
     await start_jwks_refresh_loop()
-    print("[startup] Keycloak JWKS fetch/refresh loop started.")
+    logger.info("Keycloak JWKS fetch/refresh loop started.")
 
     # event_reminders_scheduler() is disabled: TenantService.check_and_send_reminders()
     # is an unimplemented no-op, so running the loop was just polling every 10
@@ -80,14 +99,12 @@ async def lifespan(application: FastAPI):  # noqa: ARG001
 
     if scheduler_task is not None:
         scheduler_task.cancel()
-        try:
+        with suppress(asyncio.CancelledError):
             await scheduler_task
-        except asyncio.CancelledError:
-            pass
 
     await stop_jwks_refresh_loop()
     await db_manager.disconnect_all()
-    print("[shutdown] All tenant/control-plane connection pools closed.")
+    logger.info("All tenant/control-plane connection pools closed.")
 
 
 app = FastAPI(
@@ -117,6 +134,35 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ─── Request correlation / logging ──────────────────────────────────────────
+app.add_middleware(CorrelationIdMiddleware)
+
+
+# ─── Error taxonomy ──────────────────────────────────────────────────────────
+# AppError subclasses carry a status+message that is safe to show a client.
+# Anything else (a bare, unexpected exception) must never leak its message --
+# stack traces, SQL fragments, file paths -- to the caller; log it in full
+# server-side and return a generic 500 with only the correlation id, so a
+# support conversation can reference one concrete request without exposing
+# internals.
+@app.exception_handler(AppError)
+async def _app_error_handler(request: Request, exc: AppError) -> JSONResponse:  # noqa: ARG001
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.message, "correlation_id": get_correlation_id()},
+    )
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(
+    request: Request, exc: Exception
+) -> JSONResponse:  # noqa: ARG001
+    logger.exception("Unhandled exception")
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal error", "correlation_id": get_correlation_id()},
+    )
+
 
 # ─── Routers ─────────────────────────────────────────────────────────────────
 app.include_router(auth_router)
@@ -128,6 +174,7 @@ app.include_router(analytics_router)
 app.include_router(notifications_router)
 app.include_router(invitation_router)
 app.include_router(school_router)
+app.include_router(audit_router)
 
 
 @app.get("/health", tags=["health"])
@@ -136,9 +183,57 @@ async def health() -> dict:
     return {"status": "ok"}
 
 
+@app.get("/ready", tags=["health"])
+async def ready() -> JSONResponse:
+    """Readiness probe -- unlike /health (which the Docker healthcheck
+    depends on and must stay a fixed, dependency-free response), this
+    actually exercises the control-plane database, Keycloak's JWKS endpoint,
+    and OPA, so a caller can tell "the process is up" from "the process can
+    actually serve a real request" -- returns 200 only if every dependency
+    answered."""
+    import asyncio
+
+    import httpx
+
+    from app.core.keycloak_jwt import KEYCLOAK_JWKS_URL
+
+    async def _check_database() -> bool:
+        try:
+            pool = await asyncio.wait_for(get_control_plane_pool(), timeout=2)
+            await asyncio.wait_for(pool.fetchval("SELECT 1"), timeout=2)
+            return True
+        except Exception:
+            return False
+
+    async def _check_keycloak() -> bool:
+        try:
+            async with httpx.AsyncClient(timeout=2) as client:
+                resp = await client.get(KEYCLOAK_JWKS_URL)
+                return resp.status_code == 200
+        except Exception:
+            return False
+
+    async def _check_opa() -> bool:
+        try:
+            from app.core.config import OPA_URL
+
+            opa_base = OPA_URL.split("/v1/")[0]
+            async with httpx.AsyncClient(timeout=2) as client:
+                resp = await client.get(f"{opa_base}/health")
+                return resp.status_code == 200
+        except Exception:
+            return False
+
+    database_ok, keycloak_ok, opa_ok = await asyncio.gather(
+        _check_database(), _check_keycloak(), _check_opa()
+    )
+    body = {"database": database_ok, "keycloak": keycloak_ok, "opa": opa_ok}
+    return JSONResponse(status_code=200 if all(body.values()) else 503, content=body)
+
+
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run(app, host="0.0.0.0", port=8001)
+    uvicorn.run(app, host="127.0.0.1", port=8001)
 
 # Hot reload trigger

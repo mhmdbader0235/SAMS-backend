@@ -646,7 +646,13 @@ def school(api: Api) -> School:
     """Provision a whole random school: tenant, onboarding, staff, classes, families."""
     rng = random.Random(SEED)
     tenant = f"qa_{RUN_ID}"
-    display = f"{rng.choice(SCHOOL_WORDS)} {rng.choice(SCHOOL_KINDS)}"
+    # Keycloak enforces a realm-wide UNIQUE organization name (independent of
+    # the tenant alias) -- SCHOOL_WORDS x SCHOOL_KINDS is only 32 combinations,
+    # nothing here cleans up organizations between runs, and this fixture ran
+    # on a long-lived realm, so a bare word-pair collides with a prior run's
+    # school and 500s on tenant creation with a confusing name-conflict error.
+    # RUN_ID is already unique per run (time + pid) -- reuse it here too.
+    display = f"{rng.choice(SCHOOL_WORDS)} {rng.choice(SCHOOL_KINDS)} {RUN_ID}"
     curriculum, grade_names = rng.choice(CURRICULA)
     n_grades, n_sections = rng.randint(2, 3), rng.randint(2, 3)
 
@@ -1540,10 +1546,10 @@ class TestDeepFlows:
             .expect(200)
             .json()
         )
-        assert summary["total_cost"] == pytest.approx(expected_total, rel=1e-6)
+        assert float(summary["total_cost"]) == pytest.approx(expected_total, rel=1e-6)
         for line in summary["resources"]:
-            assert line["total_cost"] == pytest.approx(
-                line["unit_price"] * line["quantity"], rel=1e-6
+            assert float(line["total_cost"]) == pytest.approx(
+                float(line["unit_price"]) * line["quantity"], rel=1e-6
             )
 
     def test_p06_manager_sees_a_trip_only_once_it_leaves_the_teacher_s_desk(
@@ -1770,7 +1776,7 @@ class TestDeepFlows:
 
         before = payment_status(school, pupil.parent, enrollment["id"])
         assert before["status"] == "pending"
-        assert before["amount"] == pytest.approx(float(enrollment["ticket_price"]), rel=1e-6)
+        assert float(before["amount"]) == pytest.approx(float(enrollment["ticket_price"]), rel=1e-6)
 
         school.api.post(
             f"/api/v1/events/enrollments/{enrollment['id']}/pay",
@@ -1958,7 +1964,7 @@ class TestFullProcesses:
         enrollment = request_seat(school, pupil, cm_id)
         decide_enrollment(school, pupil.parent, enrollment["id"], "approved_by_parent")
         invoice = payment_status(school, pupil.parent, enrollment["id"])
-        assert invoice["amount"] == pytest.approx(ticket, rel=1e-6)
+        assert float(invoice["amount"]) == pytest.approx(ticket, rel=1e-6)
         pay(school, pupil.parent, enrollment["id"])
         assert payment_status(school, pupil.parent, enrollment["id"])["status"] == "paid"
         final = decide_enrollment(school, teacher, enrollment["id"], "approved_by_teacher")
@@ -1993,7 +1999,7 @@ class TestFullProcesses:
             .expect(200)
             .json()
         )
-        assert summary["total_cost"] == pytest.approx(expected_cost, rel=1e-6)
+        assert float(summary["total_cost"]) == pytest.approx(expected_cost, rel=1e-6)
 
     def test_f02_a_rejected_trip_is_reworked_and_approved_on_the_second_pass(
         self, school: School, rng
@@ -2181,7 +2187,7 @@ class TestFullProcesses:
     def test_f09_a_brand_new_school_is_locked_until_it_finishes_day_one(self, school: School, rng):
         """The whole onboarding gate, on its own fresh tenant."""
         tenant = f"qa_{RUN_ID}_new"
-        display = f"{rng.choice(SCHOOL_WORDS)} {rng.choice(SCHOOL_KINDS)}"
+        display = f"{rng.choice(SCHOOL_WORDS)} {rng.choice(SCHOOL_KINDS)} {RUN_ID}_new"
         api = school.api
         api.post(
             "/api/v1/auth/tenants",

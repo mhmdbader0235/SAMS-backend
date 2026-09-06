@@ -48,7 +48,7 @@ def main():
 
     print(f"Step 3: Starting Backend Service with Python: {python_bin} (port 8001)...")
     p_backend = subprocess.Popen(
-        [python_bin, "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8001", "--reload"]
+        [python_bin, "-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8001", "--reload"]
     )
     processes.append(p_backend)
 

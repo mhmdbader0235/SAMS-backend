@@ -23,9 +23,7 @@ class SchoolRepository:
         row = await self.get_profile_row()
         if row:
             return row
-        row = await self.pool.fetchrow(
-            "INSERT INTO school_profile (currency) VALUES ('JOD') RETURNING *"
-        )
+        row = await self.pool.fetchrow("INSERT INTO school_profile DEFAULT VALUES RETURNING *")
         return dict(row)
 
     async def update_profile(self, fields: dict) -> dict:
@@ -47,6 +45,22 @@ class SchoolRepository:
             *values,
         )
         return dict(row)
+
+    async def has_recorded_money(self) -> bool:
+        """True once any real money has entered this tenant: a payment, a
+        priced resource, or a non-zero ticket price. Gates whether currency
+        can still be changed after activation -- once true, a currency
+        change would silently mismatch amounts already on record.
+        """
+        row = await self.pool.fetchrow(
+            """
+            SELECT
+                EXISTS(SELECT 1 FROM payments) AS has_payments,
+                EXISTS(SELECT 1 FROM resource_cost) AS has_resource_cost,
+                EXISTS(SELECT 1 FROM event_class_map WHERE ticket_price <> 0) AS has_ticket_price
+            """
+        )
+        return bool(row["has_payments"] or row["has_resource_cost"] or row["has_ticket_price"])
 
     async def stamp_profile_committed(self) -> None:
         await self.pool.execute(
@@ -101,7 +115,9 @@ class SchoolRepository:
         )
         if existing_id:
             if not fields:
-                row = await self.pool.fetchrow("SELECT * FROM school_campus WHERE id = $1", existing_id)
+                row = await self.pool.fetchrow(
+                    "SELECT * FROM school_campus WHERE id = $1", existing_id
+                )
                 return dict(row)
             columns = list(fields.keys())
             set_sql = ", ".join(f"{col} = ${i + 1}" for i, col in enumerate(columns))

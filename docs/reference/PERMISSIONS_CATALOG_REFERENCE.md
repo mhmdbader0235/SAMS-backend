@@ -30,11 +30,18 @@ High-level roles represent traditional job functions. Assigning a composite role
 
 ### Phase 1 — active
 
+> **Canonical source, as of 2026-09-06:** `back/app/core/permissions_catalog.json` is the single source of
+> truth for the exact, complete Phase 1 permission list per role. The table below is a hand-curated,
+> deliberately abbreviated *highlights* view for human reading (personas, a representative subset of
+> permissions) — it will never be a byte-for-byte match to the JSON and is not meant to be. If the two
+> disagree on what a role can fundamentally do (not just which subset is shown), the JSON wins; fix this
+> table's highlights, don't treat the JSON as the thing to change.
+
 | Composite Role | Target Persona | Key Granted Permissions |
 | :--- | :--- | :--- |
 | **`super_admin`** | Platform Admin | Unrestricted access across all tenant schemas (`*`). |
 | **`school_admin`** | Principal / School Admin | `school:*`, `user:*`, `event:*`, `enrollment:cancel`, `billing:audit`, `announcement:manage` |
-| **`manager`** | Operations Manager | `event:review`, `event:publish`, `event:view_draft`, `resource:price`, `billing:*`, `enrollment:view_roster` |
+| **`manager`** | Operations Manager | `event:review`, `event:publish`, `event:view_draft`, `resource:price`, `billing:*`, `enrollment:view_roster`, `level:create`, `level:manage`, `class:create`, `class:update`, `user:create` |
 | **`teacher`** | Class Teacher / Trip Head | `event:create`, `event:edit`, `event:delete`, `event:propose`, `event:clone`, `resource:create`, `enrollment:teacher_approve`, `enrollment:view_roster` |
 | **`parent`** | Parent / Guardian | `enrollment:parent_approve`, `enrollment:cancel`, `billing:pay`, `student:view_linked`, `health:manage_child` |
 | **`student`** | Enrolled Student | `enrollment:request`, `feedback:create`, `school:read` |

@@ -161,7 +161,9 @@ school_admin_permission := {
 
 # --- Manager Permissions Set ---
 manager_permission := {
-    "school:read", "level:read", "class:read", "teacher:read", "parent:read", "student:read",
+    "school:read", "level:read", "level:create", "level:manage", "class:read", "class:create",
+    "class:update", "class:edit", "class:assign_teacher", "user:create",
+    "teacher:read", "parent:read", "student:read",
     "user:view", "user:read", "user:profile_read", "user:profile_edit", "event:read", "event:view",
     "event:review", "event:publish", "event:view_draft", "event:audience_predict", "resource:view",
     "resource:read", "resource:price", "resource:set_cost", "resource_type:read", "billing:invoice",

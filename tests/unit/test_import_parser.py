@@ -23,10 +23,13 @@ class TestDetectFileKind:
 
     def test_falls_back_to_content_type_when_extension_is_ambiguous(self):
         assert detect_file_kind("upload", "text/csv") == "csv"
-        assert detect_file_kind(
-            "upload",
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        ) == "xlsx"
+        assert (
+            detect_file_kind(
+                "upload",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+            == "xlsx"
+        )
 
     def test_unsupported_type_raises(self):
         with pytest.raises(ValueError):

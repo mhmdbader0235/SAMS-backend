@@ -5,6 +5,7 @@ Does not import FastAPI or asyncpg directly. Enforces 3-tier layering and
 Control-Plane vs. Tenant DB boundaries.
 """
 
+import contextlib
 import os
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
@@ -696,14 +697,12 @@ class AuthService:
                         c_id,
                     )
                 elif new_role == "parent":
-                    try:
+                    with contextlib.suppress(Exception):
                         await conn_t.execute(
                             "INSERT INTO parenets (id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING",
                             user_id,
                             user_display_name,
                         )
-                    except Exception:
-                        pass
         except Exception as _e:
             print(f"[assign_user_role] Warning profile records sync: {_e}")
 

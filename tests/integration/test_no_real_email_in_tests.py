@@ -15,5 +15,7 @@ from tests.integration._helpers import register_school_admin
 
 
 async def test_register_school_admin_never_touches_real_smtp(test_client: AsyncClient, clean_db):
-    with patch("smtplib.SMTP_SSL", side_effect=AssertionError("smtplib.SMTP_SSL was called for real!")):
+    with patch(
+        "smtplib.SMTP_SSL", side_effect=AssertionError("smtplib.SMTP_SSL was called for real!")
+    ):
         await register_school_admin(test_client, "verify_guard@school.com")

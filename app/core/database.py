@@ -10,6 +10,7 @@ tenant configurations, and parent-student links.
 """
 
 import asyncio
+import contextlib
 import os
 
 import asyncpg
@@ -68,8 +69,12 @@ async def _initialize_control_plane_tables(pool: asyncpg.Pool) -> None:
             );
             """
         )
-        await conn.execute("ALTER TABLE parents ADD COLUMN IF NOT EXISTS phone VARCHAR(50) DEFAULT NULL;")
-        await conn.execute("ALTER TABLE parents ADD COLUMN IF NOT EXISTS address TEXT DEFAULT NULL;")
+        await conn.execute(
+            "ALTER TABLE parents ADD COLUMN IF NOT EXISTS phone VARCHAR(50) DEFAULT NULL;"
+        )
+        await conn.execute(
+            "ALTER TABLE parents ADD COLUMN IF NOT EXISTS address TEXT DEFAULT NULL;"
+        )
 
         # Super-admins table
         await conn.execute(
@@ -208,20 +213,21 @@ async def _initialize_control_plane_tables(pool: asyncpg.Pool) -> None:
                 )
 
         # Seed default super admin (sa@desk.com / password123)
-        sa_exists = await conn.fetchval("SELECT id FROM super_admins WHERE email = $1", "sa@desk.com")
+        sa_exists = await conn.fetchval(
+            "SELECT id FROM super_admins WHERE email = $1", "sa@desk.com"
+        )
         if not sa_exists:
-            from app.domains.auth.service import AuthService
             from app.core.keycloak_admin import sync_user_to_keycloak
+            from app.domains.auth.service import AuthService
+
             pass_hash = AuthService.hash_password("password123")
             await conn.execute(
                 "INSERT INTO super_admins (email, password_hash) VALUES ($1, $2)",
                 "sa@desk.com",
                 pass_hash,
             )
-            try:
+            with contextlib.suppress(Exception):
                 sync_user_to_keycloak("sa@desk.com", "password123", "super_admin", "tenant_a")
-            except Exception:
-                pass
 
 
 # =============================================================================
@@ -260,11 +266,19 @@ async def _initialize_tenant_tables(pool: asyncpg.Pool, tenant_id: str) -> None:
             """
         )
         await conn.execute("ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;")
-        await conn.execute("ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('school_admin', 'teacher', 'parent', 'student', 'manager', 'finance', 'event_teacher', 'pending', 'super_admin'));")
+        await conn.execute(
+            "ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('school_admin', 'teacher', 'parent', 'student', 'manager', 'finance', 'event_teacher', 'pending', 'super_admin'));"
+        )
         await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS roles TEXT[] DEFAULT '{}';")
-        await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions TEXT[] DEFAULT '{}';")
-
-
+        await conn.execute(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions TEXT[] DEFAULT '{}';"
+        )
+        await conn.execute(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_language TEXT DEFAULT NULL;"
+        )
+        await conn.execute(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS preferred_timezone TEXT DEFAULT NULL;"
+        )
 
         # 2. levels
         await conn.execute(
@@ -329,7 +343,9 @@ async def _initialize_tenant_tables(pool: asyncpg.Pool, tenant_id: str) -> None:
             );
             """
         )
-        await conn.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50) DEFAULT NULL;")
+        await conn.execute(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS phone VARCHAR(50) DEFAULT NULL;"
+        )
         await conn.execute("ALTER TABLE parenets ADD COLUMN IF NOT EXISTS phone TEXT DEFAULT NULL;")
 
         # 5. class
@@ -533,8 +549,9 @@ async def _initialize_tenant_tables(pool: asyncpg.Pool, tenant_id: str) -> None:
             END $$;
             """
         )
-        await conn.execute("ALTER TYPE event_status ADD VALUE IF NOT EXISTS 'approved' AFTER 'proposed';")
-
+        await conn.execute(
+            "ALTER TYPE event_status ADD VALUE IF NOT EXISTS 'approved' AFTER 'proposed';"
+        )
 
         await conn.execute(
             """
@@ -790,12 +807,12 @@ async def _initialize_tenant_tables(pool: asyncpg.Pool, tenant_id: str) -> None:
         # named row alongside each existing one instead of leaving an
         # already-populated category alone.
         _DEFAULT_RESOURCE_TYPES = [
-            ('20-Seat Bus', 'transport'),
-            ('40-Seat Bus', 'transport'),
-            ('Male Supervisor', 'staffing'),
-            ('Female Supervisor', 'staffing'),
-            ('Kids Meal', 'meals'),
-            ('Adult Meal', 'meals'),
+            ("20-Seat Bus", "transport"),
+            ("40-Seat Bus", "transport"),
+            ("Male Supervisor", "staffing"),
+            ("Female Supervisor", "staffing"),
+            ("Kids Meal", "meals"),
+            ("Adult Meal", "meals"),
         ]
         for _category in {c for _, c in _DEFAULT_RESOURCE_TYPES}:
             _category_has_rows = await conn.fetchval(
@@ -841,6 +858,58 @@ async def _initialize_tenant_tables(pool: asyncpg.Pool, tenant_id: str) -> None:
             """
         )
 
+        # 22. audit_log -- immutable, tenant-scoped audit trail (ADR 0006).
+        # No PII: actor_email_hmac not the raw email, changed_fields stores
+        # field NAMES only. See alembic/versions/tenant_0005_audit_log.py for
+        # the full rationale.
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS audit_log (
+                id BIGSERIAL PRIMARY KEY,
+                occurred_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                correlation_id UUID NULL,
+                actor_user_id BIGINT NULL REFERENCES users(id) ON DELETE SET NULL,
+                actor_email_hmac TEXT NULL,
+                actor_role TEXT NOT NULL,
+                action TEXT NOT NULL,
+                entity_type TEXT NOT NULL,
+                entity_id TEXT NULL,
+                outcome TEXT NOT NULL CHECK (outcome IN ('allow','deny','error')),
+                changed_fields TEXT[] NULL,
+                metadata JSONB NOT NULL DEFAULT '{}',
+                retention_until DATE NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_audit_occurred ON audit_log (occurred_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_audit_entity
+                ON audit_log (entity_type, entity_id, occurred_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_audit_actor ON audit_log (actor_user_id, occurred_at DESC);
+            """
+        )
+
+        # 23. Money precision -- widen every money column from scale 2 to
+        # scale 4. Scale 2 cannot represent JOD/KWD/BHD's 3-decimal minor
+        # unit; scale 4 covers every currency in ISO_4217_MINOR_UNITS,
+        # including CLF's 4. ALTER COLUMN TYPE is safe to re-run (a no-op
+        # once already widened). payments.currency is backfilled from the
+        # school's own currency, not a literal, before being made NOT NULL.
+        await conn.execute(
+            "ALTER TABLE event_class_map ALTER COLUMN ticket_price TYPE NUMERIC(14, 4);"
+        )
+        await conn.execute("ALTER TABLE event ALTER COLUMN school_subsidy TYPE NUMERIC(14, 4);")
+        await conn.execute("ALTER TABLE event ALTER COLUMN total_cost TYPE NUMERIC(14, 4);")
+        await conn.execute("ALTER TABLE resource_cost ALTER COLUMN unit_price TYPE NUMERIC(14, 4);")
+        await conn.execute("ALTER TABLE resource_cost ALTER COLUMN total_cost TYPE NUMERIC(14, 4);")
+        await conn.execute("ALTER TABLE payments ALTER COLUMN amount TYPE NUMERIC(14, 4);")
+        await conn.execute("ALTER TABLE payments ADD COLUMN IF NOT EXISTS currency VARCHAR(3);")
+        await conn.execute(
+            """
+            UPDATE payments SET currency = COALESCE(
+                (SELECT currency FROM school_profile ORDER BY id ASC LIMIT 1), 'USD'
+            )
+            WHERE currency IS NULL;
+            """
+        )
+        await conn.execute("ALTER TABLE payments ALTER COLUMN currency SET NOT NULL;")
 
 
 # =============================================================================
@@ -858,9 +927,7 @@ async def _ensure_database_exists(config: dict) -> None:
             database="postgres",
         )
         try:
-            exists = await conn.fetchval(
-                "SELECT 1 FROM pg_database WHERE datname = $1", db_name
-            )
+            exists = await conn.fetchval("SELECT 1 FROM pg_database WHERE datname = $1", db_name)
             if not exists:
                 await conn.execute(f'CREATE DATABASE "{db_name}"')
         finally:
@@ -941,7 +1008,15 @@ CONTROL_PLANE_DB_CONFIG: dict = {
 # Single-Tenant/Control-Plane Database Wrapper
 # =============================================================================
 class Database:
-    def __init__(self, host: str, port: int, user: str, password: str, database: str, schema_name: str | None = None) -> None:
+    def __init__(
+        self,
+        host: str,
+        port: int,
+        user: str,
+        password: str,
+        database: str,
+        schema_name: str | None = None,
+    ) -> None:
         self._host = host
         self._port = port
         self._user = user
@@ -954,7 +1029,7 @@ class Database:
         if self.pool is None:
             server_settings = {}
             if self._schema_name:
-                server_settings['search_path'] = f'"{self._schema_name}", public'
+                server_settings["search_path"] = f'"{self._schema_name}", public'
 
             self.pool = await asyncpg.create_pool(
                 host=self._host,
@@ -1021,7 +1096,7 @@ class DatabaseManager:
                 # db_password ARE used — reserved/live, see TENANT_DB_CONFIG above.
                 row = await cp_pool.fetchrow(
                     "SELECT db_host, db_port, db_user, db_password, db_name FROM tenants WHERE tenant_id = $1",
-                    tenant_id
+                    tenant_id,
                 )
                 if row:
                     config = {
@@ -1058,7 +1133,6 @@ class DatabaseManager:
                             config["database"],
                         )
 
-
                 # Force database name to use control plane database. This is what
                 # makes tenants.db_host/db_port/db_name dead (see the comments on
                 # that table and on the SELECT above) — every tenant lives in this
@@ -1079,8 +1153,7 @@ class DatabaseManager:
                 await _initialize_tenant_tables(pool, tenant_id)
 
             return await self._databases[tenant_id].connect(
-                init_tenant_tables,
-                setup_conn_fn=setup_conn_fn
+                init_tenant_tables, setup_conn_fn=setup_conn_fn
             )
 
     async def disconnect_all(self) -> None:

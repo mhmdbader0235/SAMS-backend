@@ -94,9 +94,11 @@ class TestTenantOverrideSecurity:
         }
         fake_pool = FakePool(user_row=own_tenant_user_row)
 
-        with patch.object(AuthService, "decode_access_token", return_value=payload), \
-             patch.object(db_module, "get_db_pool", AsyncMock(return_value=fake_pool)), \
-             patch.object(db_module, "get_control_plane_pool", AsyncMock(return_value=fake_pool)):
+        with (
+            patch.object(AuthService, "decode_access_token", return_value=payload),
+            patch.object(db_module, "get_db_pool", AsyncMock(return_value=fake_pool)),
+            patch.object(db_module, "get_control_plane_pool", AsyncMock(return_value=fake_pool)),
+        ):
             request = FakeRequest(headers={"x-tenant-id": "tenant_b"})
             user = await get_current_user(request=request, credentials=_credentials())
 
@@ -120,9 +122,11 @@ class TestTenantOverrideSecurity:
         }
         fake_pool = FakePool(user_row=own_tenant_user_row)
 
-        with patch.object(AuthService, "decode_access_token", return_value=payload), \
-             patch.object(db_module, "get_db_pool", AsyncMock(return_value=fake_pool)), \
-             patch.object(db_module, "get_control_plane_pool", AsyncMock(return_value=fake_pool)):
+        with (
+            patch.object(AuthService, "decode_access_token", return_value=payload),
+            patch.object(db_module, "get_db_pool", AsyncMock(return_value=fake_pool)),
+            patch.object(db_module, "get_control_plane_pool", AsyncMock(return_value=fake_pool)),
+        ):
             request = FakeRequest(query_params={"tenant_id": "tenant_b"})
             user = await get_current_user(request=request, credentials=_credentials())
 
@@ -140,9 +144,11 @@ class TestTenantOverrideSecurity:
         # comment in get_current_user) — fetchrow returning None exercises that path.
         fake_pool = FakePool(user_row=None)
 
-        with patch.object(AuthService, "decode_access_token", return_value=payload), \
-             patch.object(db_module, "get_db_pool", AsyncMock(return_value=fake_pool)), \
-             patch.object(db_module, "get_control_plane_pool", AsyncMock(return_value=fake_pool)):
+        with (
+            patch.object(AuthService, "decode_access_token", return_value=payload),
+            patch.object(db_module, "get_db_pool", AsyncMock(return_value=fake_pool)),
+            patch.object(db_module, "get_control_plane_pool", AsyncMock(return_value=fake_pool)),
+        ):
             request = FakeRequest(headers={"x-tenant-id": "tenant_c"})
             user = await get_current_user(request=request, credentials=_credentials())
 
@@ -158,9 +164,11 @@ class TestTenantOverrideSecurity:
         }
         fake_pool = FakePool(user_row=None)
 
-        with patch.object(AuthService, "decode_access_token", return_value=payload), \
-             patch.object(db_module, "get_db_pool", AsyncMock(return_value=fake_pool)), \
-             patch.object(db_module, "get_control_plane_pool", AsyncMock(return_value=fake_pool)):
+        with (
+            patch.object(AuthService, "decode_access_token", return_value=payload),
+            patch.object(db_module, "get_db_pool", AsyncMock(return_value=fake_pool)),
+            patch.object(db_module, "get_control_plane_pool", AsyncMock(return_value=fake_pool)),
+        ):
             request = FakeRequest(query_params={"tenant_id": "tenant_c"})
             user = await get_current_user(request=request, credentials=_credentials())
 

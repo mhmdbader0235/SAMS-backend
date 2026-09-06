@@ -202,8 +202,7 @@ class TestStructureImportCommit:
         headers = {"Authorization": f"Bearer {token}"}
 
         content = (
-            "grade_name,class_name,head_teacher_email\n"
-            "Grade 7,Grade 7 - A,nobody@nowhere.com\n"
+            "grade_name,class_name,head_teacher_email\n" "Grade 7,Grade 7 - A,nobody@nowhere.com\n"
         )
         resp = await test_client.post(
             "/api/v1/students/structure/import/commit", files=_csv_file(content), headers=headers

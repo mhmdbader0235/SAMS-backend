@@ -13,7 +13,9 @@ from app.core.dependencies import CurrentUser, get_current_user, require_tenant_
 from app.domains.invitations.service import InvitationService
 from app.schemas.invitation import InvitationCreateRequest, InvitationResponse
 
-router = APIRouter(prefix="/api/v1/invitations", tags=["invitations"], dependencies=[Depends(require_tenant_live)])
+router = APIRouter(
+    prefix="/api/v1/invitations", tags=["invitations"], dependencies=[Depends(require_tenant_live)]
+)
 
 
 @router.post(
@@ -28,7 +30,11 @@ async def create_invitation(
 ) -> InvitationResponse:
     """Pre-provision a user in Keycloak and create an invitation audit record."""
     # RBAC Guard: Require school_admin, super_admin, or user:invite clearance
-    if not (current_user.has_role("school_admin") or current_user.has_role("super_admin") or current_user.has_role("user:invite")):
+    if not (
+        current_user.has_role("school_admin")
+        or current_user.has_role("super_admin")
+        or current_user.has_role("user:invite")
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only school_admin, super_admin, or users with user:invite permission can send invitations",
@@ -45,7 +51,10 @@ async def create_invitation(
         )
 
     if not is_super and current_user.tenant_id:
-        if payload.tenant_id and payload.tenant_id.strip().lower() != current_user.tenant_id.strip().lower():
+        if (
+            payload.tenant_id
+            and payload.tenant_id.strip().lower() != current_user.tenant_id.strip().lower()
+        ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Admins of tenant '{current_user.tenant_id}' cannot send invitations for tenant '{payload.tenant_id}'",

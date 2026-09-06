@@ -9,6 +9,7 @@ and Keycloak OIDC SSO.
 import json
 import logging
 import os
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -21,29 +22,37 @@ KEYCLOAK_ADMIN_PASSWORD = os.getenv("KEYCLOAK_ADMIN_PASSWORD", "admin")
 KEYCLOAK_REALM = os.getenv("KEYCLOAK_REALM", "SAMS")
 
 
-def sync_user_to_keycloak(email: str, password: str, role: str, tenant_id: str | None = None, first_name: str | None = None, last_name: str | None = None) -> bool:
+def sync_user_to_keycloak(
+    email: str,
+    password: str,
+    role: str,
+    tenant_id: str | None = None,
+    first_name: str | None = None,
+    last_name: str | None = None,
+) -> bool:
     """Sync a user account to Keycloak realm via Admin REST API."""
     try:
         # 1. Obtain Keycloak Admin Access Token
         token_url = f"{KEYCLOAK_URL}/realms/master/protocol/openid-connect/token"
-        data = urllib.parse.urlencode({
-            "client_id": "admin-cli",
-            "username": KEYCLOAK_ADMIN,
-            "password": KEYCLOAK_ADMIN_PASSWORD,
-            "grant_type": "password"
-        }).encode()
+        data = urllib.parse.urlencode(
+            {
+                "client_id": "admin-cli",
+                "username": KEYCLOAK_ADMIN,
+                "password": KEYCLOAK_ADMIN_PASSWORD,
+                "grant_type": "password",
+            }
+        ).encode()
         req = urllib.request.Request(token_url, data=data, method="POST")
         with urllib.request.urlopen(req, timeout=5) as resp:
             token_res = json.loads(resp.read().decode())
             admin_token = token_res["access_token"]
 
-        headers = {
-            "Authorization": f"Bearer {admin_token}",
-            "Content-Type": "application/json"
-        }
+        headers = {"Authorization": f"Bearer {admin_token}", "Content-Type": "application/json"}
 
         # 2. Search for user by email in Keycloak
-        search_url = f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/users?email={urllib.parse.quote(email)}"
+        search_url = (
+            f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/users?email={urllib.parse.quote(email)}"
+        )
         req = urllib.request.Request(search_url, headers=headers, method="GET")
         kc_user_id = None
         try:
@@ -64,15 +73,14 @@ def sync_user_to_keycloak(email: str, password: str, role: str, tenant_id: str |
                 "lastName": last_name or "",
                 "enabled": True,
                 "emailVerified": True,
-                "attributes": {
-                    "tenant_id": [tenant_id],
-                    "role": [role]
-                },
-                "credentials": [{
-                    "type": "password",
-                    "value": password,
-                    "temporary": False,
-                }]
+                "attributes": {"tenant_id": [tenant_id], "role": [role]},
+                "credentials": [
+                    {
+                        "type": "password",
+                        "value": password,
+                        "temporary": False,
+                    }
+                ],
             }
             req = urllib.request.Request(
                 create_url,
@@ -93,16 +101,13 @@ def sync_user_to_keycloak(email: str, password: str, role: str, tenant_id: str |
                     "email": email,
                     "firstName": first_name or "",
                     "lastName": last_name or "",
-                    "attributes": {
-                        "tenant_id": [tenant_id],
-                        "role": [role]
-                    }
+                    "attributes": {"tenant_id": [tenant_id], "role": [role]},
                 }
                 req_up = urllib.request.Request(
                     update_url,
                     data=json.dumps(update_payload).encode(),
                     headers=headers,
-                    method="PUT"
+                    method="PUT",
                 )
                 with urllib.request.urlopen(req_up, timeout=3):
                     pass
@@ -131,24 +136,25 @@ def update_user_role_in_keycloak(email: str, new_role: str, tenant_id: str) -> b
     try:
         # 1. Obtain Keycloak Admin Access Token
         token_url = f"{KEYCLOAK_URL}/realms/master/protocol/openid-connect/token"
-        data = urllib.parse.urlencode({
-            "client_id": "admin-cli",
-            "username": KEYCLOAK_ADMIN,
-            "password": KEYCLOAK_ADMIN_PASSWORD,
-            "grant_type": "password"
-        }).encode()
+        data = urllib.parse.urlencode(
+            {
+                "client_id": "admin-cli",
+                "username": KEYCLOAK_ADMIN,
+                "password": KEYCLOAK_ADMIN_PASSWORD,
+                "grant_type": "password",
+            }
+        ).encode()
         req = urllib.request.Request(token_url, data=data, method="POST")
         with urllib.request.urlopen(req, timeout=5) as resp:
             token_res = json.loads(resp.read().decode())
             admin_token = token_res["access_token"]
 
-        headers = {
-            "Authorization": f"Bearer {admin_token}",
-            "Content-Type": "application/json"
-        }
+        headers = {"Authorization": f"Bearer {admin_token}", "Content-Type": "application/json"}
 
         # 2. Search for user by email in Keycloak
-        search_url = f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/users?email={urllib.parse.quote(email)}"
+        search_url = (
+            f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/users?email={urllib.parse.quote(email)}"
+        )
         req = urllib.request.Request(search_url, headers=headers, method="GET")
         kc_user_id = None
         with urllib.request.urlopen(req, timeout=3) as resp:
@@ -167,16 +173,10 @@ def update_user_role_in_keycloak(email: str, new_role: str, tenant_id: str) -> b
             "email": email,
             "firstName": user_obj.get("firstName", ""),
             "lastName": user_obj.get("lastName", ""),
-            "attributes": {
-                "tenant_id": [tenant_id],
-                "role": [new_role]
-            }
+            "attributes": {"tenant_id": [tenant_id], "role": [new_role]},
         }
         req_up = urllib.request.Request(
-            update_url,
-            data=json.dumps(update_payload).encode(),
-            headers=headers,
-            method="PUT"
+            update_url, data=json.dumps(update_payload).encode(), headers=headers, method="PUT"
         )
         with urllib.request.urlopen(req_up, timeout=3):
             pass
@@ -207,21 +207,20 @@ def delete_user_from_keycloak(email: str) -> bool:
     """
     try:
         token_url = f"{KEYCLOAK_URL}/realms/master/protocol/openid-connect/token"
-        data = urllib.parse.urlencode({
-            "client_id": "admin-cli",
-            "username": KEYCLOAK_ADMIN,
-            "password": KEYCLOAK_ADMIN_PASSWORD,
-            "grant_type": "password"
-        }).encode()
+        data = urllib.parse.urlencode(
+            {
+                "client_id": "admin-cli",
+                "username": KEYCLOAK_ADMIN,
+                "password": KEYCLOAK_ADMIN_PASSWORD,
+                "grant_type": "password",
+            }
+        ).encode()
         req = urllib.request.Request(token_url, data=data, method="POST")
         with urllib.request.urlopen(req, timeout=5) as resp:
             token_res = json.loads(resp.read().decode())
             admin_token = token_res["access_token"]
 
-        headers = {
-            "Authorization": f"Bearer {admin_token}",
-            "Content-Type": "application/json"
-        }
+        headers = {"Authorization": f"Bearer {admin_token}", "Content-Type": "application/json"}
 
         search_url = (
             f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/users"
@@ -231,9 +230,11 @@ def delete_user_from_keycloak(email: str) -> bool:
         with urllib.request.urlopen(req, timeout=3) as resp:
             users = json.loads(resp.read().decode())
 
-        kc_user_ids = [
-            u["id"] for u in users if isinstance(u, dict) and u.get("id")
-        ] if isinstance(users, list) else []
+        kc_user_ids = (
+            [u["id"] for u in users if isinstance(u, dict) and u.get("id")]
+            if isinstance(users, list)
+            else []
+        )
 
         if not kc_user_ids:
             logger.warning(f"Keycloak user deletion: no matching user found for {email}")
@@ -262,24 +263,26 @@ def ensure_keycloak_frontend_redirect_uris():
     """Ensure Keycloak 'frontend' client has all valid redirect URIs for ports 3000, 9080, 8000."""
     try:
         token_url = f"{KEYCLOAK_URL}/realms/master/protocol/openid-connect/token"
-        data = urllib.parse.urlencode({
-            "client_id": "admin-cli",
-            "username": KEYCLOAK_ADMIN,
-            "password": KEYCLOAK_ADMIN_PASSWORD,
-            "grant_type": "password"
-        }).encode()
+        data = urllib.parse.urlencode(
+            {
+                "client_id": "admin-cli",
+                "username": KEYCLOAK_ADMIN,
+                "password": KEYCLOAK_ADMIN_PASSWORD,
+                "grant_type": "password",
+            }
+        ).encode()
         req = urllib.request.Request(token_url, data=data, method="POST")
         with urllib.request.urlopen(req, timeout=5) as resp:
             token_res = json.loads(resp.read().decode())
             admin_token = token_res["access_token"]
 
-        headers = {
-            "Authorization": f"Bearer {admin_token}",
-            "Content-Type": "application/json"
-        }
+        headers = {"Authorization": f"Bearer {admin_token}", "Content-Type": "application/json"}
 
         # Search for frontend client
-        req_c = urllib.request.Request(f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/clients?clientId=frontend", headers=headers)
+        req_c = urllib.request.Request(
+            f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/clients?clientId=frontend",
+            headers=headers,
+        )
         with urllib.request.urlopen(req_c, timeout=3) as resp_c:
             clients = json.loads(resp_c.read().decode())
             if clients and isinstance(clients, list) and len(clients) > 0:
@@ -325,7 +328,7 @@ def ensure_keycloak_frontend_redirect_uris():
                     "http://127.0.0.1:*/*",
                     "http://127.0.0.1:*?*",
                     "http://127.0.0.1:*/*?*",
-                    "*"
+                    "*",
                 ]
                 updated_uris = list(set(current_uris + needed_uris))
                 if set(updated_uris) != set(current_uris):
@@ -334,10 +337,12 @@ def ensure_keycloak_frontend_redirect_uris():
                         f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/clients/{c_id}",
                         data=json.dumps(client).encode(),
                         headers=headers,
-                        method="PUT"
+                        method="PUT",
                     )
                     with urllib.request.urlopen(req_up, timeout=3):
-                        logger.info("Successfully updated Keycloak frontend client valid redirect URIs.")
+                        logger.info(
+                            "Successfully updated Keycloak frontend client valid redirect URIs."
+                        )
     except Exception as exc:
         logger.warning(f"Could not update Keycloak frontend client redirect URIs: {exc}")
 
@@ -485,19 +490,47 @@ def create_keycloak_organization(
         with urllib.request.urlopen(req, timeout=5):
             pass
     except urllib.error.HTTPError as exc:
-        # 409 means someone (another worker, a retry) created it in between the
-        # lookup above and this POST -- that is success, not failure.
         if exc.code != 409:
             detail = exc.read().decode()[:300]
             raise KeycloakOrganizationError(
                 f"Keycloak refused to create organization '{tid}': HTTP {exc.code} {detail}"
             ) from exc
+        # A 409 here has two different causes that must not be conflated:
+        #  (a) our own alias was created by a concurrent request between the
+        #      lookup above and this POST -- genuinely idempotent, the
+        #      immediate re-check below will find it by alias; or
+        #  (b) Keycloak enforces a realm-wide UNIQUE organization `name`
+        #      (independent of alias) -- a DIFFERENT tenant already owns
+        #      this display name. Re-running onboarding with a repeated
+        #      school name (a small word list, or a demo re-run) hits this
+        #      routinely. Treating every 409 as idempotent success used to
+        #      silently swallow case (b), which then failed the alias
+        #      readback below for a tenant that was never actually created
+        #      -- surfacing as a confusing "not readable back" error instead
+        #      of the real "that name is taken" one.
+        by_alias = find_organization_by_alias(tid, headers)
+        if by_alias:
+            return by_alias
+        detail = exc.read().decode()[:300]
+        raise KeycloakOrganizationError(
+            f"Cannot create organization '{tid}': the name '{payload['name']}' is "
+            f"already used by a different tenant in Keycloak. Detail: {detail}"
+        ) from exc
     except Exception as exc:
         raise KeycloakOrganizationError(
             f"Could not create Keycloak organization '{tid}': {exc}"
         ) from exc
 
-    created = find_organization_by_alias(tid, headers)
+    # A brief allowance for the list endpoint to catch up with the write we
+    # just made -- this runs once per tenant (school onboarding), so it's
+    # cheap to wait a moment rather than fail a real, successful creation.
+    created = None
+    for attempt in range(3):
+        created = find_organization_by_alias(tid, headers)
+        if created:
+            break
+        if attempt < 2:
+            time.sleep(0.5)
     if not created:
         raise KeycloakOrganizationError(
             f"Organization '{tid}' was not readable back after creation"
@@ -532,9 +565,7 @@ def add_user_to_organization(email: str, tenant_id: str) -> bool:
 
         org = find_organization_by_alias(tenant_id, headers)
         if not org:
-            logger.warning(
-                f"No Keycloak organization aliased '{tenant_id}'; cannot add {email}."
-            )
+            logger.warning(f"No Keycloak organization aliased '{tenant_id}'; cannot add {email}.")
             return False
 
         lookup = urllib.request.Request(
@@ -566,9 +597,7 @@ def add_user_to_organization(email: str, tenant_id: str) -> bool:
                 return True
             raise
     except Exception as exc:
-        logger.warning(
-            f"Could not add '{email}' to Keycloak organization '{tenant_id}': {exc}"
-        )
+        logger.warning(f"Could not add '{email}' to Keycloak organization '{tenant_id}': {exc}")
     return False
 
 
@@ -590,10 +619,7 @@ def ensure_keycloak_organizations(tenant_ids) -> dict:
             "Authorization": f"Bearer {_admin_token()}",
             "Content-Type": "application/json",
         }
-        present = {
-            str(o.get("alias") or "").strip().lower()
-            for o in _list_organizations(headers)
-        }
+        present = {str(o.get("alias") or "").strip().lower() for o in _list_organizations(headers)}
     except Exception as exc:
         logger.warning(f"Could not reconcile Keycloak organizations: {exc}")
         summary["failed"] = {t: str(exc) for t in ids}
@@ -617,4 +643,3 @@ def ensure_keycloak_organizations(tenant_ids) -> dict:
             f"{len(summary['failed'])} failed."
         )
     return summary
-

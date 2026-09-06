@@ -32,7 +32,9 @@ async def _reset_tenant_to_setup_state(db_pool: asyncpg.Pool) -> None:
     )
 
 
-async def _register(test_client: AsyncClient, email: str, role: str, invite_code: str = "regester123") -> dict:
+async def _register(
+    test_client: AsyncClient, email: str, role: str, invite_code: str = "regester123"
+) -> dict:
     # school_admin can no longer self-register with a generic passphrase — it
     # requires a real, targeted invitation (see AuthService.register_user).
     if role == "school_admin":
@@ -69,20 +71,30 @@ VALID_STRUCTURE_PAYLOAD = {
             "sections": [{"name": "Year 1 - A", "capacity": 25}],
         }
     ],
-    "calendar": {"academic_year": "2026-2027", "start_month": 9, "weekend_days": ["Saturday", "Sunday"]},
+    "calendar": {
+        "academic_year": "2026-2027",
+        "start_month": 9,
+        "weekend_days": ["Saturday", "Sunday"],
+    },
     "blackout_dates": [],
 }
 
 CALENDAR_ONLY_STRUCTURE_PAYLOAD = {
     "system": "UK",
     "levels": [],
-    "calendar": {"academic_year": "2026-2027", "start_month": 9, "weekend_days": ["Saturday", "Sunday"]},
+    "calendar": {
+        "academic_year": "2026-2027",
+        "start_month": 9,
+        "weekend_days": ["Saturday", "Sunday"],
+    },
     "blackout_dates": [],
 }
 
 
 class TestSetupState:
-    async def test_setup_state_reports_setup_for_fresh_tenant(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
+    async def test_setup_state_reports_setup_for_fresh_tenant(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
         await _reset_tenant_to_setup_state(db_pool)
         headers = await _register(test_client, "admin_fresh@school.com", "school_admin")
 
@@ -94,11 +106,15 @@ class TestSetupState:
         assert body["steps"]["structure_committed"] is False
         assert len(body["blocking"]) == 4
 
-    async def test_profile_update_requires_admin_role(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
+    async def test_profile_update_requires_admin_role(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
         from app.core.config import TEACHER_INVITE_CODE
 
         await _reset_tenant_to_setup_state(db_pool)
-        headers = await _register(test_client, "teacher_noadmin@school.com", "teacher", TEACHER_INVITE_CODE)
+        headers = await _register(
+            test_client, "teacher_noadmin@school.com", "teacher", TEACHER_INVITE_CODE
+        )
 
         resp = await test_client.put(
             "/api/v1/school/profile",
@@ -109,11 +125,15 @@ class TestSetupState:
 
 
 class TestHasStructureSemantics:
-    async def test_has_structure_false_when_only_calendar_saved(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
+    async def test_has_structure_false_when_only_calendar_saved(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
         headers = await _register(test_client, "admin_calendar@school.com", "school_admin")
 
         setup_resp = await test_client.post(
-            "/api/v1/students/structure/setup", json=CALENDAR_ONLY_STRUCTURE_PAYLOAD, headers=headers
+            "/api/v1/students/structure/setup",
+            json=CALENDAR_ONLY_STRUCTURE_PAYLOAD,
+            headers=headers,
         )
         assert setup_resp.status_code == 200
 
@@ -121,7 +141,9 @@ class TestHasStructureSemantics:
         assert structure_resp.status_code == 200
         assert structure_resp.json()["has_structure"] is False
 
-    async def test_has_structure_true_with_levels_and_sections(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
+    async def test_has_structure_true_with_levels_and_sections(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
         headers = await _register(test_client, "admin_structure@school.com", "school_admin")
 
         setup_resp = await test_client.post(
@@ -145,7 +167,9 @@ class TestOnboardingFlowAndCurriculumLock:
         assert early_activate.status_code == 400
 
         # Stage 1: commit-profile fails until identity + campus + emergency contact exist.
-        early_commit = await test_client.post("/api/v1/school/setup/commit-profile", headers=headers)
+        early_commit = await test_client.post(
+            "/api/v1/school/setup/commit-profile", headers=headers
+        )
         assert early_commit.status_code == 400
 
         profile_resp = await test_client.put(
@@ -162,17 +186,26 @@ class TestOnboardingFlowAndCurriculumLock:
         )
         assert profile_resp.status_code == 200
 
-        still_missing_campus = await test_client.post("/api/v1/school/setup/commit-profile", headers=headers)
+        still_missing_campus = await test_client.post(
+            "/api/v1/school/setup/commit-profile", headers=headers
+        )
         assert still_missing_campus.status_code == 400
 
         campus_resp = await test_client.post(
             "/api/v1/school/campuses",
-            json={"name": "Main Campus", "address_line1": "Street 1", "city": "Amman", "country": "Jordan"},
+            json={
+                "name": "Main Campus",
+                "address_line1": "Street 1",
+                "city": "Amman",
+                "country": "Jordan",
+            },
             headers=headers,
         )
         assert campus_resp.status_code == 200
 
-        still_missing_contact = await test_client.post("/api/v1/school/setup/commit-profile", headers=headers)
+        still_missing_contact = await test_client.post(
+            "/api/v1/school/setup/commit-profile", headers=headers
+        )
         assert still_missing_contact.status_code == 400
 
         contact_resp = await test_client.post(
@@ -194,7 +227,9 @@ class TestOnboardingFlowAndCurriculumLock:
         assert commit_resp.json()["profile_committed_at"] is not None
 
         # Activation still blocked — Stage 2 (structure) not done yet.
-        activate_before_structure = await test_client.post("/api/v1/school/setup/activate", headers=headers)
+        activate_before_structure = await test_client.post(
+            "/api/v1/school/setup/activate", headers=headers
+        )
         assert activate_before_structure.status_code == 400
 
         # Stage 2: Curriculum Wizard.
@@ -215,7 +250,9 @@ class TestOnboardingFlowAndCurriculumLock:
 
         # Curriculum system is now locked: changing it must be rejected...
         locked_payload = dict(VALID_STRUCTURE_PAYLOAD, system="International")
-        locked_resp = await test_client.post("/api/v1/students/structure/setup", json=locked_payload, headers=headers)
+        locked_resp = await test_client.post(
+            "/api/v1/students/structure/setup", json=locked_payload, headers=headers
+        )
         assert locked_resp.status_code == 403
 
         # ...but editing grades/sections under the SAME system must still work.
@@ -235,10 +272,16 @@ class TestOnboardingFlowAndCurriculumLock:
                     ],
                 }
             ],
-            "calendar": {"academic_year": "2026-2027", "start_month": 9, "weekend_days": ["Saturday", "Sunday"]},
+            "calendar": {
+                "academic_year": "2026-2027",
+                "start_month": 9,
+                "weekend_days": ["Saturday", "Sunday"],
+            },
             "blackout_dates": [],
         }
-        edited_resp = await test_client.post("/api/v1/students/structure/setup", json=edited_payload, headers=headers)
+        edited_resp = await test_client.post(
+            "/api/v1/students/structure/setup", json=edited_payload, headers=headers
+        )
         assert edited_resp.status_code == 200
 
         final_structure = await test_client.get("/api/v1/students/structure", headers=headers)
@@ -285,7 +328,9 @@ class TestLegacyGrandfathering:
         classes_resp = await test_client.get("/api/v1/students/classes", headers=headers)
         assert classes_resp.status_code == 200
 
-        row = await db_pool.fetchval("SELECT activated_at FROM school_profile ORDER BY id ASC LIMIT 1")
+        row = await db_pool.fetchval(
+            "SELECT activated_at FROM school_profile ORDER BY id ASC LIMIT 1"
+        )
         assert row is not None
 
 
@@ -299,16 +344,30 @@ class TestRequireTenantLiveGate:
         # The school-setup and academic-structure endpoints stay reachable
         # while the tenant is still in "setup" status.
         assert (await test_client.get("/api/v1/school/profile", headers=headers)).status_code == 200
-        assert (await test_client.get("/api/v1/students/structure", headers=headers)).status_code == 200
+        assert (
+            await test_client.get("/api/v1/students/structure", headers=headers)
+        ).status_code == 200
 
-        student_payload = {"email": "student_gate@school.com", "password": "pass", "name": "Gate Student"}
+        student_payload = {
+            "email": "student_gate@school.com",
+            "password": "pass",
+            "name": "Gate Student",
+        }
         invitation_payload = {"tenant_id": "tenant_a", "role": "teacher"}
         event_payload = {"title": "Blocked Trip", "date": datetime.now(UTC).isoformat()}
 
         # Every other domain is off-limits before activation.
-        assert (await test_client.post("/api/v1/students", json=student_payload, headers=headers)).status_code == 403
-        assert (await test_client.post("/api/v1/auth/invitations", json=invitation_payload, headers=headers)).status_code == 403
-        assert (await test_client.post("/api/v1/events", json=event_payload, headers=headers)).status_code == 403
+        assert (
+            await test_client.post("/api/v1/students", json=student_payload, headers=headers)
+        ).status_code == 403
+        assert (
+            await test_client.post(
+                "/api/v1/auth/invitations", json=invitation_payload, headers=headers
+            )
+        ).status_code == 403
+        assert (
+            await test_client.post("/api/v1/events", json=event_payload, headers=headers)
+        ).status_code == 403
 
         # Finish setup.
         await test_client.put(
@@ -325,12 +384,22 @@ class TestRequireTenantLiveGate:
         )
         await test_client.post(
             "/api/v1/school/campuses",
-            json={"name": "Main Campus", "address_line1": "Street 1", "city": "Amman", "country": "Jordan"},
+            json={
+                "name": "Main Campus",
+                "address_line1": "Street 1",
+                "city": "Amman",
+                "country": "Jordan",
+            },
             headers=headers,
         )
         await test_client.post(
             "/api/v1/school/contacts",
-            json={"role_title": "Principal", "name": "P", "phone": "+962700000000", "is_emergency_contact": True},
+            json={
+                "role_title": "Principal",
+                "name": "P",
+                "phone": "+962700000000",
+                "is_emergency_contact": True,
+            },
             headers=headers,
         )
         commit_resp = await test_client.post("/api/v1/school/setup/commit-profile", headers=headers)
@@ -359,10 +428,14 @@ class TestRequireTenantLiveGate:
         )
         assert create_invite_resp.status_code == 200
 
-        create_event_resp = await test_client.post("/api/v1/events", json=event_payload, headers=headers)
+        create_event_resp = await test_client.post(
+            "/api/v1/events", json=event_payload, headers=headers
+        )
         assert create_event_resp.status_code == 200
 
-    async def test_super_admin_bypasses_the_gate(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
+    async def test_super_admin_bypasses_the_gate(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
         await _reset_tenant_to_setup_state(db_pool)
         headers = await _register(test_client, "sa_gate@desk.com", "super_admin")
 

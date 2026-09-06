@@ -5,20 +5,39 @@ Implements PII encryption/decryption, masking, and audit logging.
 Does not import FastAPI or asyncpg directly.
 """
 
+import contextlib
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from cryptography.fernet import Fernet
 
+from app.core import authz
 from app.core.config import ENCRYPTION_KEY
 from app.core.database import get_control_plane_pool, get_db_pool
 from app.core.keycloak_admin import sync_user_to_keycloak
+from app.domains.audit.service import AuditService
 from app.domains.auth.service import AuthService
 from app.domains.tenant.control_plane_repository import ControlPlaneRepository
 from app.domains.tenant.tenant_repository import UNSET, TenantRepository, parse_id
 from app.domains.tenant.user_repository import UserRepository
 
 _fernet = Fernet(ENCRYPTION_KEY.encode())
+
+
+class _AuditActor:
+    """Minimal actor shape AuditService.record needs (.id/.role/.email),
+    built from whatever a caller already threads through as `user_role`/
+    `changed_by` -- most call sites here only have those two, not a full
+    CurrentUser, so `email` is None and the resulting audit row's
+    actor_email_hmac is NULL. Documented limitation, not an oversight."""
+
+    def __init__(self, user_id, role: str | list[str] | None):
+        self.id = user_id
+        if isinstance(role, list | tuple | set):
+            self.role = next(iter(role), "unknown")
+        else:
+            self.role = role or "unknown"
+        self.email = None
 
 
 # =============================================================================
@@ -41,12 +60,6 @@ def _decrypt(val: str) -> str:
     return _fernet.decrypt(val.encode()).decode()
 
 
-def _log_audit(user_id, action: str) -> None:
-    """Audit Trail: Log user ID, timestamp, and action without leaking PII."""
-    timestamp = datetime.now(UTC).isoformat()
-    print(f"[AUDIT] Timestamp: {timestamp} | User: {user_id} | Action: {action}")
-
-
 def _mask_field(val: str, field_name: str) -> str:
     """Mask sensitive fields for unauthorized roles."""
     if not val:
@@ -61,44 +74,6 @@ def _mask_field(val: str, field_name: str) -> str:
 
 
 class TenantService:
-    @staticmethod
-    def _has_intersection(user_role: str | list[str] | None, allowed_roles: set[str] | str) -> bool:
-        if not user_role:
-            return False
-        if isinstance(user_role, str):
-            roles = {user_role}
-        elif isinstance(user_role, (list, tuple, set)):
-            roles = set(user_role)
-        else:
-            roles = {str(user_role)}
-
-        reqs = {allowed_roles} if isinstance(allowed_roles, str) else set(allowed_roles)
-
-        if "super_admin" in roles or "*" in roles:
-            return True
-
-        if "admin" in roles:
-            roles.add("school_admin")
-
-        # Forward expansion only: if the caller holds a composite role (e.g.
-        # "teacher"), grant the granular permissions that role carries (e.g.
-        # "class:read"), so `reqs` can be either role names or permission
-        # strings. There must be no reverse direction here — walking a
-        # granular permission the caller holds (e.g. "school:read", which
-        # nearly every role has) back to "every role that could plausibly
-        # hold it" silently grants "school_admin" to anyone, which is exactly
-        # how a student token used to pass admin-only checks. See
-        # SchoolService._require_admin for the strict-membership pattern
-        # this mirrors.
-        from app.core.dependencies import COMPOSITE_ROLE_PERMISSIONS
-
-        expanded_roles = set(roles)
-        for r in list(roles):
-            if r in COMPOSITE_ROLE_PERMISSIONS:
-                expanded_roles.update(COMPOSITE_ROLE_PERMISSIONS[r])
-
-        return bool(expanded_roles.intersection(reqs))
-
     # =========================================================================
     # Levels
     # =========================================================================
@@ -120,7 +95,7 @@ class TenantService:
         # user via Manage Permissions, without changing their base role. This
         # mirrors update_level/delete_level below, which already excluded
         # teacher/manager; create_level was the one inconsistent sibling.
-        if not TenantService._has_intersection(user_role, {"school_admin", "level:create"}):
+        if not authz.require(user_role, {"school_admin", "level:create"}):
             raise PermissionError("Only school admins can create levels")
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
@@ -164,7 +139,7 @@ class TenantService:
         # only school_admin, or a teacher explicitly granted the "teacher:create"
         # permission via Manage Permissions, may do this. See
         # docs/05-traceability/02-invariants.md.
-        if not TenantService._has_intersection(user_role, {"school_admin", "teacher:create"}):
+        if not authz.require(user_role, {"school_admin", "teacher:create"}):
             raise PermissionError("Only staff can register teachers")
 
         pool = await get_db_pool(tenant_id)
@@ -200,7 +175,7 @@ class TenantService:
         # discarding the router's own "manager creation may be delegated via
         # user:create" decision -- a caller who passed the router gate with a
         # granted user:create permission still 403'd here.
-        if role == "manager":
+        if role == "manager":  # noqa: SIM108 -- kept as if/else, see comment below
             allowed = {"school_admin", "user:create"}
         else:
             # role == "school_admin": deliberately NO user:create escape
@@ -210,7 +185,7 @@ class TenantService:
             # convenience. Mirrors create_school_admin's router-level check.
             allowed = {"school_admin"}
 
-        if not TenantService._has_intersection(user_role, allowed):
+        if not authz.require(user_role, allowed):
             raise PermissionError("Only school admins can register staff users")
 
         pool = await get_db_pool(tenant_id)
@@ -258,7 +233,7 @@ class TenantService:
         # Same rule as create_teacher: a bare "teacher" role does not get to
         # register student accounts. Only school_admin, or a teacher explicitly
         # granted "student:create" via Manage Permissions, may do this.
-        if not TenantService._has_intersection(user_role, {"school_admin", "student:create"}):
+        if not authz.require(user_role, {"school_admin", "student:create"}):
             raise PermissionError("Only staff can register students")
 
         pool = await get_db_pool(tenant_id)
@@ -285,7 +260,7 @@ class TenantService:
     async def get_class_history(
         tenant_id: str, student_id: int, user_role: str | list[str] = ""
     ) -> list[dict]:
-        if not TenantService._has_intersection(
+        if not authz.require(
             user_role, {"school_admin", "super_admin", "admin", "teacher", "manager"}
         ):
             raise PermissionError("Only staff can view a student's placement history")
@@ -323,15 +298,13 @@ class TenantService:
         # grants the same unrestricted linking school_admin has (the
         # own-class-only scoping just below only applies to the literal
         # "teacher" role, not to this permission).
-        if not TenantService._has_intersection(user_role, {"school_admin", "teacher", "user:link"}):
+        if not authz.require(user_role, {"school_admin", "teacher", "user:link"}):
             raise PermissionError("Only school admins and teachers can link students and parents")
 
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
 
-        if TenantService._has_intersection(
-            user_role, "teacher"
-        ) and not TenantService._has_intersection(user_role, "school_admin"):
+        if authz.require(user_role, "teacher") and not authz.require(user_role, "school_admin"):
             # Teacher must be the head teacher of the student's class
             student = await repo.get_student_by_id(student_id)
             if not student:
@@ -370,15 +343,13 @@ class TenantService:
         # Creating a class section is Academic Administration Hub territory --
         # "add a class to a grade" must never be reachable by a bare "teacher"
         # or "manager" role. super_admin/admin are redundant with
-        # _has_intersection's own super_admin bypass above, kept here for
+        # authz.require's own super_admin bypass above, kept here for
         # readability; class:create is the real, cataloged permission
         # (replacing the earlier placeholder "class:write", which had no
         # catalog entry) an admin can grant a specific user via Manage
         # Permissions, same shape as teacher:create/student:create elsewhere
         # in this file.
-        if not TenantService._has_intersection(
-            user_role, {"school_admin", "super_admin", "admin", "class:create"}
-        ):
+        if not authz.require(user_role, {"school_admin", "super_admin", "admin", "class:create"}):
             raise PermissionError("Only school admins can create classes")
 
         pool = await get_db_pool(tenant_id)
@@ -437,9 +408,7 @@ class TenantService:
         # invoked it directly would have bypassed authorization entirely.
         # class:update is the real, cataloged permission escape hatch,
         # mirroring the router-level check in students/router.py.
-        if not TenantService._has_intersection(
-            user_role, {"school_admin", "super_admin", "admin", "class:update"}
-        ):
+        if not authz.require(user_role, {"school_admin", "super_admin", "admin", "class:update"}):
             raise PermissionError("Only school admins can update classes")
 
         pool = await get_db_pool(tenant_id)
@@ -465,21 +434,45 @@ class TenantService:
     async def delete_class(
         tenant_id: str, class_id: int, user_role: str | list[str] = "", changed_by=None
     ) -> bool:
-        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin", "admin"}):
+        if not authz.require(user_role, {"school_admin", "super_admin", "admin"}):
             raise PermissionError("Only school admins can delete classes")
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
-        return await repo.delete_class(class_id, changed_by=changed_by)
+        actor = _AuditActor(changed_by, user_role)
+
+        async def _audit_hook(conn) -> None:
+            await AuditService.record(
+                conn,
+                actor=actor,
+                action="class.delete",
+                entity_type="class",
+                entity_id=class_id,
+                outcome="allow",
+            )
+
+        return await repo.delete_class(class_id, changed_by=changed_by, audit_hook=_audit_hook)
 
     @staticmethod
     async def delete_level(
         tenant_id: str, level_id: int, user_role: str | list[str] = "", changed_by=None
     ) -> bool:
-        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin", "admin"}):
+        if not authz.require(user_role, {"school_admin", "super_admin", "admin"}):
             raise PermissionError("Only school admins can delete levels")
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
-        return await repo.delete_level(level_id, changed_by=changed_by)
+        actor = _AuditActor(changed_by, user_role)
+
+        async def _audit_hook(conn) -> None:
+            await AuditService.record(
+                conn,
+                actor=actor,
+                action="level.delete",
+                entity_type="level",
+                entity_id=level_id,
+                outcome="allow",
+            )
+
+        return await repo.delete_level(level_id, changed_by=changed_by, audit_hook=_audit_hook)
 
     @staticmethod
     async def update_level(
@@ -493,7 +486,7 @@ class TenantService:
         is_active: bool | None = None,
         user_role: str | list[str] = "",
     ) -> dict | None:
-        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin", "admin"}):
+        if not authz.require(user_role, {"school_admin", "super_admin", "admin"}):
             raise PermissionError("Only school admins can update levels")
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
@@ -525,9 +518,7 @@ class TenantService:
         # Academic Administration Hub -- apiReassignStudentClass is called from
         # nowhere else in the frontend, so tightening this has no effect
         # outside that page. A bare "teacher" is deliberately excluded.
-        if not TenantService._has_intersection(
-            user_role, {"school_admin", "super_admin", "admin", "student:manage"}
-        ):
+        if not authz.require(user_role, {"school_admin", "super_admin", "admin", "student:manage"}):
             raise PermissionError("Only school admins can reassign student classes")
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
@@ -543,9 +534,7 @@ class TenantService:
     ) -> dict:
         # Same as reassign_student_class above -- bulk reassignment is Student
         # Placement tab territory only, "teacher" excluded on purpose.
-        if not TenantService._has_intersection(
-            user_role, {"school_admin", "super_admin", "admin", "student:manage"}
-        ):
+        if not authz.require(user_role, {"school_admin", "super_admin", "admin", "student:manage"}):
             raise PermissionError("Only school admins can reassign student classes")
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
@@ -566,7 +555,7 @@ class TenantService:
         class_mappings: list[dict],
         user_role: str | list[str],
     ) -> dict:
-        if not TenantService._has_intersection(user_role, {"school_admin", "teacher"}):
+        if not authz.require(user_role, {"school_admin", "teacher"}):
             raise PermissionError("Only staff can create events")
 
         pool = await get_db_pool(tenant_id)
@@ -606,7 +595,7 @@ class TenantService:
         new_title: str | None = None,
         new_date: datetime | None = None,
     ) -> dict:
-        if not TenantService._has_intersection(user_role, {"school_admin", "teacher"}):
+        if not authz.require(user_role, {"school_admin", "teacher"}):
             raise PermissionError("Only staff can clone events")
 
         pool = await get_db_pool(tenant_id)
@@ -674,9 +663,7 @@ class TenantService:
         date_val: datetime,
         user_role: str | list[str],
     ) -> dict:
-        if not TenantService._has_intersection(
-            user_role, {"school_admin", "teacher", "event_teacher", "manager"}
-        ):
+        if not authz.require(user_role, {"school_admin", "teacher", "event_teacher", "manager"}):
             raise PermissionError("Only staff can update events")
 
         pool = await get_db_pool(tenant_id)
@@ -790,20 +777,23 @@ class TenantService:
             teacher_class_ids = {c["id"] for c in teacher_classes}
             events = await repo.get_all_events()
             for ev in events:
-                if ev["id"] not in already_added:
-                    if TenantService.check_event_permission(actor, ev, "read") or any(
+                if ev["id"] not in already_added and (
+                    TenantService.check_event_permission(actor, ev, "read")
+                    or any(
                         m.get("class_id") in teacher_class_ids for m in ev.get("class_mappings", [])
-                    ):
-                        filtered_events.append(ev)
-                        already_added.add(ev["id"])
+                    )
+                ):
+                    filtered_events.append(ev)
+                    already_added.add(ev["id"])
 
         if "student" in roles:
             events = await repo.get_events_for_student(user_id)
             for ev in events:
-                if ev["id"] not in already_added:
-                    if TenantService.check_event_permission(actor, ev, "read"):
-                        filtered_events.append(ev)
-                        already_added.add(ev["id"])
+                if ev["id"] not in already_added and TenantService.check_event_permission(
+                    actor, ev, "read"
+                ):
+                    filtered_events.append(ev)
+                    already_added.add(ev["id"])
 
         if "parent" in roles:
             children = await repo.get_linked_students_for_parent(user_id)
@@ -1077,7 +1067,7 @@ class TenantService:
         requesting_user_id,
         requesting_user_role: str | list[str],
     ) -> UUID:
-        if not TenantService._has_intersection(requesting_user_role, {"school_admin", "teacher"}):
+        if not authz.require(requesting_user_role, {"school_admin", "teacher"}):
             raise PermissionError("Only staff can manage health records")
 
         pool = await get_db_pool(tenant_id)
@@ -1087,15 +1077,27 @@ class TenantService:
         med_enc = _encrypt(medical_conditions)
         emg_enc = _encrypt(emergency_contact)
 
-        _log_audit(
-            requesting_user_id, f"WRITE student_health_and_records for student_id: {student_id}"
-        )
+        actor = _AuditActor(requesting_user_id, requesting_user_role)
+
+        async def _audit_hook(conn) -> None:
+            await AuditService.record(
+                conn,
+                actor=actor,
+                action="student.health.write",
+                entity_type="student",
+                entity_id=student_id,
+                outcome="allow",
+                metadata={
+                    "fields_written": ["national_id", "medical_conditions", "emergency_contact"]
+                },
+            )
 
         return await repo.create_or_update_student_health(
             student_id=student_id,
             national_id_encrypted=nat_enc,
             medical_conditions_encrypted=med_enc,
             emergency_contact_encrypted=emg_enc,
+            audit_hook=_audit_hook,
         )
 
     @staticmethod
@@ -1118,9 +1120,21 @@ class TenantService:
         med_dec = _decrypt(record["medical_conditions_encrypted"])
         emg_dec = _decrypt(record["emergency_contact_encrypted"])
 
-        _log_audit(
-            requesting_user_id, f"READ student_health_and_records for student_id: {student_id}"
-        )
+        # Non-fatal: an audit outage must not 500 a health-record view. Uses
+        # its own connection (not the read's, which already finished) since
+        # there is nothing to roll back a read against.
+        try:
+            async with (await get_db_pool(tenant_id)).acquire() as audit_conn:
+                await AuditService.record(
+                    audit_conn,
+                    actor=_AuditActor(requesting_user_id, requesting_user_role),
+                    action="student.health.read",
+                    entity_type="student",
+                    entity_id=student_id,
+                    outcome="allow",
+                )
+        except Exception:
+            pass
 
         if requesting_user_role == "school_admin" and elevated_clearance:
             return {
@@ -1154,7 +1168,7 @@ class TenantService:
     async def save_academic_structure(
         tenant_id: str, payload: dict, user_role: str | list[str], changed_by=None
     ) -> None:
-        if not TenantService._has_intersection(
+        if not authz.require(
             user_role,
             {
                 "school_admin",
@@ -1190,7 +1204,7 @@ class TenantService:
     # Import writes both levels and classes in one call, so it's gated like
     # save_academic_structure above (also a bulk academic-structure write) --
     # an OR of the relevant permissions, not requiring all of them at once,
-    # consistent with _has_intersection's existing semantics. Adds
+    # consistent with authz.require's existing semantics. Adds
     # class:create, which save_academic_structure's own set is missing
     # despite writing classes too -- not perpetuating that gap here.
     _IMPORT_PERMISSIONS = {
@@ -1217,7 +1231,7 @@ class TenantService:
         than this holding any server-side session -- nothing like that
         exists elsewhere in this codebase, and re-parsing a capped-size file
         twice is cheap."""
-        if not TenantService._has_intersection(user_role, TenantService._IMPORT_PERMISSIONS):
+        if not authz.require(user_role, TenantService._IMPORT_PERMISSIONS):
             raise PermissionError("Insufficient permissions to import academic structure.")
 
         from app.domains.students.import_parser import detect_file_kind, parse_import_file
@@ -1246,7 +1260,7 @@ class TenantService:
         only: never deletes a class or grade the file doesn't mention --
         deliberately does NOT reuse save_academic_structure, which deletes
         any class section not present in the payload it's given."""
-        if not TenantService._has_intersection(user_role, TenantService._IMPORT_PERMISSIONS):
+        if not authz.require(user_role, TenantService._IMPORT_PERMISSIONS):
             raise PermissionError("Insufficient permissions to import academic structure.")
 
         from app.domains.students.import_parser import detect_file_kind, parse_import_file
@@ -1262,7 +1276,7 @@ class TenantService:
 
     @staticmethod
     async def get_academic_structure(tenant_id: str, user_role: str | list[str]) -> dict:
-        if not TenantService._has_intersection(
+        if not authz.require(
             user_role,
             {
                 "school_admin",
@@ -1309,27 +1323,26 @@ class TenantService:
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
 
-        async with repo.pool.acquire() as conn:
-            async with conn.transaction():
-                # Re-check status is draft or resource_planning
-                event = await repo.get_event_by_id(event_id)
-                if not event or event.get("status", "draft") not in ("draft", "resource_planning"):
-                    raise ValueError(
-                        "Resources can only be modified on draft or resource planning events"
-                    )
+        async with repo.pool.acquire() as conn, conn.transaction():
+            # Re-check status is draft or resource_planning
+            event = await repo.get_event_by_id(event_id)
+            if not event or event.get("status", "draft") not in ("draft", "resource_planning"):
+                raise ValueError(
+                    "Resources can only be modified on draft or resource planning events"
+                )
 
-                # Delete existing resources for event
-                await repo.delete_resources_for_event(event_id)
+            # Delete existing resources for event
+            await repo.delete_resources_for_event(event_id)
 
-                # Insert new resources
-                for r in resources_list:
-                    await repo.create_resource(
-                        event_id=event_id,
-                        resource_type_id=r["resource_type_id"],
-                        description=r.get("description"),
-                        quantity=r["quantity"],
-                        added_by_user_id=added_by_user_id,
-                    )
+            # Insert new resources
+            for r in resources_list:
+                await repo.create_resource(
+                    event_id=event_id,
+                    resource_type_id=r["resource_type_id"],
+                    description=r.get("description"),
+                    quantity=r["quantity"],
+                    added_by_user_id=added_by_user_id,
+                )
 
     @staticmethod
     async def set_resource_cost(
@@ -1368,7 +1381,13 @@ class TenantService:
         from app.domains.school.repository import SchoolRepository
 
         school_profile = await SchoolRepository(pool).get_profile_row()
-        currency = (school_profile or {}).get("currency") or "JOD"
+        # The summary reports one currency for the whole event: the school's
+        # own. A resource_cost row's own `currency` column is per-line
+        # bookkeeping (whatever was set when that line was priced) and must
+        # never leak into this summary-level value -- doing so used to make
+        # the reported currency whichever resource happened to be priced
+        # last, not the school's actual currency.
+        currency = (school_profile or {}).get("currency")
 
         lines = []
         cost_sum = 0.0
@@ -1378,7 +1397,6 @@ class TenantService:
             if cost_info:
                 unit_price = float(cost_info["unit_price"])
                 total_cost = float(cost_info["total_cost"])
-                currency = cost_info["currency"]
                 set_by_user_id = cost_info["set_by_user_id"]
             else:
                 unit_price = 0.0
@@ -1438,29 +1456,24 @@ class TenantService:
                     for m in (event.get("class_mappings") or [])
                     if m.get("head_teacher_id") is not None
                 ]
-                if is_owner or parse_id(getattr(user, "id", None)) in mapped_teacher_ids:
-                    return True
-                return False
+                return bool(is_owner or parse_id(getattr(user, "id", None)) in mapped_teacher_ids)
             for role in user_roles:
                 if role in ("parent", "student") and status == "published":
                     return True
-                if role in ("teacher", "event_teacher"):
-                    if status in (
-                        "published",
-                        "approved",
-                        "proposed",
-                        "pricing_review",
-                        "final_review",
-                        "ready_to_publish",
-                    ):
-                        return True
+                if role in ("teacher", "event_teacher") and status in (
+                    "published",
+                    "approved",
+                    "proposed",
+                    "pricing_review",
+                    "final_review",
+                    "ready_to_publish",
+                ):
+                    return True
                 if role == "manager" and status != "draft":
                     return True
                 if role in ("school_admin", "super_admin", "admin"):
                     return True
-            if "event:read" in user_roles and status != "draft":
-                return True
-            return False
+            return bool("event:read" in user_roles and status != "draft")
         elif action == "edit_draft":
             if status != "draft":
                 return False
@@ -1473,9 +1486,7 @@ class TenantService:
                     "admin",
                 ) and (is_owner or role in ("school_admin", "super_admin", "admin")):
                     return True
-            if "event:edit" in user_roles and is_owner:
-                return True
-            return False
+            return bool("event:edit" in user_roles and is_owner)
         elif action in ("manager_decision", "approve", "review"):
             if (
                 "event:review" in user_roles
@@ -1743,7 +1754,7 @@ class TenantService:
         tenant_id: str, user_role: str | list[str]
     ) -> list[dict]:
         """Fetch all users in the tenant with their assigned roles and permissions (admin only)."""
-        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin", "admin"}):
+        if not authz.require(user_role, {"school_admin", "super_admin", "admin"}):
             raise PermissionError(
                 "Only school administrators can access the user permissions matrix"
             )
@@ -1759,17 +1770,17 @@ class TenantService:
         roles: list[str],
         permissions: list[str],
         user_role: str | list[str],
+        requesting_user_id=None,
     ) -> dict:
         """Update a tenant user's primary role, multiple composite roles, and custom permissions."""
-        if not TenantService._has_intersection(
-            user_role, {"school_admin", "super_admin", "admin", "user:invite"}
-        ):
+        if not authz.require(user_role, {"school_admin", "super_admin", "admin", "user:invite"}):
             raise PermissionError(
                 "Only school administrators can update user roles and permissions"
             )
-        if primary_role == "super_admin" or "super_admin" in (roles or []):
-            if not TenantService._has_intersection(user_role, {"super_admin"}):
-                raise PermissionError("Only a super_admin can grant the super_admin role")
+        if (primary_role == "super_admin" or "super_admin" in (roles or [])) and not authz.require(
+            user_role, {"super_admin"}
+        ):
+            raise PermissionError("Only a super_admin can grant the super_admin role")
         pool = await get_db_pool(tenant_id)
         user_repo = UserRepository(pool)
 
@@ -1779,8 +1790,7 @@ class TenantService:
         # place that still knows what the user was before this call.
         existing = await user_repo.get_user_by_id(user_id)
         was_super_admin = bool(existing) and (
-            existing.get("role") == "super_admin"
-            or "super_admin" in (existing.get("roles") or [])
+            existing.get("role") == "super_admin" or "super_admin" in (existing.get("roles") or [])
         )
 
         updated = await user_repo.update_user_roles_and_permissions(
@@ -1873,14 +1883,12 @@ class TenantService:
                             c_id,
                         )
                     elif primary_role == "parent":
-                        try:
+                        with contextlib.suppress(Exception):
                             await conn_t.execute(
                                 "INSERT INTO parenets (id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING",
                                 target_id,
                                 user_display_name,
                             )
-                        except Exception:
-                            pass
             except Exception as _e:
                 print(f"[update_tenant_user_permissions] Warning profile records sync: {_e}")
 
@@ -1894,10 +1902,24 @@ class TenantService:
                     f"[update_tenant_user_permissions] Warning Keycloak update for {user_email}: {_e}"
                 )
 
-        _log_audit(
-            user_id,
-            f"UPDATE_PERMISSIONS: role={primary_role}, roles={roles}, perms_count={len(permissions)}",
-        )
+        try:
+            async with (await get_db_pool(tenant_id)).acquire() as audit_conn:
+                await AuditService.record(
+                    audit_conn,
+                    actor=_AuditActor(requesting_user_id, user_role),
+                    action="user.permissions.update",
+                    entity_type="user",
+                    entity_id=user_id,
+                    outcome="allow",
+                    changed_fields=["role", "roles", "permissions"],
+                    metadata={
+                        "new_primary_role": primary_role,
+                        "role_count": len(roles or []),
+                        "permission_count": len(permissions or []),
+                    },
+                )
+        except Exception:
+            pass
         return updated
 
     @staticmethod
@@ -1917,7 +1939,7 @@ class TenantService:
         """
         roles = (
             set(user_role)
-            if isinstance(user_role, (list, tuple, set))
+            if isinstance(user_role, list | tuple | set)
             else ({user_role} if user_role else set())
         )
         is_super = "super_admin" in roles
@@ -1976,7 +1998,9 @@ class TenantService:
                             f"but no matching public.super_admins row was found to remove"
                         )
                 except Exception as _e:
-                    print(f"[delete_tenant_user] Warning super_admins cleanup for {user_email}: {_e}")
+                    print(
+                        f"[delete_tenant_user] Warning super_admins cleanup for {user_email}: {_e}"
+                    )
             try:
                 from app.core.keycloak_admin import delete_user_from_keycloak
 
@@ -1988,10 +2012,22 @@ class TenantService:
             except Exception as _e:
                 print(f"[delete_tenant_user] Warning Keycloak cleanup for {user_email}: {_e}")
 
-        _log_audit(
-            requesting_user_id,
-            f"DELETE_USER: target_id={target_user_id}, target_email={user_email}",
-        )
+        try:
+            async with (await get_db_pool(tenant_id)).acquire() as audit_conn:
+                await AuditService.record(
+                    audit_conn,
+                    actor=_AuditActor(requesting_user_id, user_role),
+                    action="user.delete",
+                    entity_type="user",
+                    entity_id=target_user_id,
+                    outcome="allow",
+                    metadata={
+                        "deleted_role": deleted.get("role"),
+                        "was_super_admin": "super_admin" in target_roles,
+                    },
+                )
+        except Exception:
+            pass
         return deleted
 
     # =========================================================================
@@ -2005,7 +2041,7 @@ class TenantService:
         end_date=None,
         user_role: str | list[str] = "",
     ) -> dict:
-        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin"}):
+        if not authz.require(user_role, {"school_admin", "super_admin"}):
             raise PermissionError("Only a school admin can define an academic year")
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
@@ -2026,7 +2062,7 @@ class TenantService:
         created_by=None,
         user_role: str | list[str] = "",
     ) -> dict:
-        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin"}):
+        if not authz.require(user_role, {"school_admin", "super_admin"}):
             raise PermissionError("Only a school admin can run year rollover")
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
@@ -2132,7 +2168,7 @@ class TenantService:
     async def get_rollover(
         tenant_id: str, rollover_id: int, user_role: str | list[str] = ""
     ) -> dict:
-        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin"}):
+        if not authz.require(user_role, {"school_admin", "super_admin"}):
             raise PermissionError("Only a school admin can view a rollover plan")
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
@@ -2157,7 +2193,7 @@ class TenantService:
         to_section_label: str | None = None,
         user_role: str | list[str] = "",
     ) -> dict:
-        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin"}):
+        if not authz.require(user_role, {"school_admin", "super_admin"}):
             raise PermissionError("Only a school admin can override a rollover line")
         if override_action is not None and override_action not in (
             "promote",
@@ -2189,7 +2225,7 @@ class TenantService:
     async def preview_rollover(
         tenant_id: str, rollover_id: int, user_role: str | list[str] = ""
     ) -> dict:
-        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin"}):
+        if not authz.require(user_role, {"school_admin", "super_admin"}):
             raise PermissionError("Only a school admin can preview a rollover plan")
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
@@ -2218,7 +2254,7 @@ class TenantService:
     async def commit_rollover(
         tenant_id: str, rollover_id: int, changed_by=None, user_role: str | list[str] = ""
     ) -> dict:
-        if not TenantService._has_intersection(user_role, {"school_admin", "super_admin"}):
+        if not authz.require(user_role, {"school_admin", "super_admin"}):
             raise PermissionError("Only a school admin can commit a rollover")
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)

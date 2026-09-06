@@ -24,8 +24,8 @@ load_dotenv()
 if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-from app.main import app
-import app.utils.email as email_module
+import app.utils.email as email_module  # noqa: E402 -- must follow the event-loop-policy fix above
+from app.main import app  # noqa: E402 -- must follow the event-loop-policy fix above
 
 
 # ─── Never let a test hit real SMTP ──────────────────────────────────────────
@@ -39,6 +39,7 @@ import app.utils.email as email_module
 @pytest.fixture(autouse=True)
 def _never_send_real_email(monkeypatch):
     monkeypatch.setattr(email_module, "_send_email_sync", lambda *a, **k: None)
+
 
 # ─── Test database settings ──────────────────────────────────────────────────
 TEST_DB = {
@@ -88,8 +89,10 @@ async def db_pool():
             """
         )
     # Recreate tables from init.sql
-    init_sql_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "init.sql")
-    with open(init_sql_path, "r", encoding="utf-8") as f:
+    init_sql_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "init.sql"
+    )
+    with open(init_sql_path, encoding="utf-8") as f:
         schema_sql = f.read()
     async with pool.acquire() as conn:
         await conn.execute(schema_sql)
@@ -113,7 +116,9 @@ async def test_client(db_pool: asyncpg.Pool, monkeypatch):
         return db_pool
 
     monkeypatch.setattr(db_module.db_manager, "get_pool", _mock_get_pool)
-    monkeypatch.setattr(db_module.db_manager, "get_control_plane_pool", _mock_get_control_plane_pool)
+    monkeypatch.setattr(
+        db_module.db_manager, "get_control_plane_pool", _mock_get_control_plane_pool
+    )
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://testserver"

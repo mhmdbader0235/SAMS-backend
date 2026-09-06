@@ -13,14 +13,16 @@ from tests.integration._helpers import register_school_admin
 # Authentication Tests
 # =============================================================================
 class TestAuthRouter:
-    async def test_register_and_login_super_admin(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
+    async def test_register_and_login_super_admin(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
         from app.core.config import SUPER_ADMIN_BOOTSTRAP_CODE
 
         reg_payload = {
             "email": "sa@desk.com",
             "password": "sapassword123",
             "role": "super_admin",
-            "invite_code": SUPER_ADMIN_BOOTSTRAP_CODE
+            "invite_code": SUPER_ADMIN_BOOTSTRAP_CODE,
         }
         reg_resp = await test_client.post("/api/v1/auth/register", json=reg_payload)
         assert reg_resp.status_code == 200
@@ -34,55 +36,67 @@ class TestAuthRouter:
         assert login_resp.status_code == 200
         assert "access_token" in login_resp.json()
 
-    async def test_register_and_login_parent(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
+    async def test_register_and_login_parent(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
         reg_payload = {
             "email": "parent@school.com",
             "password": "parentpassword",
             "role": "parent",
             "tenant_id": "tenant_a",
-            "invite_code": "regester123"
+            "invite_code": "regester123",
         }
         reg_resp = await test_client.post("/api/v1/auth/register", json=reg_payload)
         assert reg_resp.status_code == 200
         token = reg_resp.json()["access_token"]
 
-        me_resp = await test_client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+        me_resp = await test_client.get(
+            "/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"}
+        )
         assert me_resp.status_code == 200
         assert me_resp.json()["role"] == "parent"
         assert me_resp.json()["tenant_id"] == "tenant_a"
 
-    async def test_register_and_login_teacher(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
+    async def test_register_and_login_teacher(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
         from app.core.config import TEACHER_INVITE_CODE
-        
+
         reg_payload = {
             "email": "teacher@school.com",
             "password": "teacherpass",
             "role": "teacher",
             "tenant_id": "tenant_a",
-            "invite_code": TEACHER_INVITE_CODE
+            "invite_code": TEACHER_INVITE_CODE,
         }
         reg_resp = await test_client.post("/api/v1/auth/register", json=reg_payload)
         assert reg_resp.status_code == 200
         token = reg_resp.json()["access_token"]
 
-        me_resp = await test_client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+        me_resp = await test_client.get(
+            "/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"}
+        )
         assert me_resp.status_code == 200
         assert me_resp.json()["role"] == "teacher"
 
-    async def test_register_and_login_student(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
+    async def test_register_and_login_student(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
         # Student registration automatically maps level and class if none exists
         reg_payload = {
             "email": "student@school.com",
             "password": "studentpass",
             "role": "student",
             "tenant_id": "tenant_a",
-            "invite_code": "regester123"
+            "invite_code": "regester123",
         }
         reg_resp = await test_client.post("/api/v1/auth/register", json=reg_payload)
         assert reg_resp.status_code == 200
         token = reg_resp.json()["access_token"]
 
-        me_resp = await test_client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"})
+        me_resp = await test_client.get(
+            "/api/v1/auth/me", headers={"Authorization": f"Bearer {token}"}
+        )
         assert me_resp.status_code == 200
         assert me_resp.json()["role"] == "student"
 
@@ -159,7 +173,13 @@ class TestStudentsAndClassesRouter:
 
         create_resp = await test_client.post(
             "/api/v1/students/levels",
-            json={"name": "Grade 11", "isced_level": 3, "age_band_min": 16, "age_band_max": 17, "ordinal": 11},
+            json={
+                "name": "Grade 11",
+                "isced_level": 3,
+                "age_band_min": 16,
+                "age_band_max": 17,
+                "ordinal": 11,
+            },
             headers=headers,
         )
         level_id = create_resp.json()["level_id"]
@@ -171,7 +191,9 @@ class TestStudentsAndClassesRouter:
         assert deactivate_resp.json()["is_active"] is False
 
         rename_resp = await test_client.put(
-            f"/api/v1/students/levels/{level_id}", json={"name": "Grade 11 Renamed"}, headers=headers
+            f"/api/v1/students/levels/{level_id}",
+            json={"name": "Grade 11 Renamed"},
+            headers=headers,
         )
         assert rename_resp.status_code == 200, rename_resp.text
         renamed = rename_resp.json()
@@ -219,7 +241,9 @@ class TestStudentsAndClassesRouter:
             headers=headers,
         )
         assert second.status_code == 200, second.text
-        assert second.json()["level_id"] == first_id, "must not create a second row for the same name"
+        assert (
+            second.json()["level_id"] == first_id
+        ), "must not create a second row for the same name"
         assert second.json()["isced_level"] == 2
         assert second.json()["ordinal"] == 9
 
@@ -240,7 +264,13 @@ class TestStudentsAndClassesRouter:
         }
         first = await test_client.post(
             "/api/v1/students/levels",
-            json={"name": "Partial Dup Grade", "isced_level": 3, "age_band_min": 10, "age_band_max": 11, "ordinal": 6},
+            json={
+                "name": "Partial Dup Grade",
+                "isced_level": 3,
+                "age_band_min": 10,
+                "age_band_max": 11,
+                "ordinal": 6,
+            },
             headers=headers,
         )
         assert first.status_code == 200, first.text
@@ -249,9 +279,9 @@ class TestStudentsAndClassesRouter:
             "/api/v1/students/levels", json={"name": "Partial Dup Grade"}, headers=headers
         )
         assert second.status_code == 200, second.text
-        assert second.json()["isced_level"] == 3, (
-            "omitted isced_level must keep its real value, not reset to the bootstrap default of 1"
-        )
+        assert (
+            second.json()["isced_level"] == 3
+        ), "omitted isced_level must keep its real value, not reset to the bootstrap default of 1"
         assert second.json()["age_band_min"] == 10
         assert second.json()["ordinal"] == 6
 
@@ -283,9 +313,9 @@ class TestStudentsAndClassesRouter:
         assert deactivate_resp.status_code == 200, deactivate_resp.text
 
         structure_after = await test_client.get("/api/v1/students/structure", headers=headers)
-        assert structure_after.json()["has_structure"] is False, (
-            "a deactivated level's sections must not count toward has_structure"
-        )
+        assert (
+            structure_after.json()["has_structure"] is False
+        ), "a deactivated level's sections must not count toward has_structure"
 
         blocked_resp = await test_client.post(
             "/api/v1/students/classes", json={"name": "12B", "level_id": level_id}, headers=headers
@@ -317,7 +347,9 @@ class TestStudentsAndClassesRouter:
         assert t_reg.status_code == 200, t_reg.text
 
         lvl_resp = await test_client.post(
-            "/api/v1/students/levels", json={"name": "Grade 20", "ordinal": 20}, headers=admin_headers
+            "/api/v1/students/levels",
+            json={"name": "Grade 20", "ordinal": 20},
+            headers=admin_headers,
         )
         level_id = lvl_resp.json()["level_id"]
 
@@ -335,7 +367,9 @@ class TestStudentsAndClassesRouter:
 
         # Renaming without mentioning head_teacher_id must not touch it.
         rename_resp = await test_client.put(
-            f"/api/v1/students/classes/{class_id}", json={"name": "20A Renamed"}, headers=admin_headers
+            f"/api/v1/students/classes/{class_id}",
+            json={"name": "20A Renamed"},
+            headers=admin_headers,
         )
         assert rename_resp.status_code == 200, rename_resp.text
         assert rename_resp.json()["head_teacher_id"] == teacher_id
@@ -347,9 +381,9 @@ class TestStudentsAndClassesRouter:
             headers=admin_headers,
         )
         assert clear_resp.status_code == 200, clear_resp.text
-        assert clear_resp.json()["head_teacher_id"] is None, (
-            "an explicit null head_teacher_id must clear it, not be treated as omitted"
-        )
+        assert (
+            clear_resp.json()["head_teacher_id"] is None
+        ), "an explicit null head_teacher_id must clear it, not be treated as omitted"
 
     async def test_class_capacity_must_be_positive(
         self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
@@ -443,11 +477,15 @@ class TestStudentsAndClassesRouter:
         admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
         lvl_resp = await test_client.post(
-            "/api/v1/students/levels", json={"name": "Grade 23", "ordinal": 23}, headers=admin_headers
+            "/api/v1/students/levels",
+            json={"name": "Grade 23", "ordinal": 23},
+            headers=admin_headers,
         )
         level_id = lvl_resp.json()["level_id"]
         cls_resp = await test_client.post(
-            "/api/v1/students/classes", json={"name": "23A", "level_id": level_id}, headers=admin_headers
+            "/api/v1/students/classes",
+            json={"name": "23A", "level_id": level_id},
+            headers=admin_headers,
         )
         class_id = cls_resp.json()["id"]
 
@@ -532,8 +570,11 @@ class TestStudentsAndClassesRouter:
         assert entries[1]["old_class_id"] == class_a_id
         assert entries[1]["new_class_id"] == class_b_id
 
-    async def test_staff_can_manage_levels_and_classes(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
+    async def test_staff_can_manage_levels_and_classes(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
         from app.core.config import TEACHER_INVITE_CODE
+
         # A teacher account still exists, purely to supply a real teacher id for
         # head_teacher_id below -- it is no longer the ACTOR for any of the
         # level/class management calls (Academic Administration Hub territory,
@@ -543,7 +584,7 @@ class TestStudentsAndClassesRouter:
             "password": "pass",
             "role": "teacher",
             "tenant_id": "tenant_a",
-            "invite_code": TEACHER_INVITE_CODE
+            "invite_code": TEACHER_INVITE_CODE,
         }
         t_reg = await test_client.post("/api/v1/auth/register", json=t_payload)
         t_headers = {"Authorization": f"Bearer {t_reg.json()['access_token']}"}
@@ -552,7 +593,9 @@ class TestStudentsAndClassesRouter:
         headers = {"Authorization": f"Bearer {admin_token}"}
 
         # Create level
-        lvl_resp = await test_client.post("/api/v1/students/levels", json={"name": "Grade 5"}, headers=headers)
+        lvl_resp = await test_client.post(
+            "/api/v1/students/levels", json={"name": "Grade 5"}, headers=headers
+        )
         assert lvl_resp.status_code == 200
         lvl_id = lvl_resp.json()["level_id"]
 
@@ -567,17 +610,18 @@ class TestStudentsAndClassesRouter:
         t_id = teachers_list.json()[0]["id"]
 
         # Create Class
-        cls_payload = {
-            "name": "Class A",
-            "level_id": lvl_id,
-            "head_teacher_id": t_id
-        }
-        cls_resp = await test_client.post("/api/v1/students/classes", json=cls_payload, headers=headers)
+        cls_payload = {"name": "Class A", "level_id": lvl_id, "head_teacher_id": t_id}
+        cls_resp = await test_client.post(
+            "/api/v1/students/classes", json=cls_payload, headers=headers
+        )
         assert cls_resp.status_code == 200
         assert cls_resp.json()["name"] == "Class A"
 
-    async def test_duplicate_level_and_class_prevention(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
+    async def test_duplicate_level_and_class_prevention(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
         from app.core.config import TEACHER_INVITE_CODE
+
         # Same as above -- teacher exists only to supply a head_teacher_id;
         # level/class creation is school_admin-only.
         t_payload = {
@@ -585,24 +629,28 @@ class TestStudentsAndClassesRouter:
             "password": "pass",
             "role": "teacher",
             "tenant_id": "tenant_a",
-            "invite_code": TEACHER_INVITE_CODE
+            "invite_code": TEACHER_INVITE_CODE,
         }
         t_reg = await test_client.post("/api/v1/auth/register", json=t_payload)
-        t_headers = {"Authorization": f"Bearer {t_reg.json()['access_token']}"}
+        {"Authorization": f"Bearer {t_reg.json()['access_token']}"}
 
         admin_token = await register_school_admin(test_client, "admin_dup@school.com")
         headers = {"Authorization": f"Bearer {admin_token}"}
 
         # 1. Create a level
-        lvl_resp1 = await test_client.post("/api/v1/students/levels", json={"name": "Grade 6"}, headers=headers)
+        lvl_resp1 = await test_client.post(
+            "/api/v1/students/levels", json={"name": "Grade 6"}, headers=headers
+        )
         assert lvl_resp1.status_code == 200
         lvl_id1 = lvl_resp1.json()["level_id"]
 
         # 2. Try to create the same level (case-insensitive and trimmed)
-        lvl_resp2 = await test_client.post("/api/v1/students/levels", json={"name": "  grade 6  "}, headers=headers)
+        lvl_resp2 = await test_client.post(
+            "/api/v1/students/levels", json={"name": "  grade 6  "}, headers=headers
+        )
         assert lvl_resp2.status_code == 200
         lvl_id2 = lvl_resp2.json()["level_id"]
-        
+
         # They should return the exact same level_id
         assert lvl_id1 == lvl_id2
 
@@ -611,37 +659,36 @@ class TestStudentsAndClassesRouter:
         assert teachers_list.status_code == 200
         t_id = teachers_list.json()[0]["id"]
 
-        cls_payload1 = {
-            "name": "Class B",
-            "level_id": lvl_id1,
-            "head_teacher_id": t_id
-        }
-        cls_resp1 = await test_client.post("/api/v1/students/classes", json=cls_payload1, headers=headers)
+        cls_payload1 = {"name": "Class B", "level_id": lvl_id1, "head_teacher_id": t_id}
+        cls_resp1 = await test_client.post(
+            "/api/v1/students/classes", json=cls_payload1, headers=headers
+        )
         assert cls_resp1.status_code == 200
         cls_id1 = cls_resp1.json()["id"]
 
         # 4. Try to create the same class under same level (case-insensitive and trimmed)
-        cls_payload2 = {
-            "name": "  class b  ",
-            "level_id": lvl_id1,
-            "head_teacher_id": t_id
-        }
-        cls_resp2 = await test_client.post("/api/v1/students/classes", json=cls_payload2, headers=headers)
+        cls_payload2 = {"name": "  class b  ", "level_id": lvl_id1, "head_teacher_id": t_id}
+        cls_resp2 = await test_client.post(
+            "/api/v1/students/classes", json=cls_payload2, headers=headers
+        )
         assert cls_resp2.status_code == 200
         cls_id2 = cls_resp2.json()["id"]
 
         # They should return the exact same class ID
         assert cls_id1 == cls_id2
 
-    async def test_update_class_head_teacher(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
+    async def test_update_class_head_teacher(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
         from app.core.config import TEACHER_INVITE_CODE
+
         # Setup teacher 1 & teacher 2
         t1_payload = {
             "email": "head1@school.com",
             "password": "pass",
             "role": "teacher",
             "tenant_id": "tenant_a",
-            "invite_code": TEACHER_INVITE_CODE
+            "invite_code": TEACHER_INVITE_CODE,
         }
         t1_reg = await test_client.post("/api/v1/auth/register", json=t1_payload)
         t1_headers = {"Authorization": f"Bearer {t1_reg.json()['access_token']}"}
@@ -651,16 +698,18 @@ class TestStudentsAndClassesRouter:
             "password": "pass",
             "role": "teacher",
             "tenant_id": "tenant_a",
-            "invite_code": TEACHER_INVITE_CODE
+            "invite_code": TEACHER_INVITE_CODE,
         }
-        t2_reg = await test_client.post("/api/v1/auth/register", json=t2_payload)
+        await test_client.post("/api/v1/auth/register", json=t2_payload)
 
         admin_token = await register_school_admin(test_client, "admin_head_teacher@school.com")
         admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
         # Create level & class as school_admin -- a bare "teacher" can no
         # longer do either (Academic Administration Hub territory).
-        lvl_resp = await test_client.post("/api/v1/students/levels", json={"name": "Grade 10"}, headers=admin_headers)
+        lvl_resp = await test_client.post(
+            "/api/v1/students/levels", json={"name": "Grade 10"}, headers=admin_headers
+        )
         lvl_id = lvl_resp.json()["level_id"]
 
         teachers_list = await test_client.get("/api/v1/students/teachers", headers=admin_headers)
@@ -668,7 +717,11 @@ class TestStudentsAndClassesRouter:
         t1_id = next(t["id"] for t in t_objs if t["email"] == "head1@school.com")
         t2_id = next(t["id"] for t in t_objs if t["email"] == "head2@school.com")
 
-        cls_resp = await test_client.post("/api/v1/students/classes", json={"name": "Grade 10A", "level_id": lvl_id, "head_teacher_id": t1_id}, headers=admin_headers)
+        cls_resp = await test_client.post(
+            "/api/v1/students/classes",
+            json={"name": "Grade 10A", "level_id": lvl_id, "head_teacher_id": t1_id},
+            headers=admin_headers,
+        )
         assert cls_resp.status_code == 200
         cls_id = cls_resp.json()["id"]
         assert cls_resp.json()["head_teacher_id"] == t1_id
@@ -684,20 +737,27 @@ class TestStudentsAndClassesRouter:
         assert denied_resp.status_code == 403
 
         # school_admin can still update the class's head teacher.
-        update_resp = await test_client.put(f"/api/v1/students/classes/{cls_id}", json={"head_teacher_id": t2_id, "name": "Grade 10-A Updated"}, headers=admin_headers)
+        update_resp = await test_client.put(
+            f"/api/v1/students/classes/{cls_id}",
+            json={"head_teacher_id": t2_id, "name": "Grade 10-A Updated"},
+            headers=admin_headers,
+        )
         assert update_resp.status_code == 200
         assert update_resp.json()["head_teacher_id"] == t2_id
         assert update_resp.json()["name"] == "Grade 10-A Updated"
 
-    async def test_student_enrollments_and_approvals(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
+    async def test_student_enrollments_and_approvals(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
         from app.core.config import TEACHER_INVITE_CODE
+
         # 1. Setup teacher & class
         t_payload = {
             "email": "teacher@class.com",
             "password": "pass",
             "role": "teacher",
             "tenant_id": "tenant_a",
-            "invite_code": TEACHER_INVITE_CODE
+            "invite_code": TEACHER_INVITE_CODE,
         }
         t_reg = await test_client.post("/api/v1/auth/register", json=t_payload)
         t_headers = {"Authorization": f"Bearer {t_reg.json()['access_token']}"}
@@ -707,14 +767,18 @@ class TestStudentsAndClassesRouter:
         admin_token = await register_school_admin(test_client, "admin_enroll_approve@class.com")
         admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
-        lvl_resp = await test_client.post("/api/v1/students/levels", json={"name": "Grade 6"}, headers=admin_headers)
+        lvl_resp = await test_client.post(
+            "/api/v1/students/levels", json={"name": "Grade 6"}, headers=admin_headers
+        )
         lvl_id = lvl_resp.json()["level_id"]
 
         teachers_list = await test_client.get("/api/v1/students/teachers", headers=t_headers)
         t_id = teachers_list.json()[0]["id"]
 
         cls_payload = {"name": "Science B", "level_id": lvl_id, "head_teacher_id": t_id}
-        cls_resp = await test_client.post("/api/v1/students/classes", json=cls_payload, headers=admin_headers)
+        cls_resp = await test_client.post(
+            "/api/v1/students/classes", json=cls_payload, headers=admin_headers
+        )
         class_id = cls_resp.json()["id"]
 
         # 2. Setup Student
@@ -723,7 +787,7 @@ class TestStudentsAndClassesRouter:
             "password": "pass",
             "role": "student",
             "tenant_id": "tenant_a",
-            "invite_code": "regester123"
+            "invite_code": "regester123",
         }
         s_reg = await test_client.post("/api/v1/auth/register", json=s_payload)
         s_headers = {"Authorization": f"Bearer {s_reg.json()['access_token']}"}
@@ -740,10 +804,12 @@ class TestStudentsAndClassesRouter:
             "address": "Astrodome",
             "school_subsidy": 4.0,
             "date": datetime.now(UTC).isoformat(),
-            "class_mappings": [{
-                "class_id": class_id,
-                "ticket_price": 6.0,
-            }]
+            "class_mappings": [
+                {
+                    "class_id": class_id,
+                    "ticket_price": 6.0,
+                }
+            ],
         }
         event_resp = await test_client.post("/api/v1/events", json=event_payload, headers=t_headers)
         if event_resp.status_code != 200:
@@ -762,7 +828,7 @@ class TestStudentsAndClassesRouter:
             "password": "pass",
             "role": "parent",
             "tenant_id": "tenant_a",
-            "invite_code": "regester123"
+            "invite_code": "regester123",
         }
         p_reg = await test_client.post("/api/v1/auth/register", json=p_payload)
         p_headers = {"Authorization": f"Bearer {p_reg.json()['access_token']}"}
@@ -772,7 +838,7 @@ class TestStudentsAndClassesRouter:
         link_resp = await test_client.post(
             "/api/v1/students/link-parent",
             json={"student_id": student_id, "parent_id": parent_id},
-            headers=t_headers
+            headers=t_headers,
         )
         assert link_resp.status_code == 200
 
@@ -780,7 +846,7 @@ class TestStudentsAndClassesRouter:
         enroll_resp = await test_client.post(
             "/api/v1/students/enrollments",
             json={"student_id": student_id, "event_class_map_id": ecm_id},
-            headers=s_headers
+            headers=s_headers,
         )
         assert enroll_resp.status_code == 200
         assert enroll_resp.json()["state"] == "requested_by_student"
@@ -790,7 +856,7 @@ class TestStudentsAndClassesRouter:
         failed_app_resp = await test_client.post(
             f"/api/v1/students/enrollments/{enrollment_id}/approve",
             json={"state": "approved_by_teacher"},
-            headers=t_headers
+            headers=t_headers,
         )
         assert failed_app_resp.status_code == 400
         assert "must be approved by a parent" in failed_app_resp.json()["detail"]
@@ -799,7 +865,7 @@ class TestStudentsAndClassesRouter:
         parent_app_resp = await test_client.post(
             f"/api/v1/students/enrollments/{enrollment_id}/approve",
             json={"state": "approved_by_parent"},
-            headers=p_headers
+            headers=p_headers,
         )
         assert parent_app_resp.status_code == 200
         assert parent_app_resp.json()["state"] == "approved_by_parent"
@@ -808,7 +874,7 @@ class TestStudentsAndClassesRouter:
         app_resp = await test_client.post(
             f"/api/v1/students/enrollments/{enrollment_id}/approve",
             json={"state": "approved_by_teacher"},
-            headers=t_headers
+            headers=t_headers,
         )
         assert app_resp.status_code == 200
         assert app_resp.json()["state"] == "approved_by_teacher"
@@ -822,10 +888,16 @@ class TestStudentsAndClassesRouter:
         explicitly linked with can_approve=False ("non-custodial")."""
         from app.core.config import TEACHER_INVITE_CODE
 
-        t_reg = await test_client.post("/api/v1/auth/register", json={
-            "email": f"teacher_{tag}@class.com", "password": "pass", "role": "teacher",
-            "tenant_id": "tenant_a", "invite_code": TEACHER_INVITE_CODE,
-        })
+        t_reg = await test_client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": f"teacher_{tag}@class.com",
+                "password": "pass",
+                "role": "teacher",
+                "tenant_id": "tenant_a",
+                "invite_code": TEACHER_INVITE_CODE,
+            },
+        )
         t_headers = {"Authorization": f"Bearer {t_reg.json()['access_token']}"}
 
         # Level/class creation is school_admin-only (Academic Administration Hub
@@ -847,21 +919,34 @@ class TestStudentsAndClassesRouter:
         )
         class_id = cls_resp.json()["id"]
 
-        s_reg = await test_client.post("/api/v1/auth/register", json={
-            "email": f"student_{tag}@class.com", "password": "pass", "role": "student",
-            "tenant_id": "tenant_a", "invite_code": "regester123",
-        })
+        s_reg = await test_client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": f"student_{tag}@class.com",
+                "password": "pass",
+                "role": "student",
+                "tenant_id": "tenant_a",
+                "invite_code": "regester123",
+            },
+        )
         s_headers = {"Authorization": f"Bearer {s_reg.json()['access_token']}"}
         s_me = await test_client.get("/api/v1/auth/me", headers=s_headers)
         student_id = int(s_me.json()["user_id"])
         repo = TenantRepository(db_pool)
         await repo.create_student(student_id, f"Student {tag}", class_id)
 
-        event_resp = await test_client.post("/api/v1/events", json={
-            "title": f"Trip {tag}", "description": "", "address": "",
-            "school_subsidy": 0.0, "date": datetime.now(UTC).isoformat(),
-            "class_mappings": [{"class_id": class_id, "ticket_price": 5.0}],
-        }, headers=t_headers)
+        event_resp = await test_client.post(
+            "/api/v1/events",
+            json={
+                "title": f"Trip {tag}",
+                "description": "",
+                "address": "",
+                "school_subsidy": 0.0,
+                "date": datetime.now(UTC).isoformat(),
+                "class_mappings": [{"class_id": class_id, "ticket_price": 5.0}],
+            },
+            headers=t_headers,
+        )
         assert event_resp.status_code == 200, event_resp.text
         ecm_id = event_resp.json()["class_mappings"][0]["id"]
         event_id = event_resp.json()["id"]
@@ -870,12 +955,20 @@ class TestStudentsAndClassesRouter:
         # against a published event (see TenantService.enroll_student).
         await db_pool.execute("UPDATE event SET status = 'published' WHERE id = $1", event_id)
 
-        custodial_reg = await test_client.post("/api/v1/auth/register", json={
-            "email": f"custodial_{tag}@class.com", "password": "pass", "role": "parent",
-            "tenant_id": "tenant_a", "invite_code": "regester123",
-        })
+        custodial_reg = await test_client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": f"custodial_{tag}@class.com",
+                "password": "pass",
+                "role": "parent",
+                "tenant_id": "tenant_a",
+                "invite_code": "regester123",
+            },
+        )
         custodial_headers = {"Authorization": f"Bearer {custodial_reg.json()['access_token']}"}
-        custodial_id = int((await test_client.get("/api/v1/auth/me", headers=custodial_headers)).json()["user_id"])
+        custodial_id = int(
+            (await test_client.get("/api/v1/auth/me", headers=custodial_headers)).json()["user_id"]
+        )
         link1 = await test_client.post(
             "/api/v1/students/link-parent",
             json={"student_id": student_id, "parent_id": custodial_id, "can_approve": True},
@@ -883,25 +976,42 @@ class TestStudentsAndClassesRouter:
         )
         assert link1.status_code == 200, link1.text
 
-        noncustodial_reg = await test_client.post("/api/v1/auth/register", json={
-            "email": f"noncustodial_{tag}@class.com", "password": "pass", "role": "parent",
-            "tenant_id": "tenant_a", "invite_code": "regester123",
-        })
-        noncustodial_headers = {"Authorization": f"Bearer {noncustodial_reg.json()['access_token']}"}
-        noncustodial_id = int((await test_client.get("/api/v1/auth/me", headers=noncustodial_headers)).json()["user_id"])
+        noncustodial_reg = await test_client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": f"noncustodial_{tag}@class.com",
+                "password": "pass",
+                "role": "parent",
+                "tenant_id": "tenant_a",
+                "invite_code": "regester123",
+            },
+        )
+        noncustodial_headers = {
+            "Authorization": f"Bearer {noncustodial_reg.json()['access_token']}"
+        }
+        noncustodial_id = int(
+            (await test_client.get("/api/v1/auth/me", headers=noncustodial_headers)).json()[
+                "user_id"
+            ]
+        )
         link2 = await test_client.post(
             "/api/v1/students/link-parent",
             json={
-                "student_id": student_id, "parent_id": noncustodial_id,
-                "relationship_type": "non-custodial parent", "can_approve": False,
+                "student_id": student_id,
+                "parent_id": noncustodial_id,
+                "relationship_type": "non-custodial parent",
+                "can_approve": False,
             },
             headers=t_headers,
         )
         assert link2.status_code == 200, link2.text
 
         return {
-            "t_headers": t_headers, "s_headers": s_headers, "student_id": student_id,
-            "ecm_id": ecm_id, "custodial_headers": custodial_headers,
+            "t_headers": t_headers,
+            "s_headers": s_headers,
+            "student_id": student_id,
+            "ecm_id": ecm_id,
+            "custodial_headers": custodial_headers,
             "noncustodial_headers": noncustodial_headers,
         }
 
@@ -911,7 +1021,9 @@ class TestStudentsAndClassesRouter:
         """invariant: a linked parent explicitly marked can_approve=False
         must not be able to approve or reject a paid trip -- being linked at
         all used to be the only thing that mattered."""
-        ctx = await self._setup_event_with_custodial_and_noncustodial_parent(test_client, db_pool, "nc1")
+        ctx = await self._setup_event_with_custodial_and_noncustodial_parent(
+            test_client, db_pool, "nc1"
+        )
 
         enroll_resp = await test_client.post(
             "/api/v1/students/enrollments",
@@ -945,7 +1057,9 @@ class TestStudentsAndClassesRouter:
         must land in requested_by_student (awaiting an authorized parent),
         not skip straight to approved_by_parent the way any linked parent
         used to."""
-        ctx = await self._setup_event_with_custodial_and_noncustodial_parent(test_client, db_pool, "nc2")
+        ctx = await self._setup_event_with_custodial_and_noncustodial_parent(
+            test_client, db_pool, "nc2"
+        )
 
         resp = await test_client.post(
             "/api/v1/students/enrollments",
@@ -961,7 +1075,9 @@ class TestStudentsAndClassesRouter:
         """invariant: cancelling is the same authority as approving -- a
         parent who can't consent to a trip must not be able to pull it
         after a custodial parent already approved it."""
-        ctx = await self._setup_event_with_custodial_and_noncustodial_parent(test_client, db_pool, "nc3")
+        ctx = await self._setup_event_with_custodial_and_noncustodial_parent(
+            test_client, db_pool, "nc3"
+        )
 
         enroll_resp = await test_client.post(
             "/api/v1/students/enrollments",
@@ -977,15 +1093,18 @@ class TestStudentsAndClassesRouter:
         )
         assert blocked.status_code == 403, blocked.text
 
-    async def test_parent_direct_enrollment_and_teacher_approval(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
+    async def test_parent_direct_enrollment_and_teacher_approval(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
         from app.core.config import TEACHER_INVITE_CODE
+
         # 1. Setup teacher & class
         t_payload = {
             "email": "teacher2@class.com",
             "password": "pass",
             "role": "teacher",
             "tenant_id": "tenant_a",
-            "invite_code": TEACHER_INVITE_CODE
+            "invite_code": TEACHER_INVITE_CODE,
         }
         t_reg = await test_client.post("/api/v1/auth/register", json=t_payload)
         t_headers = {"Authorization": f"Bearer {t_reg.json()['access_token']}"}
@@ -995,14 +1114,18 @@ class TestStudentsAndClassesRouter:
         admin_token = await register_school_admin(test_client, "admin_parent_direct@class.com")
         admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
-        lvl_resp = await test_client.post("/api/v1/students/levels", json={"name": "Grade 7"}, headers=admin_headers)
+        lvl_resp = await test_client.post(
+            "/api/v1/students/levels", json={"name": "Grade 7"}, headers=admin_headers
+        )
         lvl_id = lvl_resp.json()["level_id"]
 
         teachers_list = await test_client.get("/api/v1/students/teachers", headers=t_headers)
         t_id = teachers_list.json()[0]["id"]
 
         cls_payload = {"name": "Science C", "level_id": lvl_id, "head_teacher_id": t_id}
-        cls_resp = await test_client.post("/api/v1/students/classes", json=cls_payload, headers=admin_headers)
+        cls_resp = await test_client.post(
+            "/api/v1/students/classes", json=cls_payload, headers=admin_headers
+        )
         class_id = cls_resp.json()["id"]
 
         # 2. Setup Student
@@ -1011,7 +1134,7 @@ class TestStudentsAndClassesRouter:
             "password": "pass",
             "role": "student",
             "tenant_id": "tenant_a",
-            "invite_code": "regester123"
+            "invite_code": "regester123",
         }
         s_reg = await test_client.post("/api/v1/auth/register", json=s_payload)
         s_headers = {"Authorization": f"Bearer {s_reg.json()['access_token']}"}
@@ -1028,7 +1151,7 @@ class TestStudentsAndClassesRouter:
             "password": "pass",
             "role": "parent",
             "tenant_id": "tenant_a",
-            "invite_code": "regester123"
+            "invite_code": "regester123",
         }
         p_reg = await test_client.post("/api/v1/auth/register", json=p_payload)
         p_headers = {"Authorization": f"Bearer {p_reg.json()['access_token']}"}
@@ -1039,7 +1162,7 @@ class TestStudentsAndClassesRouter:
         link_resp = await test_client.post(
             "/api/v1/students/link-parent",
             json={"student_id": student_id, "parent_id": parent_id},
-            headers=t_headers
+            headers=t_headers,
         )
         assert link_resp.status_code == 200
 
@@ -1049,10 +1172,12 @@ class TestStudentsAndClassesRouter:
             "address": "Astrodome",
             "school_subsidy": 5.0,
             "date": datetime.now(UTC).isoformat(),
-            "class_mappings": [{
-                "class_id": class_id,
-                "ticket_price": 7.0,
-            }]
+            "class_mappings": [
+                {
+                    "class_id": class_id,
+                    "ticket_price": 7.0,
+                }
+            ],
         }
         event_resp = await test_client.post("/api/v1/events", json=event_payload, headers=t_headers)
         assert event_resp.status_code == 200
@@ -1068,7 +1193,7 @@ class TestStudentsAndClassesRouter:
         bad_enroll_resp = await test_client.post(
             "/api/v1/students/enrollments",
             json={"student_id": 9999, "event_class_map_id": ecm_id},
-            headers=p_headers
+            headers=p_headers,
         )
         assert bad_enroll_resp.status_code == 403
 
@@ -1076,7 +1201,7 @@ class TestStudentsAndClassesRouter:
         enroll_resp = await test_client.post(
             "/api/v1/students/enrollments",
             json={"student_id": student_id, "event_class_map_id": ecm_id},
-            headers=p_headers
+            headers=p_headers,
         )
         assert enroll_resp.status_code == 200
         assert enroll_resp.json()["state"] == "approved_by_parent"
@@ -1086,7 +1211,7 @@ class TestStudentsAndClassesRouter:
         bad_approve_resp = await test_client.post(
             f"/api/v1/students/enrollments/{enrollment_id}/approve",
             json={"state": "approved_by_parent"},
-            headers=s_headers  # student doesn't have parent relationship
+            headers=s_headers,  # student doesn't have parent relationship
         )
         assert bad_approve_resp.status_code == 403
 
@@ -1094,20 +1219,23 @@ class TestStudentsAndClassesRouter:
         app_resp = await test_client.post(
             f"/api/v1/students/enrollments/{enrollment_id}/approve",
             json={"state": "approved_by_teacher"},
-            headers=t_headers
+            headers=t_headers,
         )
         assert app_resp.status_code == 200
         assert app_resp.json()["state"] == "approved_by_teacher"
 
-    async def test_student_class_match_and_one_time_enrollment(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
+    async def test_student_class_match_and_one_time_enrollment(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
         from app.core.config import TEACHER_INVITE_CODE
+
         # 1. Setup teacher, level, and Class A
         t_payload = {
             "email": "teacher3@class.com",
             "password": "pass",
             "role": "teacher",
             "tenant_id": "tenant_a",
-            "invite_code": TEACHER_INVITE_CODE
+            "invite_code": TEACHER_INVITE_CODE,
         }
         t_reg = await test_client.post("/api/v1/auth/register", json=t_payload)
         t_headers = {"Authorization": f"Bearer {t_reg.json()['access_token']}"}
@@ -1117,16 +1245,26 @@ class TestStudentsAndClassesRouter:
         admin_token = await register_school_admin(test_client, "admin_class_match@class.com")
         admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
-        lvl_resp = await test_client.post("/api/v1/students/levels", json={"name": "Grade 8"}, headers=admin_headers)
+        lvl_resp = await test_client.post(
+            "/api/v1/students/levels", json={"name": "Grade 8"}, headers=admin_headers
+        )
         lvl_id = lvl_resp.json()["level_id"]
 
         teachers_list = await test_client.get("/api/v1/students/teachers", headers=t_headers)
         t_id = teachers_list.json()[0]["id"]
 
-        cls_resp1 = await test_client.post("/api/v1/students/classes", json={"name": "Science D", "level_id": lvl_id, "head_teacher_id": t_id}, headers=admin_headers)
+        cls_resp1 = await test_client.post(
+            "/api/v1/students/classes",
+            json={"name": "Science D", "level_id": lvl_id, "head_teacher_id": t_id},
+            headers=admin_headers,
+        )
         class_id_1 = cls_resp1.json()["id"]
 
-        cls_resp2 = await test_client.post("/api/v1/students/classes", json={"name": "Science E", "level_id": lvl_id, "head_teacher_id": t_id}, headers=admin_headers)
+        cls_resp2 = await test_client.post(
+            "/api/v1/students/classes",
+            json={"name": "Science E", "level_id": lvl_id, "head_teacher_id": t_id},
+            headers=admin_headers,
+        )
         class_id_2 = cls_resp2.json()["id"]
 
         # 2. Setup Student (assigned to Class A/class_id_1)
@@ -1135,7 +1273,7 @@ class TestStudentsAndClassesRouter:
             "password": "pass",
             "role": "student",
             "tenant_id": "tenant_a",
-            "invite_code": "regester123"
+            "invite_code": "regester123",
         }
         s_reg = await test_client.post("/api/v1/auth/register", json=s_payload)
         s_headers = {"Authorization": f"Bearer {s_reg.json()['access_token']}"}
@@ -1159,13 +1297,13 @@ class TestStudentsAndClassesRouter:
                 {
                     "class_id": class_id_2,
                     "ticket_price": 6.0,
-                }
-            ]
+                },
+            ],
         }
         event_resp = await test_client.post("/api/v1/events", json=event_payload, headers=t_headers)
         assert event_resp.status_code == 200
         mappings = event_resp.json()["class_mappings"]
-        
+
         # Identify mapping IDs
         map_id_1 = next(m["id"] for m in mappings if m["class_id"] == class_id_1)
         map_id_2 = next(m["id"] for m in mappings if m["class_id"] == class_id_2)
@@ -1185,7 +1323,7 @@ class TestStudentsAndClassesRouter:
         bad_enroll_resp = await test_client.post(
             "/api/v1/students/enrollments",
             json={"student_id": student_id, "event_class_map_id": map_id_2},
-            headers=s_headers
+            headers=s_headers,
         )
         assert bad_enroll_resp.status_code == 400
         assert "not in the class mapped to this event" in bad_enroll_resp.json()["detail"]
@@ -1194,7 +1332,7 @@ class TestStudentsAndClassesRouter:
         good_enroll_resp = await test_client.post(
             "/api/v1/students/enrollments",
             json={"student_id": student_id, "event_class_map_id": map_id_1},
-            headers=s_headers
+            headers=s_headers,
         )
         assert good_enroll_resp.status_code == 200
 
@@ -1202,7 +1340,7 @@ class TestStudentsAndClassesRouter:
         dup_enroll_resp = await test_client.post(
             "/api/v1/students/enrollments",
             json={"student_id": student_id, "event_class_map_id": map_id_1},
-            headers=s_headers
+            headers=s_headers,
         )
         assert dup_enroll_resp.status_code == 200
         assert dup_enroll_resp.json()["id"] == good_enroll_resp.json()["id"]
@@ -1211,20 +1349,23 @@ class TestStudentsAndClassesRouter:
         dup_event_resp = await test_client.post(
             "/api/v1/students/enrollments",
             json={"student_id": student_id, "event_class_map_id": map_id_2},
-            headers=s_headers
+            headers=s_headers,
         )
         assert dup_event_resp.status_code == 400
         assert "already enrolled in this event" in dup_event_resp.json()["detail"]
 
-    async def test_linked_profile_details(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
+    async def test_linked_profile_details(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
         from app.core.config import TEACHER_INVITE_CODE
+
         # 1. Setup teacher and class
         t_payload = {
             "email": "teacher4@class.com",
             "password": "pass",
             "role": "teacher",
             "tenant_id": "tenant_a",
-            "invite_code": TEACHER_INVITE_CODE
+            "invite_code": TEACHER_INVITE_CODE,
         }
         t_reg = await test_client.post("/api/v1/auth/register", json=t_payload)
         t_headers = {"Authorization": f"Bearer {t_reg.json()['access_token']}"}
@@ -1234,13 +1375,19 @@ class TestStudentsAndClassesRouter:
         admin_token = await register_school_admin(test_client, "admin_linked_profile@class.com")
         admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
-        lvl_resp = await test_client.post("/api/v1/students/levels", json={"name": "Grade 9"}, headers=admin_headers)
+        lvl_resp = await test_client.post(
+            "/api/v1/students/levels", json={"name": "Grade 9"}, headers=admin_headers
+        )
         lvl_id = lvl_resp.json()["level_id"]
 
         t_me = await test_client.get("/api/v1/auth/me", headers=t_headers)
         t_id = int(t_me.json()["user_id"])
 
-        cls_resp = await test_client.post("/api/v1/students/classes", json={"name": "Science G", "level_id": lvl_id, "head_teacher_id": t_id}, headers=admin_headers)
+        cls_resp = await test_client.post(
+            "/api/v1/students/classes",
+            json={"name": "Science G", "level_id": lvl_id, "head_teacher_id": t_id},
+            headers=admin_headers,
+        )
         class_id = cls_resp.json()["id"]
 
         # 2. Register parent
@@ -1249,7 +1396,7 @@ class TestStudentsAndClassesRouter:
             "password": "pass",
             "role": "parent",
             "tenant_id": "tenant_a",
-            "invite_code": "regester123"
+            "invite_code": "regester123",
         }
         p_reg = await test_client.post("/api/v1/auth/register", json=p_payload)
         p_headers = {"Authorization": f"Bearer {p_reg.json()['access_token']}"}
@@ -1262,7 +1409,7 @@ class TestStudentsAndClassesRouter:
             "password": "pass",
             "role": "student",
             "tenant_id": "tenant_a",
-            "invite_code": "regester123"
+            "invite_code": "regester123",
         }
         s_reg = await test_client.post("/api/v1/auth/register", json=s_payload)
         s_headers = {"Authorization": f"Bearer {s_reg.json()['access_token']}"}
@@ -1277,7 +1424,7 @@ class TestStudentsAndClassesRouter:
         link_resp = await test_client.post(
             "/api/v1/students/link-parent",
             json={"student_id": student_id, "parent_id": parent_id},
-            headers=t_headers
+            headers=t_headers,
         )
         assert link_resp.status_code == 200
 
@@ -1302,15 +1449,18 @@ class TestStudentsAndClassesRouter:
         t_prof = t_prof_resp.json()
         assert t_prof["class_name"] == "Science G (Grade 9)"
 
-    async def test_parent_two_children_different_classes_only_enrolls_eligible_child(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
+    async def test_parent_two_children_different_classes_only_enrolls_eligible_child(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
         from app.core.config import TEACHER_INVITE_CODE
+
         # 1. Setup staff & 2 classes: Class A and Class B
         t_payload = {
             "email": "teacher_two_kids@school.com",
             "password": "pass",
             "role": "teacher",
             "tenant_id": "tenant_a",
-            "invite_code": TEACHER_INVITE_CODE
+            "invite_code": TEACHER_INVITE_CODE,
         }
         t_reg = await test_client.post("/api/v1/auth/register", json=t_payload)
         t_headers = {"Authorization": f"Bearer {t_reg.json()['access_token']}"}
@@ -1320,25 +1470,53 @@ class TestStudentsAndClassesRouter:
         admin_token = await register_school_admin(test_client, "admin_two_kids@school.com")
         admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
-        lvl_resp = await test_client.post("/api/v1/students/levels", json={"name": "Grade 5"}, headers=admin_headers)
+        lvl_resp = await test_client.post(
+            "/api/v1/students/levels", json={"name": "Grade 5"}, headers=admin_headers
+        )
         lvl_id = lvl_resp.json()["level_id"]
 
         teachers_list = await test_client.get("/api/v1/students/teachers", headers=t_headers)
         t_id = teachers_list.json()[0]["id"]
 
-        cls1_resp = await test_client.post("/api/v1/students/classes", json={"name": "Class 5A", "level_id": lvl_id, "head_teacher_id": t_id}, headers=admin_headers)
+        cls1_resp = await test_client.post(
+            "/api/v1/students/classes",
+            json={"name": "Class 5A", "level_id": lvl_id, "head_teacher_id": t_id},
+            headers=admin_headers,
+        )
         class_a_id = cls1_resp.json()["id"]
 
-        cls2_resp = await test_client.post("/api/v1/students/classes", json={"name": "Class 5B", "level_id": lvl_id, "head_teacher_id": t_id}, headers=admin_headers)
+        cls2_resp = await test_client.post(
+            "/api/v1/students/classes",
+            json={"name": "Class 5B", "level_id": lvl_id, "head_teacher_id": t_id},
+            headers=admin_headers,
+        )
         class_b_id = cls2_resp.json()["id"]
 
         # 2. Setup 2 Students (Child 1 in Class A, Child 2 in Class B)
-        s1_reg = await test_client.post("/api/v1/auth/register", json={"email": "child1@school.com", "password": "pass", "role": "student", "tenant_id": "tenant_a", "invite_code": "regester123"})
+        s1_reg = await test_client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "child1@school.com",
+                "password": "pass",
+                "role": "student",
+                "tenant_id": "tenant_a",
+                "invite_code": "regester123",
+            },
+        )
         s1_headers = {"Authorization": f"Bearer {s1_reg.json()['access_token']}"}
         s1_me = await test_client.get("/api/v1/auth/me", headers=s1_headers)
         child1_id = int(s1_me.json()["user_id"])
 
-        s2_reg = await test_client.post("/api/v1/auth/register", json={"email": "child2@school.com", "password": "pass", "role": "student", "tenant_id": "tenant_a", "invite_code": "regester123"})
+        s2_reg = await test_client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "child2@school.com",
+                "password": "pass",
+                "role": "student",
+                "tenant_id": "tenant_a",
+                "invite_code": "regester123",
+            },
+        )
         s2_headers = {"Authorization": f"Bearer {s2_reg.json()['access_token']}"}
         s2_me = await test_client.get("/api/v1/auth/me", headers=s2_headers)
         child2_id = int(s2_me.json()["user_id"])
@@ -1348,7 +1526,16 @@ class TestStudentsAndClassesRouter:
         await repo.create_student(child2_id, "Sami (Class B)", class_b_id)
 
         # 3. Setup Parent linked to BOTH Child 1 and Child 2
-        p_reg = await test_client.post("/api/v1/auth/register", json={"email": "parent_two_kids@school.com", "password": "pass", "role": "parent", "tenant_id": "tenant_a", "invite_code": "regester123"})
+        p_reg = await test_client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "parent_two_kids@school.com",
+                "password": "pass",
+                "role": "parent",
+                "tenant_id": "tenant_a",
+                "invite_code": "regester123",
+            },
+        )
         p_headers = {"Authorization": f"Bearer {p_reg.json()['access_token']}"}
         p_me = await test_client.get("/api/v1/auth/me", headers=p_headers)
         parent_id = int(p_me.json()["user_id"])
@@ -1364,7 +1551,7 @@ class TestStudentsAndClassesRouter:
             "address": "Science Museum",
             "school_subsidy": 0.0,
             "date": datetime.now(UTC).isoformat(),
-            "class_mappings": [{"class_id": class_a_id, "ticket_price": 15.0}]
+            "class_mappings": [{"class_id": class_a_id, "ticket_price": 15.0}],
         }
         ev_resp = await test_client.post("/api/v1/events", json=event_payload, headers=t_headers)
         assert ev_resp.status_code == 200
@@ -1378,7 +1565,7 @@ class TestStudentsAndClassesRouter:
         pub_events_resp = await test_client.get("/api/v1/events/published", headers=p_headers)
         assert pub_events_resp.status_code == 200
         pub_events = pub_events_resp.json()
-        
+
         matched_ev = next((e for e in pub_events if e["id"] == event_id), None)
         assert matched_ev is not None
         assert len(matched_ev["class_mappings"]) == 1
@@ -1388,7 +1575,7 @@ class TestStudentsAndClassesRouter:
         enroll_c1 = await test_client.post(
             "/api/v1/students/enrollments",
             json={"student_id": child1_id, "event_class_map_id": class_a_map_id},
-            headers=p_headers
+            headers=p_headers,
         )
         assert enroll_c1.status_code == 200
         assert enroll_c1.json()["state"] == "approved_by_parent"
@@ -1397,12 +1584,14 @@ class TestStudentsAndClassesRouter:
         enroll_c2 = await test_client.post(
             "/api/v1/students/enrollments",
             json={"student_id": child2_id, "event_class_map_id": class_a_map_id},
-            headers=p_headers
+            headers=p_headers,
         )
         assert enroll_c2.status_code == 400
         assert "not in the class" in enroll_c2.json()["detail"].lower()
 
-    async def test_reassign_and_bulk_enroll_use_undoubled_paths(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
+    async def test_reassign_and_bulk_enroll_use_undoubled_paths(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
         """Regression test: these two routes used to be registered at
         /api/v1/students/students/... (doubled segment, since router_gated
         already carries the /api/v1/students prefix) and were unreachable at
@@ -1414,7 +1603,7 @@ class TestStudentsAndClassesRouter:
             "password": "pass",
             "role": "teacher",
             "tenant_id": "tenant_a",
-            "invite_code": TEACHER_INVITE_CODE
+            "invite_code": TEACHER_INVITE_CODE,
         }
         t_reg = await test_client.post("/api/v1/auth/register", json=t_payload)
         t_headers = {"Authorization": f"Bearer {t_reg.json()['access_token']}"}
@@ -1428,14 +1617,24 @@ class TestStudentsAndClassesRouter:
         admin_token = await register_school_admin(test_client, "admin_paths@class.com")
         admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
-        lvl_resp = await test_client.post("/api/v1/students/levels", json={"name": "Grade 4"}, headers=admin_headers)
+        lvl_resp = await test_client.post(
+            "/api/v1/students/levels", json={"name": "Grade 4"}, headers=admin_headers
+        )
         lvl_id = lvl_resp.json()["level_id"]
         teachers_list = await test_client.get("/api/v1/students/teachers", headers=t_headers)
         t_id = teachers_list.json()[0]["id"]
 
-        cls_a = await test_client.post("/api/v1/students/classes", json={"name": "Path A", "level_id": lvl_id, "head_teacher_id": t_id}, headers=admin_headers)
+        cls_a = await test_client.post(
+            "/api/v1/students/classes",
+            json={"name": "Path A", "level_id": lvl_id, "head_teacher_id": t_id},
+            headers=admin_headers,
+        )
         class_a_id = cls_a.json()["id"]
-        cls_b = await test_client.post("/api/v1/students/classes", json={"name": "Path B", "level_id": lvl_id, "head_teacher_id": t_id}, headers=admin_headers)
+        cls_b = await test_client.post(
+            "/api/v1/students/classes",
+            json={"name": "Path B", "level_id": lvl_id, "head_teacher_id": t_id},
+            headers=admin_headers,
+        )
         class_b_id = cls_b.json()["id"]
 
         s_payload = {
@@ -1443,10 +1642,12 @@ class TestStudentsAndClassesRouter:
             "password": "pass",
             "role": "student",
             "tenant_id": "tenant_a",
-            "invite_code": "regester123"
+            "invite_code": "regester123",
         }
         s_reg = await test_client.post("/api/v1/auth/register", json=s_payload)
-        s_me = await test_client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {s_reg.json()['access_token']}"})
+        s_me = await test_client.get(
+            "/api/v1/auth/me", headers={"Authorization": f"Bearer {s_reg.json()['access_token']}"}
+        )
         student_id = int(s_me.json()["user_id"])
 
         repo = TenantRepository(db_pool)
@@ -1454,48 +1655,52 @@ class TestStudentsAndClassesRouter:
 
         # The correct, non-doubled path must work.
         reassign_resp = await test_client.put(
-            f"/api/v1/students/{student_id}/class", json={"class_id": class_b_id}, headers=admin_headers
+            f"/api/v1/students/{student_id}/class",
+            json={"class_id": class_b_id},
+            headers=admin_headers,
         )
         assert reassign_resp.status_code == 200
 
         bulk_resp = await test_client.post(
             "/api/v1/students/bulk-enroll",
             json={"student_ids": [student_id], "class_id": class_a_id},
-            headers=admin_headers
+            headers=admin_headers,
         )
         assert bulk_resp.status_code == 200
         assert bulk_resp.json()["enrolled_count"] == 1
 
         # The old, doubled path must no longer resolve to anything.
         stale_reassign_resp = await test_client.put(
-            f"/api/v1/students/students/{student_id}/class", json={"class_id": class_a_id}, headers=admin_headers
+            f"/api/v1/students/students/{student_id}/class",
+            json={"class_id": class_a_id},
+            headers=admin_headers,
         )
         assert stale_reassign_resp.status_code == 404
 
         stale_bulk_resp = await test_client.post(
             "/api/v1/students/students/bulk-enroll",
             json={"student_ids": [student_id], "class_id": class_a_id},
-            headers=admin_headers
+            headers=admin_headers,
         )
         assert stale_bulk_resp.status_code == 404
-
-
-
 
 
 # =============================================================================
 # Notifications Tests
 # =============================================================================
 class TestNotificationsRouter:
-    async def test_notification_delivery(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
+    async def test_notification_delivery(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
         from app.core.config import TEACHER_INVITE_CODE
+
         # 1. Setup teacher and class
         t_payload = {
             "email": "teacher@notif.com",
             "password": "pass",
             "role": "teacher",
             "tenant_id": "tenant_a",
-            "invite_code": TEACHER_INVITE_CODE
+            "invite_code": TEACHER_INVITE_CODE,
         }
         t_reg = await test_client.post("/api/v1/auth/register", json=t_payload)
         t_headers = {"Authorization": f"Bearer {t_reg.json()['access_token']}"}
@@ -1505,14 +1710,18 @@ class TestNotificationsRouter:
         admin_token = await register_school_admin(test_client, "admin_notif@notif.com")
         admin_headers = {"Authorization": f"Bearer {admin_token}"}
 
-        lvl_resp = await test_client.post("/api/v1/students/levels", json={"name": "Grade 7"}, headers=admin_headers)
+        lvl_resp = await test_client.post(
+            "/api/v1/students/levels", json={"name": "Grade 7"}, headers=admin_headers
+        )
         lvl_id = lvl_resp.json()["level_id"]
 
         teachers_list = await test_client.get("/api/v1/students/teachers", headers=t_headers)
         t_id = teachers_list.json()[0]["id"]
 
         cls_payload = {"name": "Science C", "level_id": lvl_id, "head_teacher_id": t_id}
-        cls_resp = await test_client.post("/api/v1/students/classes", json=cls_payload, headers=admin_headers)
+        cls_resp = await test_client.post(
+            "/api/v1/students/classes", json=cls_payload, headers=admin_headers
+        )
         class_id = cls_resp.json()["id"]
 
         # 2. Setup Student
@@ -1521,7 +1730,7 @@ class TestNotificationsRouter:
             "password": "pass",
             "role": "student",
             "tenant_id": "tenant_a",
-            "invite_code": "regester123"
+            "invite_code": "regester123",
         }
         s_reg = await test_client.post("/api/v1/auth/register", json=s_payload)
         s_headers = {"Authorization": f"Bearer {s_reg.json()['access_token']}"}
@@ -1538,11 +1747,7 @@ class TestNotificationsRouter:
             "address": "Ocean Harbor",
             "school_subsidy": 0.0,
             "date": datetime.now(UTC).isoformat(),
-            "class_mappings": [{
-                "class_id": class_id,
-                "ticket_price": 0.0,
-                "costbudget_id": None
-            }]
+            "class_mappings": [{"class_id": class_id, "ticket_price": 0.0, "costbudget_id": None}],
         }
         await test_client.post("/api/v1/events", json=event_payload, headers=t_headers)
 
@@ -1553,7 +1758,9 @@ class TestNotificationsRouter:
         notif_id = notif_resp.json()["notifications"][0]["id"]
 
         # Mark read
-        read_resp = await test_client.post(f"/api/v1/notifications/{notif_id}/read", headers=s_headers)
+        read_resp = await test_client.post(
+            f"/api/v1/notifications/{notif_id}/read", headers=s_headers
+        )
         assert read_resp.status_code == 200
 
 
@@ -1561,15 +1768,18 @@ class TestNotificationsRouter:
 # PII Student Health & Records
 # =============================================================================
 class TestStudentHealthRouter:
-    async def test_health_records_pii(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
+    async def test_health_records_pii(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
         from app.core.config import TEACHER_INVITE_CODE
+
         # Setup teacher
         t_payload = {
             "email": "teacher@health.com",
             "password": "pass",
             "role": "teacher",
             "tenant_id": "tenant_a",
-            "invite_code": TEACHER_INVITE_CODE
+            "invite_code": TEACHER_INVITE_CODE,
         }
         t_reg = await test_client.post("/api/v1/auth/register", json=t_payload)
         t_headers = {"Authorization": f"Bearer {t_reg.json()['access_token']}"}
@@ -1580,19 +1790,23 @@ class TestStudentHealthRouter:
             "password": "pass",
             "role": "student",
             "tenant_id": "tenant_a",
-            "invite_code": "regester123"
+            "invite_code": "regester123",
         }
         s_reg = await test_client.post("/api/v1/auth/register", json=s_payload)
-        s_me = await test_client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {s_reg.json()['access_token']}"})
+        s_me = await test_client.get(
+            "/api/v1/auth/me", headers={"Authorization": f"Bearer {s_reg.json()['access_token']}"}
+        )
         student_id = int(s_me.json()["user_id"])
 
         # Insert health record
         h_payload = {
             "national_id": "NAT-12345",
             "medical_conditions": "Allergy to peanuts",
-            "emergency_contact": "+1-202-555-0143"
+            "emergency_contact": "+1-202-555-0143",
         }
-        h_resp = await test_client.post(f"/api/v1/students/{student_id}/health", json=h_payload, headers=t_headers)
+        h_resp = await test_client.post(
+            f"/api/v1/students/{student_id}/health", json=h_payload, headers=t_headers
+        )
         assert h_resp.status_code == 200
 
         # Retrieve masked
@@ -1603,15 +1817,18 @@ class TestStudentHealthRouter:
 
 
 class TestEventUpdateRouter:
-    async def test_update_event_and_class_mappings(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
+    async def test_update_event_and_class_mappings(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
         from app.core.config import TEACHER_INVITE_CODE
+
         # Setup teacher
         t_payload = {
             "email": "teacher@updateevent.com",
             "password": "pass",
             "role": "teacher",
             "tenant_id": "tenant_a",
-            "invite_code": TEACHER_INVITE_CODE
+            "invite_code": TEACHER_INVITE_CODE,
         }
         t_reg = await test_client.post("/api/v1/auth/register", json=t_payload)
         t_headers = {"Authorization": f"Bearer {t_reg.json()['access_token']}"}
@@ -1623,14 +1840,18 @@ class TestEventUpdateRouter:
         a_headers = {"Authorization": f"Bearer {a_token}"}
 
         # Setup Class
-        lvl_resp = await test_client.post("/api/v1/students/levels", json={"name": "Grade 8"}, headers=a_headers)
+        lvl_resp = await test_client.post(
+            "/api/v1/students/levels", json={"name": "Grade 8"}, headers=a_headers
+        )
         lvl_id = lvl_resp.json()["level_id"]
 
         teachers_list = await test_client.get("/api/v1/students/teachers", headers=t_headers)
         t_id = teachers_list.json()[0]["id"]
 
         cls_payload = {"name": "Science D", "level_id": lvl_id, "head_teacher_id": t_id}
-        cls_resp = await test_client.post("/api/v1/students/classes", json=cls_payload, headers=a_headers)
+        cls_resp = await test_client.post(
+            "/api/v1/students/classes", json=cls_payload, headers=a_headers
+        )
         class_id = cls_resp.json()["id"]
 
         # Create Event
@@ -1640,12 +1861,16 @@ class TestEventUpdateRouter:
             "address": "Cave",
             "school_subsidy": 10.0,
             "date": datetime.now(UTC).isoformat(),
-            "class_mappings": [{
-                "class_id": class_id,
-                "ticket_price": 5.0,
-            }]
+            "class_mappings": [
+                {
+                    "class_id": class_id,
+                    "ticket_price": 5.0,
+                }
+            ],
         }
-        create_resp = await test_client.post("/api/v1/events", json=event_payload, headers=a_headers)
+        create_resp = await test_client.post(
+            "/api/v1/events", json=event_payload, headers=a_headers
+        )
         assert create_resp.status_code == 200
         event_id = create_resp.json()["id"]
 
@@ -1656,12 +1881,16 @@ class TestEventUpdateRouter:
             "address": "Mountain",
             "school_subsidy": 25.0,
             "date": datetime.now(UTC).isoformat(),
-            "class_mappings": [{
-                "class_id": class_id,
-                "ticket_price": 15.0,
-            }]
+            "class_mappings": [
+                {
+                    "class_id": class_id,
+                    "ticket_price": 15.0,
+                }
+            ],
         }
-        update_resp = await test_client.put(f"/api/v1/events/{event_id}", json=update_payload, headers=a_headers)
+        update_resp = await test_client.put(
+            f"/api/v1/events/{event_id}", json=update_payload, headers=a_headers
+        )
         assert update_resp.status_code == 200
 
         updated_event = update_resp.json()
@@ -1670,7 +1899,7 @@ class TestEventUpdateRouter:
         assert updated_event["address"] == "Mountain"
         assert float(updated_event["school_subsidy"]) == 25.0
         assert len(updated_event["class_mappings"]) == 1
-        
+
         mapping = updated_event["class_mappings"][0]
         assert float(mapping["ticket_price"]) == 15.0
 
@@ -1685,32 +1914,38 @@ class TestEventUpdateRouter:
             "password": "pass",
             "role": "teacher",
             "tenant_id": "tenant_a",
-            "invite_code": TEACHER_INVITE_CODE
+            "invite_code": TEACHER_INVITE_CODE,
         }
         t2_reg = await test_client.post("/api/v1/auth/register", json=t2_payload)
         t2_headers = {"Authorization": f"Bearer {t2_reg.json()['access_token']}"}
 
         t2_me = await test_client.get("/api/v1/auth/me", headers=t2_headers)
         t2_id = int(t2_me.json()["user_id"])
-        
+
         repo = TenantRepository(db_pool)
         await repo.create_teacher(t2_id, "Teacher Two")
 
         cls2_payload = {"name": "Science E", "level_id": lvl_id, "head_teacher_id": t2_id}
-        cls2_resp = await test_client.post("/api/v1/students/classes", json=cls2_payload, headers=a_headers)
-        class2_id = cls2_resp.json()["id"]
+        cls2_resp = await test_client.post(
+            "/api/v1/students/classes", json=cls2_payload, headers=a_headers
+        )
+        cls2_resp.json()["id"]
 
         # teacher2 (not mapped to event) tries to GET event_id
         get_restricted = await test_client.get(f"/api/v1/events/{event_id}", headers=t2_headers)
         assert get_restricted.status_code == 403
 
         # teacher2 tries to PUT event_id
-        put_restricted = await test_client.put(f"/api/v1/events/{event_id}", json=update_payload, headers=t2_headers)
+        put_restricted = await test_client.put(
+            f"/api/v1/events/{event_id}", json=update_payload, headers=t2_headers
+        )
         assert put_restricted.status_code == 403
 
 
 class TestAdminStaffCreation:
-    async def test_admin_creates_manager(self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db):
+    async def test_admin_creates_manager(
+        self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
+    ):
         # 1. Register a school_admin (via a real invitation)
         admin_token = await register_school_admin(test_client, "school_admin@test.com")
         admin_headers = {"Authorization": f"Bearer {admin_token}"}
@@ -1719,7 +1954,7 @@ class TestAdminStaffCreation:
         mgr_resp = await test_client.post(
             "/api/v1/students/managers",
             json={"email": "new_manager@test.com", "password": "pass"},
-            headers=admin_headers
+            headers=admin_headers,
         )
         assert mgr_resp.status_code == 200
         assert mgr_resp.json()["role"] == "manager"
@@ -1729,18 +1964,19 @@ class TestAdminStaffCreation:
         fin_resp = await test_client.post(
             "/api/v1/students/finance",
             json={"email": "new_finance@test.com", "password": "pass"},
-            headers=admin_headers
+            headers=admin_headers,
         )
         assert fin_resp.status_code == 404
 
         # 4. Teacher tries to create a manager (should fail with 403)
         from app.core.config import TEACHER_INVITE_CODE
+
         teacher_payload = {
             "email": "teacher_rand@test.com",
             "password": "pass",
             "role": "teacher",
             "tenant_id": "tenant_a",
-            "invite_code": TEACHER_INVITE_CODE
+            "invite_code": TEACHER_INVITE_CODE,
         }
         t_reg = await test_client.post("/api/v1/auth/register", json=teacher_payload)
         t_headers = {"Authorization": f"Bearer {t_reg.json()['access_token']}"}
@@ -1748,6 +1984,6 @@ class TestAdminStaffCreation:
         fail_resp = await test_client.post(
             "/api/v1/students/managers",
             json={"email": "should_fail_mgr@test.com", "password": "pass"},
-            headers=t_headers
+            headers=t_headers,
         )
         assert fail_resp.status_code == 403

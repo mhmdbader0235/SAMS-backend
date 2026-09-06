@@ -52,9 +52,7 @@ def detect_file_kind(filename: str, content_type: str | None) -> str:
     if "spreadsheetml" in ctype or "excel" in ctype:
         return "xlsx"
 
-    raise ValueError(
-        f"Unsupported file type for {filename!r} -- only .csv and .xlsx are accepted"
-    )
+    raise ValueError(f"Unsupported file type for {filename!r} -- only .csv and .xlsx are accepted")
 
 
 def _normalize_header(raw: str) -> str:

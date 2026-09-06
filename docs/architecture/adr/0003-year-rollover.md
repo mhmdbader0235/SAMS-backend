@@ -1,6 +1,8 @@
 # ADR 0003 — Year rollover, adapted to the year-scoped `class` model
 
 **Status:** Accepted (implemented this session — backend only, see "Not built" below)
+**Ratification:** Decided by an AI assistant under "make your best call" direction; not yet
+human-reviewed. Ratify or amend before building the UI (module roadmap Wave C1).
 **Date:** 2026-08-27
 **Deciders:** made by the assistant per explicit "make your best call" direction; flagged
 for review rather than silently assumed permanent

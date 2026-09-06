@@ -8,6 +8,7 @@ organization membership) and coordinates audit persistence with InvitationReposi
 
 import logging
 import os
+
 import httpx
 from fastapi import HTTPException, status
 
@@ -40,7 +41,9 @@ class InvitationService:
         return resp.json()["access_token"]
 
     @staticmethod
-    async def _get_group_id_by_path(client: httpx.AsyncClient, headers: dict, realm: str, target_path: str) -> str | None:
+    async def _get_group_id_by_path(
+        client: httpx.AsyncClient, headers: dict, realm: str, target_path: str
+    ) -> str | None:
         """Recursively search Keycloak groups for matching path or name."""
         clean_path = target_path.strip().lower()
         resp = await client.get(f"{KEYCLOAK_URL}/admin/realms/{realm}/groups", headers=headers)
@@ -54,7 +57,11 @@ class InvitationService:
             for g in grp_list:
                 g_path = g.get("path", "").strip().lower()
                 g_name = g.get("name", "").strip().lower()
-                if g_path == clean_path or g_name == clean_path.lstrip("/") or g_path.endswith(clean_path):
+                if (
+                    g_path == clean_path
+                    or g_name == clean_path.lstrip("/")
+                    or g_path.endswith(clean_path)
+                ):
                     return g.get("id")
                 sub_grps = g.get("subGroups", [])
                 if sub_grps:
@@ -125,12 +132,16 @@ class InvitationService:
         target_paths = [f"/{tenant_id}/{role}", f"/{role}"]
         group_id = None
         for path in target_paths:
-            group_id = await InvitationService._get_group_id_by_path(client, headers, KEYCLOAK_REALM, path)
+            group_id = await InvitationService._get_group_id_by_path(
+                client, headers, KEYCLOAK_REALM, path
+            )
             if group_id:
                 break
 
         if group_id:
-            grp_assign_url = f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/users/{kc_user_id}/groups/{group_id}"
+            grp_assign_url = (
+                f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/users/{kc_user_id}/groups/{group_id}"
+            )
             await client.put(grp_assign_url, headers=headers)
 
     @staticmethod
@@ -182,17 +193,14 @@ class InvitationService:
                 "create_keycloak_organization before inviting users into it."
             )
 
-        add_mem_url = (
-            f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/organizations/{org_id}/members"
-        )
+        add_mem_url = f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/organizations/{org_id}/members"
         # Body is the bare user id as a JSON string -- verified against Keycloak
         # 26.7, which returns 201 for this shape.
         mem_resp = await client.post(add_mem_url, headers=headers, json=kc_user_id)
         # 409 = already a member, which is the desired end state.
         if mem_resp.status_code >= 300 and mem_resp.status_code != 409:
             raise RuntimeError(
-                f"Could not add user to organization '{tenant_id}': "
-                f"HTTP {mem_resp.status_code}"
+                f"Could not add user to organization '{tenant_id}': " f"HTTP {mem_resp.status_code}"
             )
 
     @staticmethod
@@ -207,7 +215,9 @@ class InvitationService:
         # 1. Enforce business rule: avoid duplicate pending invitation
         existing = await repo.get_invitation_by_email(payload.email, payload.tenant_id)
         if existing:
-            raise ValueError(f"A pending invitation already exists for {payload.email} under tenant {payload.tenant_id}")
+            raise ValueError(
+                f"A pending invitation already exists for {payload.email} under tenant {payload.tenant_id}"
+            )
 
         # 2. Provision in Keycloak using a single, reusable HTTP client context
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -266,10 +276,9 @@ class InvitationService:
 
         try:
             from app.utils.email import send_invitation_email
+
             await send_invitation_email(
-                to_email=payload.email,
-                invite_code=str(inv_record["id"]),
-                role=payload.role
+                to_email=payload.email, invite_code=str(inv_record["id"]), role=payload.role
             )
         except Exception as exc:
             logger.warning(f"Could not send invitation email to {payload.email}: {exc}")

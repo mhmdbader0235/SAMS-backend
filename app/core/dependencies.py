@@ -4,6 +4,9 @@ Shared FastAPI dependencies.
 Extracts current user context from JWT tokens and performs role-based authorization guards.
 """
 
+import json
+from pathlib import Path
+
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
@@ -88,248 +91,10 @@ class CurrentUser:
 
 
 COMPOSITE_ROLE_PERMISSIONS: dict[str, set[str]] = {
-    "super_admin": {"*"},
-    "school_admin": {
-        "school:write",
-        "school:read",
-        "level:create",
-        "level:manage",
-        "level:read",
-        "class:create",
-        "class:edit",
-        "class:update",
-        "class:read",
-        "class:assign_teacher",
-        "user:create",
-        "user:invite",
-        "user:delete",
-        "user:link",
-        "user:view",
-        "user:read",
-        "user:profile_read",
-        "user:profile_edit",
-        "teacher:create",
-        "teacher:read",
-        "teacher:write",
-        "parent:read",
-        "student:create",
-        "student:read",
-        "event:create",
-        "event:read",
-        "event:view",
-        "event:edit",
-        "event:patch",
-        "event:delete",
-        "event:clone",
-        "event:propose",
-        "event:submit",
-        "event:review",
-        "event:publish",
-        "event:view_draft",
-        "event:archive",
-        "event:audience_edit",
-        "event:audience_predict",
-        "resource:create",
-        "resource:view",
-        "resource:read",
-        "resource:edit",
-        "resource:update",
-        "resource:delete",
-        "resource:price",
-        "resource:set_cost",
-        "resource_type:create",
-        "resource_type:read",
-        "enrollment:teacher_approve",
-        "enrollment:cancel",
-        "enrollment:view_roster",
-        "enrollment:read",
-        "billing:audit",
-        "billing:invoice",
-        "billing:view_payment",
-        "subsidy:manage",
-        "audit:view",
-        "health:view",
-        "health:manage",
-        "safety:manage",
-        "announcement:manage",
-        "notification:send",
-        "notification:read",
-        "notification:mark_read",
-        "feedback:view",
-    },
-    "admin": {
-        "school:write",
-        "school:read",
-        "level:create",
-        "level:manage",
-        "level:read",
-        "class:create",
-        "class:edit",
-        "class:update",
-        "class:read",
-        "class:assign_teacher",
-        "user:create",
-        "user:invite",
-        "user:delete",
-        "user:link",
-        "user:view",
-        "user:read",
-        "user:profile_read",
-        "user:profile_edit",
-        "teacher:create",
-        "teacher:read",
-        "teacher:write",
-        "parent:read",
-        "student:create",
-        "student:read",
-        "event:create",
-        "event:read",
-        "event:view",
-        "event:edit",
-        "event:patch",
-        "event:delete",
-        "event:clone",
-        "event:propose",
-        "event:submit",
-        "event:review",
-        "event:publish",
-        "event:view_draft",
-        "event:archive",
-        "event:audience_edit",
-        "event:audience_predict",
-        "resource:create",
-        "resource:view",
-        "resource:read",
-        "resource:edit",
-        "resource:update",
-        "resource:delete",
-        "resource:price",
-        "resource:set_cost",
-        "resource_type:create",
-        "resource_type:read",
-        "enrollment:teacher_approve",
-        "enrollment:cancel",
-        "enrollment:view_roster",
-        "enrollment:read",
-        "billing:audit",
-        "billing:invoice",
-        "billing:view_payment",
-        "subsidy:manage",
-        "audit:view",
-        "health:view",
-        "health:manage",
-        "safety:manage",
-        "announcement:manage",
-        "notification:send",
-        "notification:read",
-        "notification:mark_read",
-        "feedback:view",
-    },
-    "manager": {
-        "school:read",
-        "level:read",
-        "class:read",
-        "teacher:read",
-        "parent:read",
-        "student:read",
-        "user:view",
-        "user:read",
-        "user:profile_read",
-        "user:profile_edit",
-        "event:read",
-        "event:view",
-        "event:review",
-        "event:publish",
-        "event:view_draft",
-        "event:audience_predict",
-        "resource:view",
-        "resource:read",
-        "resource:price",
-        "resource:set_cost",
-        "resource_type:read",
-        "billing:invoice",
-        "billing:pay",
-        "billing:refund",
-        "billing:audit",
-        "billing:view_payment",
-        "subsidy:manage",
-        "enrollment:view_roster",
-        "enrollment:read",
-        "announcement:manage",
-        "notification:send",
-        "notification:read",
-        "notification:mark_read",
-        "feedback:view",
-    },
-    "teacher": {
-        "school:read",
-        "level:read",
-        "class:read",
-        "teacher:read",
-        "student:read",
-        "user:view",
-        "user:read",
-        "user:profile_read",
-        "user:profile_edit",
-        "event:create",
-        "event:read",
-        "event:view",
-        "event:edit",
-        "event:patch",
-        "event:delete",
-        "event:clone",
-        "event:propose",
-        "event:submit",
-        "event:view_draft",
-        "event:audience_edit",
-        "event:audience_predict",
-        "resource:create",
-        "resource:view",
-        "resource:read",
-        "resource:edit",
-        "resource:update",
-        "resource:delete",
-        "resource_type:create",
-        "resource_type:read",
-        "enrollment:teacher_approve",
-        "enrollment:view_roster",
-        "enrollment:read",
-        "health:view",
-        "health:manage",
-        "notification:read",
-        "notification:mark_read",
-        "feedback:view",
-        "feedback:create",
-    },
-    "parent": {
-        "school:read",
-        "user:profile_read",
-        "user:profile_edit",
-        "student:view_linked",
-        "event:read",
-        "event:view",
-        "enrollment:parent_approve",
-        "enrollment:cancel",
-        "enrollment:read",
-        "billing:pay",
-        "billing:view_payment",
-        "health:manage_child",
-        "notification:read",
-        "notification:mark_read",
-        "feedback:create",
-    },
-    "student": {
-        "school:read",
-        "user:profile_read",
-        "user:profile_edit",
-        "event:read",
-        "event:view",
-        "enrollment:request",
-        "enrollment:read",
-        "notification:read",
-        "notification:mark_read",
-        "feedback:create",
-    },
+    role: set(perms)
+    for role, perms in json.loads(
+        (Path(__file__).parent / "permissions_catalog.json").read_text(encoding="utf-8")
+    ).items()
 }
 
 
@@ -499,9 +264,7 @@ async def get_current_user(
                     extracted_roles.update(COMPOSITE_ROLE_PERMISSIONS["super_admin"])
                 final_roles_list = list(extracted_roles)
         except Exception as _e:
-            print(
-                f"[get_current_user] Warning: could not check super_admins for '{email}': {_e}"
-            )
+            print(f"[get_current_user] Warning: could not check super_admins for '{email}': {_e}")
 
     tenant_id = payload.get("tenant_id")
 
@@ -626,6 +389,33 @@ async def get_current_user(
         req_tenant = request.headers.get("x-tenant-id") or request.query_params.get("tenant_id")
         if req_tenant and req_tenant.strip():
             tenant_id = req_tenant.strip().lower()
+            # A vendor-side account reading/writing a specific school's data via
+            # this override is exactly the "who looked at my tenant's data"
+            # question a school should be able to ask -- audit it. Non-fatal
+            # (an audit outage must not block a legitimate super_admin request)
+            # and written into the TARGET tenant's own audit_log, not a
+            # control-plane table, so the affected school can see it directly.
+            try:
+                from app.core.database import get_db_pool
+                from app.domains.audit.service import AuditService
+
+                class _OverrideActor:
+                    id = user_id
+                    role = "super_admin"
+                    email = email
+
+                async with (await get_db_pool(tenant_id)).acquire() as audit_conn:
+                    await AuditService.record(
+                        audit_conn,
+                        actor=_OverrideActor(),
+                        action="tenant_override.cross_tenant_access",
+                        entity_type="tenant",
+                        entity_id=tenant_id,
+                        outcome="allow",
+                        metadata={"target_tenant_id": tenant_id},
+                    )
+            except Exception:
+                pass
 
     # Last-ditch cross-tenant scan. Every prior resolution step depends on
     # user_tenant_map already having a row for this email; if it doesn't (a first
@@ -679,9 +469,7 @@ async def get_current_user(
                     await cp_repo.upsert_user_tenant_map(email, tenant_id, role or "pending")
                     break
         except Exception as _e:
-            print(
-                f"[get_current_user] Warning: cross-tenant scan for '{email}' failed: {_e}"
-            )
+            print(f"[get_current_user] Warning: cross-tenant scan for '{email}' failed: {_e}")
 
     # FAIL CLOSED. This used to read `tenant_id = "tenant_a"`.
     #
@@ -848,12 +636,17 @@ async def get_current_user(
                         # so future Keycloak SSO logins can resolve their tenant correctly
                         try:
                             from app.core.database import get_control_plane_pool as _get_cp_pool
-                            from app.domains.tenant.control_plane_repository import ControlPlaneRepository as _CpRepo
+                            from app.domains.tenant.control_plane_repository import (
+                                ControlPlaneRepository as _CpRepo,
+                            )
+
                             _cp_pool = await _get_cp_pool()
                             _cp_repo = _CpRepo(_cp_pool)
                             await _cp_repo.upsert_user_tenant_map(email, tenant_id, role)
                         except Exception as _e:
-                            print(f"[get_current_user] Warning: could not add JIT-provisioned user to user_tenant_map: {_e}")
+                            print(
+                                f"[get_current_user] Warning: could not add JIT-provisioned user to user_tenant_map: {_e}"
+                            )
         except Exception as exc:
             import traceback
 
@@ -970,7 +763,9 @@ async def get_current_user(
             # next Keycloak SSO login can't resolve their tenant and falls
             # back to tenant_a, re-provisioning them as a stray 'pending' user
             # in the wrong tenant.
-            from app.domains.tenant.control_plane_repository import ControlPlaneRepository as _CpRepo
+            from app.domains.tenant.control_plane_repository import (
+                ControlPlaneRepository as _CpRepo,
+            )
 
             await _CpRepo(cp_pool).upsert_user_tenant_map(email, tenant_id, "parent")
         except Exception as exc:

@@ -25,6 +25,10 @@ EVERY tenant schema on first pool access after every backend restart
 (including init.sql-seeded ones), so its final state always wins in practice:
   - class.capacity: nullable here (database.py's ADD COLUMN has no NOT NULL),
     not NOT NULL as init.sql and the ad-hoc copies in tenant_repository.py claim.
+    STALE as of tenant_0004: database.py later gained a follow-up
+    `ALTER COLUMN capacity SET NOT NULL`, and tenant_0004 closes this gap.
+    This baseline is left nullable deliberately — it is the historical record
+    of what shipped at the time, not the current constraint.
   - students.class_id: nullable here (database.py drops the NOT NULL later in
     the same init function), not NOT NULL as init.sql's inline definition claims.
 

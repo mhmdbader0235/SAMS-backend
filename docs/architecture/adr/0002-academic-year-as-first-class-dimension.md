@@ -1,8 +1,8 @@
 # ADR 0002 — Introduce `academic_year` as a first-class, queryable dimension
 
-**Status:** Proposed
+**Status:** Accepted (migrated as `tenant_0002`; `is_active` replaced by a `status` tri-state column in `tenant_0003`)
 **Date:** 2026-08-27
-**Deciders:** architecture team (Option A vs. B below is an open decision, not settled by this ADR)
+**Deciders:** architecture team (Option A shipped — see Decision below)
 
 ## Context
 
@@ -58,6 +58,16 @@ Make `academic_year` a real table, and make `class` rows **year-scoped**: a clas
 `(name, level_id, academic_year_id)`, not just `(name, level_id)`. "Grade 7A for 2025-2026" and
 "Grade 7A for 2026-2027" become two distinct `class` rows, linked only by name and level, not by
 identity.
+
+> **Note — as actually shipped.** The block below is this ADR's original proposal. What
+> `tenant_0002_academic_year_dimension.py` actually migrated is the same shape with different
+> names: the table is `academic_years` (plural), `label` shipped as `name`, and `start_date`/
+> `end_date` are nullable rather than `NOT NULL`. The `status` tri-state column did not ship in
+> `tenant_0002` at all — `tenant_0002` shipped a boolean `is_active`, and `tenant_0003` later
+> replaced it with `status TEXT CHECK (status IN ('planned','active','closed'))` plus
+> `rolled_from_id`. Read `tenant_0002_academic_year_dimension.py` and
+> `tenant_0003_year_rollover.py` for the authoritative DDL; the SQL below records only the design
+> intent.
 
 ```sql
 CREATE TABLE academic_year (
@@ -167,8 +177,9 @@ date.
 
 ## Open questions for the deciders
 
-- Confirm Option A over Option B (this ADR assumes A; B remains available if concurrent placement
-  is tackled first and subsumes this problem).
+- ~~Confirm Option A over Option B~~ — **Resolved: Option A shipped** (`tenant_0002`). Option B
+  (a date-ranged `student_class_enrollment` join table) remains available if concurrent placement
+  is tackled later and subsumes this problem.
 - Should rollover auto-copy `head_teacher_id`/`capacity` from the prior year's matching class, or
   require the admin to re-enter them per new class row?
 - Should rollover be a guided, staged flow (mirroring the Curriculum Ladder Wizard's live-preview

@@ -19,9 +19,9 @@ No real Postgres connection is used -- AuthService.decode_access_token and
 app.core.database.get_db_pool / get_control_plane_pool are mocked.
 """
 
-import pytest
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from fastapi import HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
 
@@ -114,9 +114,13 @@ class TestFailClosed:
         fake_pool = FakePool(user_row=None)
         p1, p2 = _patches(fake_pool)
 
-        with patch.object(AuthService, "decode_access_token", return_value=payload), p1, p2:
-            with pytest.raises(HTTPException) as exc_info:
-                await get_current_user(request=FakeRequest(), credentials=_credentials())
+        with (
+            patch.object(AuthService, "decode_access_token", return_value=payload),
+            p1,
+            p2,
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await get_current_user(request=FakeRequest(), credentials=_credentials())
 
         assert exc_info.value.status_code == 400
         assert "not associated with a school" in str(exc_info.value.detail)
@@ -136,9 +140,13 @@ class TestFailClosed:
             fake_pool = FakePool(user_row=None)
             p1, p2 = _patches(fake_pool)
 
-            with patch.object(AuthService, "decode_access_token", return_value=payload), p1, p2:
-                with pytest.raises(HTTPException) as exc_info:
-                    await get_current_user(request=FakeRequest(), credentials=_credentials())
+            with (
+                patch.object(AuthService, "decode_access_token", return_value=payload),
+                p1,
+                p2,
+                pytest.raises(HTTPException) as exc_info,
+            ):
+                await get_current_user(request=FakeRequest(), credentials=_credentials())
 
             assert exc_info.value.status_code == 400, f"{bogus!r} should not resolve"
 
@@ -237,9 +245,13 @@ class TestOrganizationClaim:
         fake_pool = FakePool(user_row=None)
         p1, p2 = _patches(fake_pool)
 
-        with patch.object(AuthService, "decode_access_token", return_value=payload), p1, p2:
-            with pytest.raises(HTTPException) as exc_info:
-                await get_current_user(request=FakeRequest(), credentials=_credentials())
+        with (
+            patch.object(AuthService, "decode_access_token", return_value=payload),
+            p1,
+            p2,
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await get_current_user(request=FakeRequest(), credentials=_credentials())
 
         assert exc_info.value.status_code == 400
 

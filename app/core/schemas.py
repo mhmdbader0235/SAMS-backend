@@ -1,9 +1,32 @@
 """Pydantic schemas — request bodies and response models."""
 
 from datetime import date, datetime
+from decimal import Decimal
+from typing import Literal
 from uuid import UUID
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, field_serializer, field_validator
+
+from app.domains.school.locale import ISO_4217_MINOR_UNITS
+
+
+def _validate_timezone(v: str | None) -> str | None:
+    if v is None:
+        return v
+    try:
+        ZoneInfo(v)
+    except (ZoneInfoNotFoundError, ValueError) as exc:
+        raise ValueError(f"Unknown IANA timezone: {v!r}") from exc
+    return v
+
+
+def _validate_currency(v: str | None) -> str | None:
+    if v is None:
+        return v
+    if v.upper() not in ISO_4217_MINOR_UNITS:
+        raise ValueError(f"Unknown ISO-4217 currency code: {v!r}")
+    return v.upper()
 
 
 # =============================================================================
@@ -11,6 +34,18 @@ from pydantic import BaseModel, EmailStr, Field
 # =============================================================================
 class UserRoleUpdateRequest(BaseModel):
     role: str
+
+
+class UserPreferencesResponse(BaseModel):
+    preferred_language: str | None = None
+    preferred_timezone: str | None = None
+
+
+class UserPreferencesUpdateRequest(BaseModel):
+    preferred_language: str | None = None
+    preferred_timezone: str | None = None
+
+    _validate_timezone = field_validator("preferred_timezone")(_validate_timezone)
 
 
 class UserSummaryResponse(BaseModel):
@@ -217,30 +252,46 @@ class ClassResponse(BaseModel):
 # =============================================================================
 class ClassMappingRequest(BaseModel):
     class_id: int
-    ticket_price: float = 0.0
+    ticket_price: Decimal = Decimal("0.0")
+
+    @field_serializer("ticket_price")
+    def _serialize_ticket_price(self, v: Decimal) -> str:
+        return str(v)
 
 
 class ClassMappingResponse(BaseModel):
     id: int
     class_id: int
-    ticket_price: float
+    ticket_price: Decimal
     class_name: str | None = None
     level_name: str | None = None
     student_count: int | None = 0
 
+    @field_serializer("ticket_price")
+    def _serialize_ticket_price(self, v: Decimal) -> str:
+        return str(v)
+
 
 class TicketPriceUpdate(BaseModel):
     class_map_id: int
-    ticket_price: float
+    ticket_price: Decimal
+
+    @field_serializer("ticket_price")
+    def _serialize_ticket_price(self, v: Decimal) -> str:
+        return str(v)
 
 
 class EventCreateRequest(BaseModel):
     title: str
     description: str | None = ""
     address: str | None = ""
-    school_subsidy: float = 0.0
+    school_subsidy: Decimal = Decimal("0.0")
     date: datetime
     class_mappings: list[ClassMappingRequest] = []
+
+    @field_serializer("school_subsidy")
+    def _serialize_school_subsidy(self, v: Decimal) -> str:
+        return str(v)
 
 
 class EventResponse(BaseModel):
@@ -249,7 +300,7 @@ class EventResponse(BaseModel):
     description: str
     address: str | None = None
     event_map_id: int | None = None
-    school_subsidy: float | None = None
+    school_subsidy: Decimal | None = None
     date: datetime
     created_by: int
     created_at: datetime | None = None
@@ -258,12 +309,16 @@ class EventResponse(BaseModel):
     predicted_attendance: int | None = None
     manager_reviewer_id: int | None = None
     finance_reviewer_id: int | None = None
-    total_cost: float | None = None
+    total_cost: Decimal | None = None
     submitted_at: datetime | None = None
     manager_approved_at: datetime | None = None
     finance_priced_at: datetime | None = None
     published_at: datetime | None = None
     rejection_reason: str | None = None
+
+    @field_serializer("school_subsidy", "total_cost")
+    def _serialize_money(self, v: Decimal | None) -> str | None:
+        return str(v) if v is not None else None
 
 
 class EventsListResponse(BaseModel):
@@ -293,8 +348,12 @@ class EnrollmentResponse(BaseModel):
     student_email: str | None = None
     class_name: str | None = None
     event_title: str | None = None
-    ticket_price: float | None = 0.0
+    ticket_price: Decimal | None = Decimal("0.0")
     created_at: datetime
+
+    @field_serializer("ticket_price")
+    def _serialize_ticket_price(self, v: Decimal | None) -> str | None:
+        return str(v) if v is not None else None
 
 
 # =============================================================================
@@ -303,9 +362,13 @@ class EnrollmentResponse(BaseModel):
 class PaymentResponse(BaseModel):
     id: int
     enrollment_id: int
-    amount: float
+    amount: Decimal
     status: str
     created_at: datetime
+
+    @field_serializer("amount")
+    def _serialize_amount(self, v: Decimal) -> str:
+        return str(v)
 
 
 # =============================================================================
@@ -347,9 +410,6 @@ class StudentHealthResponse(BaseModel):
 # =============================================================================
 # Event Workflow & Resource schemas
 # =============================================================================
-from typing import Literal
-
-
 class ResourceTypeResponse(BaseModel):
     id: int
     name: str
@@ -380,21 +440,35 @@ class ResourceLineResponse(BaseModel):
     quantity: int
     added_by_user_id: int
     updated_by_user_id: int | None
-    unit_price: float
-    total_cost: float
+    unit_price: Decimal
+    total_cost: Decimal
     set_by_user_id: int | None
+
+    @field_serializer("unit_price", "total_cost")
+    def _serialize_money(self, v: Decimal) -> str:
+        return str(v)
 
 
 class ResourceSummaryResponse(BaseModel):
     event_id: int
     resources: list[ResourceLineResponse]
-    total_cost: float
+    total_cost: Decimal
     currency: str
+
+    @field_serializer("total_cost")
+    def _serialize_total_cost(self, v: Decimal) -> str:
+        return str(v)
 
 
 class ResourceCostIn(BaseModel):
-    unit_price: float = Field(ge=0.0)
-    currency: str = "JOD"
+    unit_price: Decimal = Field(ge=0)
+    currency: str
+
+    _validate_currency = field_validator("currency")(_validate_currency)
+
+    @field_serializer("unit_price")
+    def _serialize_unit_price(self, v: Decimal) -> str:
+        return str(v)
 
 
 class ManagerDecision(BaseModel):
@@ -550,6 +624,9 @@ class SchoolProfileUpdateRequest(BaseModel):
     primary_color: str | None = None
     website: str | None = None
 
+    _validate_timezone = field_validator("timezone")(_validate_timezone)
+    _validate_currency = field_validator("currency")(_validate_currency)
+
 
 class SchoolProfileResponse(BaseModel):
     legal_name: str | None = None
@@ -565,7 +642,7 @@ class SchoolProfileResponse(BaseModel):
     hemisphere: str | None = None
     default_language: str | None = None
     additional_languages: list[str] = []
-    currency: str = "JOD"
+    currency: str
     logo_url: str | None = None
     logo_dark_url: str | None = None
     primary_color: str | None = None
@@ -584,3 +661,25 @@ class SchoolSetupStateResponse(BaseModel):
     blocking: list[str] = []
     warnings: list[str] = []
     activated_at: datetime | None = None
+
+
+# =============================================================================
+# Audit log schemas
+# =============================================================================
+class AuditLogEntryResponse(BaseModel):
+    id: int
+    occurred_at: datetime
+    correlation_id: str | None = None
+    actor_user_id: int | None = None
+    actor_role: str
+    action: str
+    entity_type: str
+    entity_id: str | None = None
+    outcome: str
+    changed_fields: list[str] | None = None
+    metadata: dict = {}
+
+
+class AuditLogListResponse(BaseModel):
+    items: list[AuditLogEntryResponse]
+    next_before_id: int | None = None

@@ -6,7 +6,6 @@ from uuid import UUID
 import asyncpg
 
 
-
 class ControlPlaneRepository:
     def __init__(self, pool: asyncpg.Pool) -> None:
         self.pool = pool
@@ -101,8 +100,6 @@ class ControlPlaneRepository:
             db_name,
         )
         return tenant_id
-
-
 
     # =========================================================================
     # Parent-Child Links
@@ -217,7 +214,9 @@ class ControlPlaneRepository:
         )
         return dict(row) if row else None
 
-    async def update_parent_profile(self, parent_id: UUID, phone: str | None, address: str | None) -> None:
+    async def update_parent_profile(
+        self, parent_id: UUID, phone: str | None, address: str | None
+    ) -> None:
         """Update parent profile metadata."""
         await self.pool.execute(
             "UPDATE parents SET phone = $1, address = $2 WHERE id = $3",

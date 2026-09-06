@@ -1,11 +1,34 @@
 routes:
   -
+    # Stricter bucket for the unauthenticated auth endpoints -- credential
+    # stuffing / registration-spam / tenant-creation abuse must not share the
+    # generous general-API budget below. Higher priority so it wins over the
+    # broad /api/v1/* route for these three exact paths.
+    uris:
+      - /api/v1/auth/login
+      - /api/v1/auth/register
+      - /api/v1/auth/tenants
+    priority: 10
+    plugins:
+      limit-count:
+        count: 20
+        time_window: 60
+        rejected_code: 429
+        key_type: "var"
+        key: "http_x_forwarded_for"
+    upstream:
+      nodes:
+        "host.docker.internal:8001": 1
+      type: roundrobin
+  -
     uri: /api/v1/*
     plugins:
       limit-count:
         count: 3000
         time_window: 60
         rejected_code: 429
+        key_type: "var"
+        key: "http_x_forwarded_for"
     upstream:
       nodes:
         "host.docker.internal:8001": 1

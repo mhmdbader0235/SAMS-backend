@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 
 from app.core.database import get_db_pool
 from app.core.dependencies import CurrentUser, get_current_user, require_tenant_live
@@ -247,18 +248,6 @@ async def list_feedbacks(
 # =============================================================================
 # Event Workflow & Resources Static Endpoints (Task 8)
 # =============================================================================
-from pydantic import BaseModel
-
-
-class EventPatchRequest(BaseModel):
-    title: str | None = None
-    description: str | None = None
-    address: str | None = None
-    date: datetime | None = None
-
-
-class AudienceSelect(BaseModel):
-    class_ids: list[int]
 
 
 @router.get(
@@ -407,6 +396,60 @@ async def update_resource_line(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+@router.post(
+    "/{event_id}/resources/lines",
+    status_code=201,
+    summary="Add a single resource line to an event (does not touch existing lines)",
+)
+async def add_resource_line(
+    event_id: int,
+    payload: ResourceLineIn,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    if not current_user.tenant_id:
+        raise HTTPException(status_code=400, detail="Tenant context required")
+
+    try:
+        new_id = await EventService.add_resource_line(
+            tenant_id=current_user.tenant_id,
+            event_id=event_id,
+            actor=current_user,
+            resource_type_id=payload.resource_type_id,
+            description=payload.description,
+            quantity=payload.quantity,
+        )
+        return {"status": "success", "id": new_id}
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.delete("/resources/{resource_id}", summary="Remove one resource line from an event")
+async def delete_resource_line(
+    resource_id: int,
+    current_user: CurrentUser = Depends(get_current_user),
+):
+    if not current_user.tenant_id:
+        raise HTTPException(status_code=400, detail="Tenant context required")
+
+    try:
+        await EventService.delete_resource_line(
+            tenant_id=current_user.tenant_id,
+            resource_id=resource_id,
+            actor=current_user,
+        )
+        return {"status": "success"}
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 @router.put(
     "/resources/{resource_id}/cost", summary="Manager/admin sets the unit cost of a resource"
 )
@@ -510,7 +553,6 @@ async def update_event(
 # =============================================================================
 # Event Workflow & Resources Endpoints (Task 8)
 # =============================================================================
-from pydantic import BaseModel
 
 
 class EventPatchRequest(BaseModel):
@@ -868,7 +910,9 @@ async def update_ticket_prices(
 
     try:
         items = [{"ticket_price": p.ticket_price, "class_map_id": p.class_map_id} for p in payload]
-        await EventService.update_ticket_prices(current_user.tenant_id, event_id, current_user, items)
+        await EventService.update_ticket_prices(
+            current_user.tenant_id, event_id, current_user, items
+        )
         return {"status": "success"}
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))

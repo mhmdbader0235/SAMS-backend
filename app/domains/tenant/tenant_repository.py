@@ -7,7 +7,6 @@ from uuid import UUID
 
 import asyncpg
 
-
 # Sentinel for "caller did not mention this field" in a partial update,
 # distinct from an explicit `None` -- which for head_teacher_id means "clear
 # it, the class has no head teacher". A plain `None` default can't tell the
@@ -33,7 +32,7 @@ def _derive_section_label(name: str) -> str | None:
 
 
 def parse_id(val) -> int | UUID:
-    if isinstance(val, (UUID, int)):
+    if isinstance(val, UUID | int):
         return val
     if not val:
         return val
@@ -176,271 +175,263 @@ class TenantRepository:
         endpoints use, and any student unlinked by the removal is logged to
         student_class_history exactly like every other placement change.
         """
-        async with self.pool.acquire() as conn:
-            async with conn.transaction():
-                # academic_year_id is NOT NULL on class with no DB-side default
-                # (ADR 0002) -- resolve once, up front, for every new section
-                # this save creates.
-                active_year_id = await conn.fetchval(
-                    "SELECT id FROM academic_years WHERE status = 'active' LIMIT 1"
+        async with self.pool.acquire() as conn, conn.transaction():
+            # academic_year_id is NOT NULL on class with no DB-side default
+            # (ADR 0002) -- resolve once, up front, for every new section
+            # this save creates.
+            active_year_id = await conn.fetchval(
+                "SELECT id FROM academic_years WHERE status = 'active' LIMIT 1"
+            )
+
+            # 1. Academic Settings -- resolve "the current row" exactly
+            # the way get_academic_structure() reads it (ORDER BY id
+            # DESC), so a tenant that somehow ends up with more than one
+            # settings row (e.g. two concurrent first-time saves both
+            # seeing "none exists yet") can't have this UPDATE a
+            # different row than the one every reader displays.
+            system_val = payload.get("system") or "US"
+            cal = payload.get("calendar") or {}
+            acad_year = cal.get("academic_year") or "2026-2027"
+            start_month = int(cal.get("start_month") or 9)
+            weekend_days = cal.get("weekend_days") or ["Saturday", "Sunday"]
+
+            existing_settings = await conn.fetchval(
+                "SELECT id FROM academic_settings ORDER BY id DESC LIMIT 1"
+            )
+            if existing_settings:
+                await conn.execute(
+                    """
+                    UPDATE academic_settings
+                    SET system = $1, academic_year = $2, start_month = $3, weekend_days = $4, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = $5
+                    """,
+                    system_val,
+                    acad_year,
+                    start_month,
+                    weekend_days,
+                    existing_settings,
+                )
+            else:
+                await conn.execute(
+                    """
+                    INSERT INTO academic_settings (system, academic_year, start_month, weekend_days)
+                    VALUES ($1, $2, $3, $4)
+                    """,
+                    system_val,
+                    acad_year,
+                    start_month,
+                    weekend_days,
                 )
 
-                # 1. Academic Settings -- resolve "the current row" exactly
-                # the way get_academic_structure() reads it (ORDER BY id
-                # DESC), so a tenant that somehow ends up with more than one
-                # settings row (e.g. two concurrent first-time saves both
-                # seeing "none exists yet") can't have this UPDATE a
-                # different row than the one every reader displays.
-                system_val = payload.get("system") or "US"
-                cal = payload.get("calendar") or {}
-                acad_year = cal.get("academic_year") or "2026-2027"
-                start_month = int(cal.get("start_month") or 9)
-                weekend_days = cal.get("weekend_days") or ["Saturday", "Sunday"]
-
-                existing_settings = await conn.fetchval(
-                    "SELECT id FROM academic_settings ORDER BY id DESC LIMIT 1"
+            # 2. Blackout Dates -- diff against the payload by date (its
+            # natural key), update/insert what's given, and delete only
+            # what's genuinely absent -- instead of DELETE-then-
+            # reinsert-everything, which erases every date the caller's
+            # in-memory state doesn't happen to be holding, even ones it
+            # was never asked to touch.
+            blackout_dates = payload.get("blackout_dates") or []
+            existing_bd_rows = await conn.fetch("SELECT id, date FROM blackout_dates")
+            existing_bd_by_date = {row["date"]: row["id"] for row in existing_bd_rows}
+            incoming_dates = set()
+            for bd in blackout_dates:
+                d_val = bd.get("date")
+                if not d_val:
+                    continue
+                d_parsed = (
+                    datetime.strptime(d_val[:10], "%Y-%m-%d").date()
+                    if isinstance(d_val, str)
+                    else d_val
                 )
-                if existing_settings:
+                incoming_dates.add(d_parsed)
+                title = bd.get("title") or "Holiday"
+                tags = bd.get("tags") or []
+                if d_parsed in existing_bd_by_date:
                     await conn.execute(
-                        """
-                        UPDATE academic_settings
-                        SET system = $1, academic_year = $2, start_month = $3, weekend_days = $4, updated_at = CURRENT_TIMESTAMP
-                        WHERE id = $5
-                        """,
-                        system_val,
-                        acad_year,
-                        start_month,
-                        weekend_days,
-                        existing_settings,
+                        "UPDATE blackout_dates SET title = $1, tags = $2 WHERE id = $3",
+                        title,
+                        tags,
+                        existing_bd_by_date[d_parsed],
                     )
                 else:
                     await conn.execute(
-                        """
-                        INSERT INTO academic_settings (system, academic_year, start_month, weekend_days)
-                        VALUES ($1, $2, $3, $4)
-                        """,
-                        system_val,
-                        acad_year,
-                        start_month,
-                        weekend_days,
+                        "INSERT INTO blackout_dates (date, title, tags) VALUES ($1, $2, $3)",
+                        d_parsed,
+                        title,
+                        tags,
                     )
-
-                # 2. Blackout Dates -- diff against the payload by date (its
-                # natural key), update/insert what's given, and delete only
-                # what's genuinely absent -- instead of DELETE-then-
-                # reinsert-everything, which erases every date the caller's
-                # in-memory state doesn't happen to be holding, even ones it
-                # was never asked to touch.
-                blackout_dates = payload.get("blackout_dates") or []
-                existing_bd_rows = await conn.fetch("SELECT id, date FROM blackout_dates")
-                existing_bd_by_date = {row["date"]: row["id"] for row in existing_bd_rows}
-                incoming_dates = set()
-                for bd in blackout_dates:
-                    d_val = bd.get("date")
-                    if not d_val:
-                        continue
-                    d_parsed = (
-                        datetime.strptime(d_val[:10], "%Y-%m-%d").date()
-                        if isinstance(d_val, str)
-                        else d_val
-                    )
-                    incoming_dates.add(d_parsed)
-                    title = bd.get("title") or "Holiday"
-                    tags = bd.get("tags") or []
-                    if d_parsed in existing_bd_by_date:
-                        await conn.execute(
-                            "UPDATE blackout_dates SET title = $1, tags = $2 WHERE id = $3",
-                            title,
-                            tags,
-                            existing_bd_by_date[d_parsed],
-                        )
-                    else:
-                        await conn.execute(
-                            "INSERT INTO blackout_dates (date, title, tags) VALUES ($1, $2, $3)",
-                            d_parsed,
-                            title,
-                            tags,
-                        )
-                stale_dates = set(existing_bd_by_date.keys()) - incoming_dates
-                if stale_dates:
-                    await conn.execute(
-                        "DELETE FROM blackout_dates WHERE date = ANY($1::date[])",
-                        list(stale_dates),
-                    )
-
-                # 3. Upsert Levels and Classes / Sections
-                levels = payload.get("levels") or []
-                # Sections created before any real teacher exists simply have no
-                # head teacher yet -- head_teacher_id is nullable for exactly this
-                # case; the admin assigns one later via PUT /students/classes/{id}.
-                # No fallback to `users` here: head_teacher_id REFERENCES
-                # teachers(id), not users(id), so a users.id whose owner has
-                # no teachers row is a foreign key violation that would
-                # abort this entire save -- settings, calendar, every other
-                # level -- the moment one such user exists.
-                default_teacher_id = await conn.fetchval(
-                    "SELECT id FROM teachers ORDER BY id ASC LIMIT 1"
+            stale_dates = set(existing_bd_by_date.keys()) - incoming_dates
+            if stale_dates:
+                await conn.execute(
+                    "DELETE FROM blackout_dates WHERE date = ANY($1::date[])",
+                    list(stale_dates),
                 )
 
-                # Collected up front so a section that legitimately moves
-                # between two levels in the same save (still present, just
-                # under a different parent) is never treated as "removed"
-                # by the level it used to belong to, purely because that
-                # level happens to be processed before the section's UPDATE
-                # actually moves it.
-                all_incoming_section_ids = {
-                    sec["id"]
-                    for lvl in levels
-                    for sec in (lvl.get("sections") or [])
-                    if sec.get("id")
-                }
+            # 3. Upsert Levels and Classes / Sections
+            levels = payload.get("levels") or []
+            # Sections created before any real teacher exists simply have no
+            # head teacher yet -- head_teacher_id is nullable for exactly this
+            # case; the admin assigns one later via PUT /students/classes/{id}.
+            # No fallback to `users` here: head_teacher_id REFERENCES
+            # teachers(id), not users(id), so a users.id whose owner has
+            # no teachers row is a foreign key violation that would
+            # abort this entire save -- settings, calendar, every other
+            # level -- the moment one such user exists.
+            default_teacher_id = await conn.fetchval(
+                "SELECT id FROM teachers ORDER BY id ASC LIMIT 1"
+            )
 
-                for lvl in levels:
-                    lvl_name = (lvl.get("name") or "Grade").strip()
-                    ordinal = lvl.get("ordinal")
-                    isced = lvl.get("isced_level")
-                    age_min = lvl.get("age_band_min")
-                    age_max = lvl.get("age_band_max")
-                    is_active = bool(lvl.get("is_active", True))
-                    level_id_in = lvl.get("level_id")
+            # Collected up front so a section that legitimately moves
+            # between two levels in the same save (still present, just
+            # under a different parent) is never treated as "removed"
+            # by the level it used to belong to, purely because that
+            # level happens to be processed before the section's UPDATE
+            # actually moves it.
+            all_incoming_section_ids = {
+                sec["id"] for lvl in levels for sec in (lvl.get("sections") or []) if sec.get("id")
+            }
 
-                    lvl_id = None
-                    if level_id_in:
-                        lvl_id = await conn.fetchval(
-                            "SELECT level_id FROM levels WHERE level_id = $1", level_id_in
-                        )
-                    if not lvl_id:
-                        # No id given (a caller that fetched /structure and
-                        # resent it without carrying level_id forward), or
-                        # the id no longer exists. Fall back to matching by
-                        # name only -- never by ordinal, which is exactly
-                        # what let two grades swap labels when their
-                        # ordinals were swapped instead of tracking identity.
-                        lvl_id = await conn.fetchval(
-                            "SELECT level_id FROM levels WHERE LOWER(name) = LOWER($1)", lvl_name
-                        )
+            for lvl in levels:
+                lvl_name = (lvl.get("name") or "Grade").strip()
+                ordinal = lvl.get("ordinal")
+                isced = lvl.get("isced_level")
+                age_min = lvl.get("age_band_min")
+                age_max = lvl.get("age_band_max")
+                is_active = bool(lvl.get("is_active", True))
+                level_id_in = lvl.get("level_id")
 
-                    if lvl_id:
-                        await conn.execute(
-                            """
-                            UPDATE levels
-                            SET name = $1, isced_level = $2, age_band_min = $3, age_band_max = $4, ordinal = $5, is_active = $6
-                            WHERE level_id = $7
-                            """,
-                            lvl_name,
-                            isced,
-                            age_min,
-                            age_max,
-                            ordinal,
-                            is_active,
-                            lvl_id,
-                        )
-                    else:
-                        # No id, or the id no longer exists (stale client
-                        # state) -- this is a new level, not a rename target.
-                        lvl_id = await conn.fetchval(
-                            """
-                            INSERT INTO levels (name, isced_level, age_band_min, age_band_max, ordinal, is_active)
-                            VALUES ($1, $2, $3, $4, $5, $6)
-                            RETURNING level_id
-                            """,
-                            lvl_name,
-                            isced,
-                            age_min,
-                            age_max,
-                            ordinal,
-                            is_active,
-                        )
-
-                    sections = lvl.get("sections") or []
-                    incoming_section_ids = set()
-                    for sec in sections:
-                        sec_name = (sec.get("name") or f"{lvl_name} - A").strip()
-                        sec_cap = int(sec.get("capacity") or 25)
-                        sec_id_in = sec.get("id")
-
-                        cid = None
-                        if sec_id_in:
-                            cid = await conn.fetchval(
-                                "SELECT id FROM class WHERE id = $1", sec_id_in
-                            )
-                        if not cid:
-                            # Same rationale as the level fallback above.
-                            # This still can't detect a rename with no id
-                            # attached (the new name won't match the old
-                            # row) -- that is exactly why id is now the
-                            # primary key; this exists only so a caller that
-                            # doesn't supply one yet doesn't get duplicate
-                            # sections on every save.
-                            cid = await conn.fetchval(
-                                "SELECT id FROM class WHERE level_id = $1 AND LOWER(name) = LOWER($2)",
-                                lvl_id,
-                                sec_name,
-                            )
-
-                        if cid:
-                            await conn.execute(
-                                "UPDATE class SET name = $1, level_id = $2, capacity = $3, section_label = $4 WHERE id = $5",
-                                sec_name,
-                                lvl_id,
-                                sec_cap,
-                                _derive_section_label(sec_name),
-                                cid,
-                            )
-                        elif is_active:
-                            # A deactivated level must not accept new sections
-                            # -- an existing one can still be edited above,
-                            # but nothing new gets attached to it.
-                            if active_year_id is None:
-                                raise ValueError("No active academic year is set for this tenant")
-                            cid = await conn.fetchval(
-                                """
-                                INSERT INTO class (name, level_id, capacity, head_teacher_id, academic_year_id, section_label)
-                                VALUES ($1, $2, $3, $4, $5, $6)
-                                RETURNING id
-                                """,
-                                sec_name,
-                                lvl_id,
-                                sec_cap,
-                                default_teacher_id,
-                                active_year_id,
-                                _derive_section_label(sec_name),
-                            )
-                        if cid:
-                            incoming_section_ids.add(cid)
-
-                    existing_section_rows = await conn.fetch(
-                        "SELECT id FROM class WHERE level_id = $1", lvl_id
+                lvl_id = None
+                if level_id_in:
+                    lvl_id = await conn.fetchval(
+                        "SELECT level_id FROM levels WHERE level_id = $1", level_id_in
                     )
-                    stale_section_ids = [
-                        r["id"]
-                        for r in existing_section_rows
-                        if r["id"] not in incoming_section_ids
-                        and r["id"] not in all_incoming_section_ids
-                    ]
-                    if stale_section_ids:
-                        await self._block_if_classes_have_enrollment_history(
-                            conn, stale_section_ids
+                if not lvl_id:
+                    # No id given (a caller that fetched /structure and
+                    # resent it without carrying level_id forward), or
+                    # the id no longer exists. Fall back to matching by
+                    # name only -- never by ordinal, which is exactly
+                    # what let two grades swap labels when their
+                    # ordinals were swapped instead of tracking identity.
+                    lvl_id = await conn.fetchval(
+                        "SELECT level_id FROM levels WHERE LOWER(name) = LOWER($1)", lvl_name
+                    )
+
+                if lvl_id:
+                    await conn.execute(
+                        """
+                        UPDATE levels
+                        SET name = $1, isced_level = $2, age_band_min = $3, age_band_max = $4, ordinal = $5, is_active = $6
+                        WHERE level_id = $7
+                        """,
+                        lvl_name,
+                        isced,
+                        age_min,
+                        age_max,
+                        ordinal,
+                        is_active,
+                        lvl_id,
+                    )
+                else:
+                    # No id, or the id no longer exists (stale client
+                    # state) -- this is a new level, not a rename target.
+                    lvl_id = await conn.fetchval(
+                        """
+                        INSERT INTO levels (name, isced_level, age_band_min, age_band_max, ordinal, is_active)
+                        VALUES ($1, $2, $3, $4, $5, $6)
+                        RETURNING level_id
+                        """,
+                        lvl_name,
+                        isced,
+                        age_min,
+                        age_max,
+                        ordinal,
+                        is_active,
+                    )
+
+                sections = lvl.get("sections") or []
+                incoming_section_ids = set()
+                for sec in sections:
+                    sec_name = (sec.get("name") or f"{lvl_name} - A").strip()
+                    sec_cap = int(sec.get("capacity") or 25)
+                    sec_id_in = sec.get("id")
+
+                    cid = None
+                    if sec_id_in:
+                        cid = await conn.fetchval("SELECT id FROM class WHERE id = $1", sec_id_in)
+                    if not cid:
+                        # Same rationale as the level fallback above.
+                        # This still can't detect a rename with no id
+                        # attached (the new name won't match the old
+                        # row) -- that is exactly why id is now the
+                        # primary key; this exists only so a caller that
+                        # doesn't supply one yet doesn't get duplicate
+                        # sections on every save.
+                        cid = await conn.fetchval(
+                            "SELECT id FROM class WHERE level_id = $1 AND LOWER(name) = LOWER($2)",
+                            lvl_id,
+                            sec_name,
                         )
-                        affected = await conn.fetch(
-                            "SELECT id, class_id FROM students WHERE class_id = ANY($1::bigint[])",
-                            stale_section_ids,
-                        )
+
+                    if cid:
                         await conn.execute(
-                            "UPDATE students SET class_id = NULL WHERE class_id = ANY($1::bigint[])",
-                            stale_section_ids,
+                            "UPDATE class SET name = $1, level_id = $2, capacity = $3, section_label = $4 WHERE id = $5",
+                            sec_name,
+                            lvl_id,
+                            sec_cap,
+                            _derive_section_label(sec_name),
+                            cid,
                         )
-                        for row in affected:
-                            await self._record_class_change(
-                                conn, row["id"], row["class_id"], None, changed_by
-                            )
-                        await conn.execute(
-                            "DELETE FROM event_class_map WHERE class_id = ANY($1::bigint[])",
-                            stale_section_ids,
+                    elif is_active:
+                        # A deactivated level must not accept new sections
+                        # -- an existing one can still be edited above,
+                        # but nothing new gets attached to it.
+                        if active_year_id is None:
+                            raise ValueError("No active academic year is set for this tenant")
+                        cid = await conn.fetchval(
+                            """
+                            INSERT INTO class (name, level_id, capacity, head_teacher_id, academic_year_id, section_label)
+                            VALUES ($1, $2, $3, $4, $5, $6)
+                            RETURNING id
+                            """,
+                            sec_name,
+                            lvl_id,
+                            sec_cap,
+                            default_teacher_id,
+                            active_year_id,
+                            _derive_section_label(sec_name),
                         )
-                        await conn.execute(
-                            "DELETE FROM class WHERE id = ANY($1::bigint[])", stale_section_ids
+                    if cid:
+                        incoming_section_ids.add(cid)
+
+                existing_section_rows = await conn.fetch(
+                    "SELECT id FROM class WHERE level_id = $1", lvl_id
+                )
+                stale_section_ids = [
+                    r["id"]
+                    for r in existing_section_rows
+                    if r["id"] not in incoming_section_ids
+                    and r["id"] not in all_incoming_section_ids
+                ]
+                if stale_section_ids:
+                    await self._block_if_classes_have_enrollment_history(conn, stale_section_ids)
+                    affected = await conn.fetch(
+                        "SELECT id, class_id FROM students WHERE class_id = ANY($1::bigint[])",
+                        stale_section_ids,
+                    )
+                    await conn.execute(
+                        "UPDATE students SET class_id = NULL WHERE class_id = ANY($1::bigint[])",
+                        stale_section_ids,
+                    )
+                    for row in affected:
+                        await self._record_class_change(
+                            conn, row["id"], row["class_id"], None, changed_by
                         )
+                    await conn.execute(
+                        "DELETE FROM event_class_map WHERE class_id = ANY($1::bigint[])",
+                        stale_section_ids,
+                    )
+                    await conn.execute(
+                        "DELETE FROM class WHERE id = ANY($1::bigint[])", stale_section_ids
+                    )
 
     async def get_academic_structure(self) -> dict:
         """Fetch complete saved academic structure & calendar for tenant."""
@@ -510,7 +501,7 @@ class TenantRepository:
         # A saved calendar alone (settings_row) does not mean the school has a
         # real academic structure — it must have at least one active level
         # with at least one class section under it.
-        has_structure = any(l["is_active"] and len(l["sections"]) > 0 for l in levels)
+        has_structure = any(lvl["is_active"] and len(lvl["sections"]) > 0 for lvl in levels)
         return {
             "has_structure": has_structure,
             "system": system,
@@ -649,13 +640,10 @@ class TenantRepository:
     ) -> int:
         u_id = parse_id(user_id)
         new_cid = parse_id(class_id) if class_id else None
-        async with self.pool.acquire() as conn:
-            async with conn.transaction():
-                existing_cid = await conn.fetchval(
-                    "SELECT class_id FROM students WHERE id = $1", u_id
-                )
-                await conn.execute(
-                    """
+        async with self.pool.acquire() as conn, conn.transaction():
+            existing_cid = await conn.fetchval("SELECT class_id FROM students WHERE id = $1", u_id)
+            await conn.execute(
+                """
                     INSERT INTO students (id, name, class_id, gender, birth_data)
                     VALUES ($1, $2, $3, $4, $5)
                     ON CONFLICT (id) DO UPDATE SET
@@ -664,14 +652,14 @@ class TenantRepository:
                         gender = EXCLUDED.gender,
                         birth_data = EXCLUDED.birth_data
                     """,
-                    u_id,
-                    name,
-                    new_cid,
-                    gender,
-                    birth_data,
-                )
-                if new_cid != existing_cid:
-                    await self._record_class_change(conn, u_id, existing_cid, new_cid, changed_by)
+                u_id,
+                name,
+                new_cid,
+                gender,
+                birth_data,
+            )
+            if new_cid != existing_cid:
+                await self._record_class_change(conn, u_id, existing_cid, new_cid, changed_by)
         return u_id
 
     async def get_class_history(self, student_id) -> list[dict]:
@@ -739,7 +727,7 @@ class TenantRepository:
             if isinstance(d.get("parents"), str):
                 try:
                     d["parents"] = json.loads(d["parents"])
-                except:
+                except Exception:
                     d["parents"] = []
             results.append(d)
         return results
@@ -1046,61 +1034,68 @@ class TenantRepository:
                 "cannot be deleted."
             )
 
-    async def delete_class(self, class_id: int, changed_by=None) -> bool:
+    async def delete_class(self, class_id: int, changed_by=None, audit_hook=None) -> bool:
+        """`audit_hook`, if given, is an `async def hook(conn) -> None` invoked
+        inside this same transaction right before it commits -- so an audit
+        row is written if and only if the delete itself actually commits (see
+        tests/integration/test_audit_log.py). Kept as an opaque callback
+        rather than importing the audit domain here, so this repository has
+        zero coupling to it; the service layer composes the two."""
         cid = parse_id(class_id)
-        async with self.pool.acquire() as conn:
-            async with conn.transaction():
-                existing = await conn.fetchval("SELECT id FROM class WHERE id = $1", cid)
-                if not existing:
-                    raise ValueError(f"Class {cid} not found")
+        async with self.pool.acquire() as conn, conn.transaction():
+            existing = await conn.fetchval("SELECT id FROM class WHERE id = $1", cid)
+            if not existing:
+                raise ValueError(f"Class {cid} not found")
 
-                await self._block_if_classes_have_enrollment_history(conn, [cid])
+            await self._block_if_classes_have_enrollment_history(conn, [cid])
 
-                # Unlink students if any -- record each as a placement
-                # change (old=cid, new=NULL) before the row disappears.
-                affected = await conn.fetch("SELECT id FROM students WHERE class_id = $1", cid)
-                await conn.execute("UPDATE students SET class_id = NULL WHERE class_id = $1", cid)
-                for row in affected:
-                    await self._record_class_change(conn, row["id"], cid, None, changed_by)
-                await conn.execute("DELETE FROM event_class_map WHERE class_id = $1", cid)
-                await conn.execute("DELETE FROM class WHERE id = $1", cid)
+            # Unlink students if any -- record each as a placement
+            # change (old=cid, new=NULL) before the row disappears.
+            affected = await conn.fetch("SELECT id FROM students WHERE class_id = $1", cid)
+            await conn.execute("UPDATE students SET class_id = NULL WHERE class_id = $1", cid)
+            for row in affected:
+                await self._record_class_change(conn, row["id"], cid, None, changed_by)
+            await conn.execute("DELETE FROM event_class_map WHERE class_id = $1", cid)
+            await conn.execute("DELETE FROM class WHERE id = $1", cid)
+            if audit_hook is not None:
+                await audit_hook(conn)
         return True
 
-    async def delete_level(self, level_id: int, changed_by=None) -> bool:
+    async def delete_level(self, level_id: int, changed_by=None, audit_hook=None) -> bool:
+        """See `delete_class`'s `audit_hook` docstring -- same contract."""
         lid = parse_id(level_id)
-        async with self.pool.acquire() as conn:
-            async with conn.transaction():
-                existing = await conn.fetchval(
-                    "SELECT level_id FROM levels WHERE level_id = $1", lid
+        async with self.pool.acquire() as conn, conn.transaction():
+            existing = await conn.fetchval("SELECT level_id FROM levels WHERE level_id = $1", lid)
+            if not existing:
+                raise ValueError(f"Level {lid} not found")
+
+            class_rows = await conn.fetch("SELECT id FROM class WHERE level_id = $1", lid)
+            class_ids = [c["id"] for c in class_rows]
+
+            await self._block_if_classes_have_enrollment_history(conn, class_ids)
+
+            if class_ids:
+                affected = await conn.fetch(
+                    "SELECT id, class_id FROM students WHERE class_id = ANY($1::bigint[])",
+                    class_ids,
                 )
-                if not existing:
-                    raise ValueError(f"Level {lid} not found")
-
-                class_rows = await conn.fetch("SELECT id FROM class WHERE level_id = $1", lid)
-                class_ids = [c["id"] for c in class_rows]
-
-                await self._block_if_classes_have_enrollment_history(conn, class_ids)
-
-                if class_ids:
-                    affected = await conn.fetch(
-                        "SELECT id, class_id FROM students WHERE class_id = ANY($1::bigint[])",
-                        class_ids,
+                await conn.execute(
+                    "UPDATE students SET class_id = NULL WHERE class_id = ANY($1::bigint[])",
+                    class_ids,
+                )
+                for row in affected:
+                    await self._record_class_change(
+                        conn, row["id"], row["class_id"], None, changed_by
                     )
-                    await conn.execute(
-                        "UPDATE students SET class_id = NULL WHERE class_id = ANY($1::bigint[])",
-                        class_ids,
-                    )
-                    for row in affected:
-                        await self._record_class_change(
-                            conn, row["id"], row["class_id"], None, changed_by
-                        )
-                    await conn.execute(
-                        "DELETE FROM event_class_map WHERE class_id = ANY($1::bigint[])",
-                        class_ids,
-                    )
-                    await conn.execute("DELETE FROM class WHERE level_id = $1", lid)
+                await conn.execute(
+                    "DELETE FROM event_class_map WHERE class_id = ANY($1::bigint[])",
+                    class_ids,
+                )
+                await conn.execute("DELETE FROM class WHERE level_id = $1", lid)
 
-                await conn.execute("DELETE FROM levels WHERE level_id = $1", lid)
+            await conn.execute("DELETE FROM levels WHERE level_id = $1", lid)
+            if audit_hook is not None:
+                await audit_hook(conn)
         return True
 
     async def update_level(
@@ -1166,17 +1161,14 @@ class TenantRepository:
     ) -> bool:
         sid = parse_id(student_id)
         cid = parse_id(new_class_id) if new_class_id else None
-        async with self.pool.acquire() as conn:
-            async with conn.transaction():
-                row = await conn.fetchrow(
-                    "SELECT class_id FROM students WHERE id = $1 FOR UPDATE", sid
-                )
-                if row is None:
-                    raise ValueError(f"Student {sid} not found")
-                existing_cid = row["class_id"]
-                if cid != existing_cid:
-                    await conn.execute("UPDATE students SET class_id = $1 WHERE id = $2", cid, sid)
-                    await self._record_class_change(conn, sid, existing_cid, cid, changed_by)
+        async with self.pool.acquire() as conn, conn.transaction():
+            row = await conn.fetchrow("SELECT class_id FROM students WHERE id = $1 FOR UPDATE", sid)
+            if row is None:
+                raise ValueError(f"Student {sid} not found")
+            existing_cid = row["class_id"]
+            if cid != existing_cid:
+                await conn.execute("UPDATE students SET class_id = $1 WHERE id = $2", cid, sid)
+                await self._record_class_change(conn, sid, existing_cid, cid, changed_by)
         return True
 
     async def bulk_reassign_students(
@@ -1190,23 +1182,22 @@ class TenantRepository:
             return {"updated_count": 0, "missing_student_ids": []}
         sids = [parse_id(s) for s in student_ids]
         cid = parse_id(new_class_id) if new_class_id else None
-        async with self.pool.acquire() as conn:
-            async with conn.transaction():
-                rows = await conn.fetch(
-                    "SELECT id, class_id FROM students WHERE id = ANY($1::bigint[]) FOR UPDATE",
-                    sids,
+        async with self.pool.acquire() as conn, conn.transaction():
+            rows = await conn.fetch(
+                "SELECT id, class_id FROM students WHERE id = ANY($1::bigint[]) FOR UPDATE",
+                sids,
+            )
+            found = {row["id"]: row["class_id"] for row in rows}
+            missing = sorted(set(sids) - set(found.keys()))
+            if found:
+                await conn.execute(
+                    "UPDATE students SET class_id = $1 WHERE id = ANY($2::bigint[])",
+                    cid,
+                    list(found.keys()),
                 )
-                found = {row["id"]: row["class_id"] for row in rows}
-                missing = sorted(set(sids) - set(found.keys()))
-                if found:
-                    await conn.execute(
-                        "UPDATE students SET class_id = $1 WHERE id = ANY($2::bigint[])",
-                        cid,
-                        list(found.keys()),
-                    )
-                    for sid, old_cid in found.items():
-                        if old_cid != cid:
-                            await self._record_class_change(conn, sid, old_cid, cid, changed_by)
+                for sid, old_cid in found.items():
+                    if old_cid != cid:
+                        await self._record_class_change(conn, sid, old_cid, cid, changed_by)
         return {"updated_count": len(found), "missing_student_ids": missing}
 
     async def get_classes_by_head_teacher(self, teacher_id) -> list[dict]:
@@ -1308,7 +1299,9 @@ class TenantRepository:
                 "warnings": [],
             }
 
-        isced_level = self._parse_import_int(row.get("grade_isced_level"), "grade_isced_level", errors)
+        isced_level = self._parse_import_int(
+            row.get("grade_isced_level"), "grade_isced_level", errors
+        )
         age_band_min = self._parse_import_int(row.get("grade_age_min"), "grade_age_min", errors)
         age_band_max = self._parse_import_int(row.get("grade_age_max"), "grade_age_max", errors)
         grade_ordinal = self._parse_import_int(row.get("grade_ordinal"), "grade_ordinal", errors)
@@ -1324,7 +1317,9 @@ class TenantRepository:
         head_teacher_id = UNSET
         class_action = "grade_only"
         if class_name:
-            class_capacity = self._parse_import_int(row.get("class_capacity"), "class_capacity", errors)
+            class_capacity = self._parse_import_int(
+                row.get("class_capacity"), "class_capacity", errors
+            )
             class_active = self._parse_import_bool(row.get("class_active"), default=True)
 
             teacher_email = (row.get("head_teacher_email") or "").strip()
@@ -1338,7 +1333,9 @@ class TenantRepository:
                     )
 
             if existing_level:
-                existing_class = await self.get_class_by_name_and_level(class_name, existing_level["level_id"])
+                existing_class = await self.get_class_by_name_and_level(
+                    class_name, existing_level["level_id"]
+                )
                 class_action = "update_class" if existing_class else "create_class"
             else:
                 # Grade is new -- its class can only ever be a create, never
@@ -1462,34 +1459,33 @@ class TenantRepository:
         ],  # list of {"class_id": int, "ticket_price": float, "costbudget_id": int | None, "budget_description": str | None, "budget_price": float | None}
     ) -> dict:
         event_id = None
-        async with self.pool.acquire() as conn:
-            async with conn.transaction():
-                event_id = await conn.fetchval(
+        async with self.pool.acquire() as conn, conn.transaction():
+            event_id = await conn.fetchval(
+                """
+                INSERT INTO event (title, description, address, school_subsidy, date, created_by)
+                VALUES ($1, $2, $3, $4, $5, $6)
+                RETURNING id
+                """,
+                title,
+                description,
+                address,
+                school_subsidy,
+                date_val,
+                parse_id(created_by),
+            )
+
+            # Insert class mappings
+            for mapping in class_mappings:
+                await conn.fetchval(
                     """
-                    INSERT INTO event (title, description, address, school_subsidy, date, created_by)
-                    VALUES ($1, $2, $3, $4, $5, $6)
+                    INSERT INTO event_class_map (event_id, class_id, ticket_price)
+                    VALUES ($1, $2, $3)
                     RETURNING id
                     """,
-                    title,
-                    description,
-                    address,
-                    school_subsidy,
-                    date_val,
-                    parse_id(created_by),
+                    event_id,
+                    parse_id(mapping["class_id"]),
+                    mapping.get("ticket_price", 0.0),
                 )
-
-                # Insert class mappings
-                for mapping in class_mappings:
-                    ecm_id = await conn.fetchval(
-                        """
-                        INSERT INTO event_class_map (event_id, class_id, ticket_price)
-                        VALUES ($1, $2, $3)
-                        RETURNING id
-                        """,
-                        event_id,
-                        parse_id(mapping["class_id"]),
-                        mapping.get("ticket_price", 0.0),
-                    )
 
         return await self.get_event_by_id(event_id)
 
@@ -1642,56 +1638,55 @@ class TenantRepository:
         date_val: datetime,
         class_mappings: list[dict],
     ) -> dict:
-        async with self.pool.acquire() as conn:
-            async with conn.transaction():
-                # 1. Update general event details
-                await conn.execute(
-                    """
+        async with self.pool.acquire() as conn, conn.transaction():
+            # 1. Update general event details
+            await conn.execute(
+                """
                     UPDATE event
                     SET title = $1, description = $2, address = $3, school_subsidy = $4, date = $5
                     WHERE id = $6
                     """,
-                    title,
-                    description,
-                    address,
-                    school_subsidy,
-                    date_val,
-                    parse_id(event_id),
-                )
+                title,
+                description,
+                address,
+                school_subsidy,
+                date_val,
+                parse_id(event_id),
+            )
 
-                # 2. Query existing mappings
-                existing_rows = await conn.fetch(
-                    "SELECT id, class_id FROM event_class_map WHERE event_id = $1",
-                    parse_id(event_id),
-                )
-                existing_map = {int(row["class_id"]): row["id"] for row in existing_rows}
+            # 2. Query existing mappings
+            existing_rows = await conn.fetch(
+                "SELECT id, class_id FROM event_class_map WHERE event_id = $1",
+                parse_id(event_id),
+            )
+            existing_map = {int(row["class_id"]): row["id"] for row in existing_rows}
 
-                # 3. Upsert mappings and delete/insert budgets
-                for mapping in class_mappings:
-                    class_id = int(parse_id(mapping["class_id"]))
-                    ticket_price = float(mapping.get("ticket_price", 0.0))
+            # 3. Upsert mappings and delete/insert budgets
+            for mapping in class_mappings:
+                class_id = int(parse_id(mapping["class_id"]))
+                ticket_price = float(mapping.get("ticket_price", 0.0))
 
-                    if class_id in existing_map:
-                        ecm_id = existing_map[class_id]
-                        await conn.execute(
-                            "UPDATE event_class_map SET ticket_price = $1 WHERE id = $2",
-                            ticket_price,
-                            ecm_id,
-                        )
-                    else:
-                        ecm_id = await conn.fetchval(
-                            """
+                if class_id in existing_map:
+                    ecm_id = existing_map[class_id]
+                    await conn.execute(
+                        "UPDATE event_class_map SET ticket_price = $1 WHERE id = $2",
+                        ticket_price,
+                        ecm_id,
+                    )
+                else:
+                    ecm_id = await conn.fetchval(
+                        """
                             INSERT INTO event_class_map (event_id, class_id, ticket_price)
                             VALUES ($1, $2, $3)
                             RETURNING id
                             """,
-                            parse_id(event_id),
-                            class_id,
-                            ticket_price,
-                        )
+                        parse_id(event_id),
+                        class_id,
+                        ticket_price,
+                    )
 
-                    # No budgets to handle since cost_budget is dropped
-                    pass
+                # No budgets to handle since cost_budget is dropped
+                pass
 
         return await self.get_event_by_id(event_id)
 
@@ -1923,7 +1918,7 @@ class TenantRepository:
             JOIN users u ON u.id = f.user_id
             LEFT JOIN teachers t ON t.id = f.user_id
             LEFT JOIN students s ON s.id = f.user_id
-            LEFT JOIN parents p ON p.id = f.user_id
+            LEFT JOIN parenets p ON p.id = f.user_id
             WHERE f.event_id = $1
             ORDER BY f.created_at DESC
             """,
@@ -1979,27 +1974,33 @@ class TenantRepository:
         national_id_encrypted: str,
         medical_conditions_encrypted: str,
         emergency_contact_encrypted: str,
+        audit_hook=None,
     ) -> UUID:
-        return await self.pool.fetchval(
-            """
-            INSERT INTO student_health_and_records (
-                student_id,
+        """`audit_hook`, if given: see delete_class's docstring for the contract."""
+        async with self.pool.acquire() as conn, conn.transaction():
+            record_id = await conn.fetchval(
+                """
+                INSERT INTO student_health_and_records (
+                    student_id,
+                    national_id_encrypted,
+                    medical_conditions_encrypted,
+                    emergency_contact_encrypted
+                )
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (student_id) DO UPDATE SET
+                    national_id_encrypted = EXCLUDED.national_id_encrypted,
+                    medical_conditions_encrypted = EXCLUDED.medical_conditions_encrypted,
+                    emergency_contact_encrypted = EXCLUDED.emergency_contact_encrypted
+                RETURNING id
+                """,
+                parse_id(student_id),
                 national_id_encrypted,
                 medical_conditions_encrypted,
-                emergency_contact_encrypted
+                emergency_contact_encrypted,
             )
-            VALUES ($1, $2, $3, $4)
-            ON CONFLICT (student_id) DO UPDATE SET
-                national_id_encrypted = EXCLUDED.national_id_encrypted,
-                medical_conditions_encrypted = EXCLUDED.medical_conditions_encrypted,
-                emergency_contact_encrypted = EXCLUDED.emergency_contact_encrypted
-            RETURNING id
-            """,
-            parse_id(student_id),
-            national_id_encrypted,
-            medical_conditions_encrypted,
-            emergency_contact_encrypted,
-        )
+            if audit_hook is not None:
+                await audit_hook(conn)
+        return record_id
 
     async def get_student_health_by_student_id(self, student_id) -> dict | None:
         row = await self.pool.fetchrow(
@@ -2121,6 +2122,12 @@ class TenantRepository:
         await self.pool.execute(
             "DELETE FROM resources WHERE event_id = $1",
             parse_id(event_id),
+        )
+
+    async def delete_resource(self, resource_id: int) -> None:
+        await self.pool.execute(
+            "DELETE FROM resources WHERE id = $1",
+            parse_id(resource_id),
         )
 
     async def update_resource(
@@ -2337,49 +2344,48 @@ class TenantRepository:
         'excluded, not held', per ADR 0003."""
         rid = parse_id(rollover_id)
         student_ids = [parse_id(line["student_id"]) for line in lines]
-        async with self.pool.acquire() as conn:
-            async with conn.transaction():
-                if student_ids:
-                    await conn.execute(
-                        "DELETE FROM year_rollover_line WHERE rollover_id = $1 AND student_id != ALL($2::bigint[])",
-                        rid,
-                        student_ids,
-                    )
-                else:
-                    await conn.execute("DELETE FROM year_rollover_line WHERE rollover_id = $1", rid)
-                for line in lines:
-                    await conn.execute(
-                        """
-                        INSERT INTO year_rollover_line
-                            (rollover_id, student_id, from_class_id, to_level_id, to_section_label,
-                             proposed_action, exception_code)
-                        VALUES ($1, $2, $3, $4, $5, $6, $7)
-                        ON CONFLICT (rollover_id, student_id) DO UPDATE SET
-                            from_class_id = EXCLUDED.from_class_id,
-                            proposed_action = EXCLUDED.proposed_action,
-                            exception_code = EXCLUDED.exception_code,
-                            -- Once a line carries an override_action, its target
-                            -- was deliberately chosen by an admin (possibly via
-                            -- resolving a hold to a manually-picked level/section)
-                            -- -- a recompute must not silently overwrite that
-                            -- choice back to the engine's raw proposal.
-                            to_level_id = CASE
-                                WHEN year_rollover_line.override_action IS NULL THEN EXCLUDED.to_level_id
-                                ELSE year_rollover_line.to_level_id
-                            END,
-                            to_section_label = CASE
-                                WHEN year_rollover_line.override_action IS NULL THEN EXCLUDED.to_section_label
-                                ELSE year_rollover_line.to_section_label
-                            END
-                        """,
-                        rid,
-                        parse_id(line["student_id"]),
-                        parse_id(line["from_class_id"]) if line.get("from_class_id") else None,
-                        parse_id(line["to_level_id"]) if line.get("to_level_id") else None,
-                        line.get("to_section_label"),
-                        line["proposed_action"],
-                        line.get("exception_code"),
-                    )
+        async with self.pool.acquire() as conn, conn.transaction():
+            if student_ids:
+                await conn.execute(
+                    "DELETE FROM year_rollover_line WHERE rollover_id = $1 AND student_id != ALL($2::bigint[])",
+                    rid,
+                    student_ids,
+                )
+            else:
+                await conn.execute("DELETE FROM year_rollover_line WHERE rollover_id = $1", rid)
+            for line in lines:
+                await conn.execute(
+                    """
+                    INSERT INTO year_rollover_line
+                        (rollover_id, student_id, from_class_id, to_level_id, to_section_label,
+                         proposed_action, exception_code)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    ON CONFLICT (rollover_id, student_id) DO UPDATE SET
+                        from_class_id = EXCLUDED.from_class_id,
+                        proposed_action = EXCLUDED.proposed_action,
+                        exception_code = EXCLUDED.exception_code,
+                        -- Once a line carries an override_action, its target
+                        -- was deliberately chosen by an admin (possibly via
+                        -- resolving a hold to a manually-picked level/section)
+                        -- -- a recompute must not silently overwrite that
+                        -- choice back to the engine's raw proposal.
+                        to_level_id = CASE
+                            WHEN year_rollover_line.override_action IS NULL THEN EXCLUDED.to_level_id
+                            ELSE year_rollover_line.to_level_id
+                        END,
+                        to_section_label = CASE
+                            WHEN year_rollover_line.override_action IS NULL THEN EXCLUDED.to_section_label
+                            ELSE year_rollover_line.to_section_label
+                        END
+                    """,
+                    rid,
+                    parse_id(line["student_id"]),
+                    parse_id(line["from_class_id"]) if line.get("from_class_id") else None,
+                    parse_id(line["to_level_id"]) if line.get("to_level_id") else None,
+                    line.get("to_section_label"),
+                    line["proposed_action"],
+                    line.get("exception_code"),
+                )
 
     async def get_rollover_lines(self, rollover_id: int) -> list[dict]:
         rows = await self.pool.fetch(
@@ -2438,169 +2444,168 @@ class TenantRepository:
         """
         rid = parse_id(rollover_id)
         cb = parse_id(changed_by) if changed_by else None
-        async with self.pool.acquire() as conn:
-            async with conn.transaction():
-                rollover = await conn.fetchrow(
-                    "SELECT * FROM year_rollover WHERE id = $1 FOR UPDATE", rid
-                )
-                if not rollover:
-                    raise ValueError(f"Rollover {rid} not found")
-                if rollover["state"] == "committed":
-                    # Re-entrant: a retried commit request after the first
-                    # already succeeded returns the existing result, not an error.
-                    return dict(rollover)
-                if rollover["state"] != "previewed":
-                    raise ValueError(
-                        f"Rollover must be previewed before it can be committed "
-                        f"(current state: {rollover['state']})"
-                    )
-
-                from_year_id = rollover["from_year_id"]
-                to_year_id = rollover["to_year_id"]
-
-                await conn.execute(
-                    "UPDATE year_rollover SET state = 'committing', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
-                    rid,
+        async with self.pool.acquire() as conn, conn.transaction():
+            rollover = await conn.fetchrow(
+                "SELECT * FROM year_rollover WHERE id = $1 FOR UPDATE", rid
+            )
+            if not rollover:
+                raise ValueError(f"Rollover {rid} not found")
+            if rollover["state"] == "committed":
+                # Re-entrant: a retried commit request after the first
+                # already succeeded returns the existing result, not an error.
+                return dict(rollover)
+            if rollover["state"] != "previewed":
+                raise ValueError(
+                    f"Rollover must be previewed before it can be committed "
+                    f"(current state: {rollover['state']})"
                 )
 
-                lines = await conn.fetch(
-                    "SELECT * FROM year_rollover_line WHERE rollover_id = $1 AND applied_at IS NULL",
-                    rid,
-                )
+            from_year_id = rollover["from_year_id"]
+            to_year_id = rollover["to_year_id"]
 
-                # 1. Ensure a to_year class exists for every distinct
-                #    (to_level_id, to_section_label) a promote line targets,
-                #    cloned from its source class's capacity/head_teacher.
-                #    ON CONFLICT DO NOTHING absorbs a retry after a partial crash.
-                resolved_class_ids: dict[tuple, int] = {}
-                for line in lines:
-                    effective = line["override_action"] or line["proposed_action"]
-                    if effective != "promote":
-                        continue
-                    key = (line["to_level_id"], line["to_section_label"])
-                    if key in resolved_class_ids or not line["from_class_id"]:
-                        continue
-                    source = await conn.fetchrow(
-                        "SELECT capacity, head_teacher_id FROM class WHERE id = $1",
-                        line["from_class_id"],
-                    )
-                    level_row = await conn.fetchrow(
-                        "SELECT name FROM levels WHERE level_id = $1", line["to_level_id"]
-                    )
-                    target_name = f"{level_row['name']} - {line['to_section_label']}"
-                    new_class_id = await conn.fetchval(
-                        """
-                        INSERT INTO class (name, level_id, head_teacher_id, capacity, is_active,
-                                            academic_year_id, section_label)
-                        VALUES ($1, $2, $3, $4, TRUE, $5, $6)
-                        ON CONFLICT (name, academic_year_id) DO NOTHING
-                        RETURNING id
-                        """,
-                        target_name,
-                        line["to_level_id"],
-                        source["head_teacher_id"],
-                        source["capacity"],
-                        to_year_id,
-                        line["to_section_label"],
-                    )
-                    if new_class_id is None:
-                        new_class_id = await conn.fetchval(
-                            "SELECT id FROM class WHERE name = $1 AND academic_year_id = $2",
-                            target_name,
-                            to_year_id,
-                        )
-                    resolved_class_ids[key] = new_class_id
+            await conn.execute(
+                "UPDATE year_rollover SET state = 'committing', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+                rid,
+            )
 
-                # 2. Apply each line's effective action (override, if any set, else
-                #    the engine's proposal). 'hold' lines are left unresolved --
-                #    no class_id change, no applied_at stamp, so they stay
-                #    visibly outstanding for a future rollover attempt or a
-                #    manual fix after commit.
-                to_year_row = await conn.fetchrow(
-                    "SELECT end_date FROM academic_years WHERE id = $1", from_year_id
-                )
-                exit_date = to_year_row["end_date"] if to_year_row else None
-                applied_line_ids = []
-                for line in lines:
-                    effective = line["override_action"] or line["proposed_action"]
-                    if effective == "promote":
-                        target_class_id = resolved_class_ids.get(
-                            (line["to_level_id"], line["to_section_label"])
-                        )
-                        if not target_class_id:
-                            # A promote line with no resolvable target is a data
-                            # integrity problem (e.g. its from_class was deleted
-                            # between preview and commit), not a normal outcome
-                            # -- raise and let the whole transaction roll back
-                            # rather than silently leaving one student unmoved
-                            # while everyone else's promotion is stamped applied.
-                            raise ValueError(
-                                f"Rollover line {line['id']} (student {line['student_id']}) "
-                                f"could not resolve a target class for level={line['to_level_id']}, "
-                                f"section={line['to_section_label']!r} -- aborting commit"
-                            )
-                        await conn.execute(
-                            "UPDATE students SET class_id = $1 WHERE id = $2",
-                            target_class_id,
-                            line["student_id"],
-                        )
-                        await conn.execute(
-                            "UPDATE year_rollover_line SET to_class_id = $1 WHERE id = $2",
-                            target_class_id,
-                            line["id"],
-                        )
-                        await self._record_class_change(
-                            conn, line["student_id"], line["from_class_id"], target_class_id, cb
-                        )
-                        applied_line_ids.append(line["id"])
-                    elif effective in ("graduate", "withdraw"):
-                        new_status = "graduated" if effective == "graduate" else "withdrawn"
-                        await conn.execute(
-                            "UPDATE students SET class_id = NULL, status = $1, exited_on = $2 WHERE id = $3",
-                            new_status,
-                            exit_date,
-                            line["student_id"],
-                        )
-                        await self._record_class_change(
-                            conn, line["student_id"], line["from_class_id"], None, cb
-                        )
-                        applied_line_ids.append(line["id"])
-                    # 'hold': nothing to apply -- left out of applied_line_ids on purpose.
+            lines = await conn.fetch(
+                "SELECT * FROM year_rollover_line WHERE rollover_id = $1 AND applied_at IS NULL",
+                rid,
+            )
 
-                await conn.execute(
-                    "UPDATE year_rollover_line SET applied_at = CURRENT_TIMESTAMP "
-                    "WHERE id = ANY($1::bigint[]) AND applied_at IS NULL",
-                    applied_line_ids,
+            # 1. Ensure a to_year class exists for every distinct
+            #    (to_level_id, to_section_label) a promote line targets,
+            #    cloned from its source class's capacity/head_teacher.
+            #    ON CONFLICT DO NOTHING absorbs a retry after a partial crash.
+            resolved_class_ids: dict[tuple, int] = {}
+            for line in lines:
+                effective = line["override_action"] or line["proposed_action"]
+                if effective != "promote":
+                    continue
+                key = (line["to_level_id"], line["to_section_label"])
+                if key in resolved_class_ids or not line["from_class_id"]:
+                    continue
+                source = await conn.fetchrow(
+                    "SELECT capacity, head_teacher_id FROM class WHERE id = $1",
+                    line["from_class_id"],
                 )
-
-                # 3. Flip academic-year states. from_year first: the
-                #    one-active-year partial unique index rejects the reverse
-                #    order (both years being 'active' at once, even briefly).
-                await conn.execute(
-                    "UPDATE academic_years SET status = 'closed' WHERE id = $1", from_year_id
+                level_row = await conn.fetchrow(
+                    "SELECT name FROM levels WHERE level_id = $1", line["to_level_id"]
                 )
-                await conn.execute(
-                    "UPDATE academic_years SET status = 'active', rolled_from_id = $1 WHERE id = $2",
-                    from_year_id,
+                target_name = f"{level_row['name']} - {line['to_section_label']}"
+                new_class_id = await conn.fetchval(
+                    """
+                    INSERT INTO class (name, level_id, head_teacher_id, capacity, is_active,
+                                        academic_year_id, section_label)
+                    VALUES ($1, $2, $3, $4, TRUE, $5, $6)
+                    ON CONFLICT (name, academic_year_id) DO NOTHING
+                    RETURNING id
+                    """,
+                    target_name,
+                    line["to_level_id"],
+                    source["head_teacher_id"],
+                    source["capacity"],
                     to_year_id,
+                    line["to_section_label"],
                 )
-
-                def _count(action: str) -> int:
-                    return sum(
-                        1
-                        for line in lines
-                        if (line["override_action"] or line["proposed_action"]) == action
+                if new_class_id is None:
+                    new_class_id = await conn.fetchval(
+                        "SELECT id FROM class WHERE name = $1 AND academic_year_id = $2",
+                        target_name,
+                        to_year_id,
                     )
+                resolved_class_ids[key] = new_class_id
 
-                summary = {
-                    "promoted": _count("promote"),
-                    "graduated": _count("graduate"),
-                    "withdrawn": _count("withdraw"),
-                    "held": _count("hold"),
-                }
-                await conn.execute(
-                    "UPDATE year_rollover SET state = 'committed', summary = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
-                    json.dumps(summary),
-                    rid,
+            # 2. Apply each line's effective action (override, if any set, else
+            #    the engine's proposal). 'hold' lines are left unresolved --
+            #    no class_id change, no applied_at stamp, so they stay
+            #    visibly outstanding for a future rollover attempt or a
+            #    manual fix after commit.
+            to_year_row = await conn.fetchrow(
+                "SELECT end_date FROM academic_years WHERE id = $1", from_year_id
+            )
+            exit_date = to_year_row["end_date"] if to_year_row else None
+            applied_line_ids = []
+            for line in lines:
+                effective = line["override_action"] or line["proposed_action"]
+                if effective == "promote":
+                    target_class_id = resolved_class_ids.get(
+                        (line["to_level_id"], line["to_section_label"])
+                    )
+                    if not target_class_id:
+                        # A promote line with no resolvable target is a data
+                        # integrity problem (e.g. its from_class was deleted
+                        # between preview and commit), not a normal outcome
+                        # -- raise and let the whole transaction roll back
+                        # rather than silently leaving one student unmoved
+                        # while everyone else's promotion is stamped applied.
+                        raise ValueError(
+                            f"Rollover line {line['id']} (student {line['student_id']}) "
+                            f"could not resolve a target class for level={line['to_level_id']}, "
+                            f"section={line['to_section_label']!r} -- aborting commit"
+                        )
+                    await conn.execute(
+                        "UPDATE students SET class_id = $1 WHERE id = $2",
+                        target_class_id,
+                        line["student_id"],
+                    )
+                    await conn.execute(
+                        "UPDATE year_rollover_line SET to_class_id = $1 WHERE id = $2",
+                        target_class_id,
+                        line["id"],
+                    )
+                    await self._record_class_change(
+                        conn, line["student_id"], line["from_class_id"], target_class_id, cb
+                    )
+                    applied_line_ids.append(line["id"])
+                elif effective in ("graduate", "withdraw"):
+                    new_status = "graduated" if effective == "graduate" else "withdrawn"
+                    await conn.execute(
+                        "UPDATE students SET class_id = NULL, status = $1, exited_on = $2 WHERE id = $3",
+                        new_status,
+                        exit_date,
+                        line["student_id"],
+                    )
+                    await self._record_class_change(
+                        conn, line["student_id"], line["from_class_id"], None, cb
+                    )
+                    applied_line_ids.append(line["id"])
+                # 'hold': nothing to apply -- left out of applied_line_ids on purpose.
+
+            await conn.execute(
+                "UPDATE year_rollover_line SET applied_at = CURRENT_TIMESTAMP "
+                "WHERE id = ANY($1::bigint[]) AND applied_at IS NULL",
+                applied_line_ids,
+            )
+
+            # 3. Flip academic-year states. from_year first: the
+            #    one-active-year partial unique index rejects the reverse
+            #    order (both years being 'active' at once, even briefly).
+            await conn.execute(
+                "UPDATE academic_years SET status = 'closed' WHERE id = $1", from_year_id
+            )
+            await conn.execute(
+                "UPDATE academic_years SET status = 'active', rolled_from_id = $1 WHERE id = $2",
+                from_year_id,
+                to_year_id,
+            )
+
+            def _count(action: str) -> int:
+                return sum(
+                    1
+                    for line in lines
+                    if (line["override_action"] or line["proposed_action"]) == action
                 )
-                return dict(await conn.fetchrow("SELECT * FROM year_rollover WHERE id = $1", rid))
+
+            summary = {
+                "promoted": _count("promote"),
+                "graduated": _count("graduate"),
+                "withdrawn": _count("withdraw"),
+                "held": _count("hold"),
+            }
+            await conn.execute(
+                "UPDATE year_rollover SET state = 'committed', summary = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
+                json.dumps(summary),
+                rid,
+            )
+            return dict(await conn.fetchrow("SELECT * FROM year_rollover WHERE id = $1", rid))

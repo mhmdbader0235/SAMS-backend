@@ -7,7 +7,7 @@ import asyncpg
 
 def parse_id(val) -> int | UUID | str:
     """Parse and convert user_id into int, UUID, or original string safely."""
-    if isinstance(val, (UUID, int)):
+    if isinstance(val, UUID | int):
         return val
     if not val:
         return val
@@ -132,7 +132,7 @@ class UserRepository:
     async def get_user_by_id(self, user_id) -> dict | None:
         """Fetch a user record by ID, or None if not found."""
         parsed = parse_id(user_id)
-        if isinstance(parsed, (int, UUID)):
+        if isinstance(parsed, int | UUID):
             try:
                 row = await self.pool.fetchrow(
                     """
@@ -169,7 +169,7 @@ class UserRepository:
     async def get_user_profile(self, user_id) -> dict | None:
         """Fetch tenant user profile fields by integer/UUID ID."""
         parsed = parse_id(user_id)
-        if isinstance(parsed, (int, UUID)):
+        if isinstance(parsed, int | UUID):
             try:
                 row = await self.pool.fetchrow(
                     """
@@ -258,7 +258,7 @@ class UserRepository:
             clean_roles = [r for r in roles if r and r not in ("pending", "none", "unassigned")]
             all_roles = list(dict.fromkeys([primary_role] + clean_roles))
 
-        if isinstance(parsed, (int, UUID)):
+        if isinstance(parsed, int | UUID):
             row = await self.pool.fetchrow(
                 """
                 UPDATE users
@@ -295,13 +295,44 @@ class UserRepository:
     async def update_user_profile(self, user_id, phone: str | None, address: str | None) -> None:
         """Update tenant user profile fields."""
         parsed = parse_id(user_id)
-        if isinstance(parsed, (int, UUID)):
+        if isinstance(parsed, int | UUID):
             await self.pool.execute(
                 "UPDATE users SET phone = $1, address = $2 WHERE id = $3",
                 phone,
                 address,
                 parsed,
             )
+
+    async def get_user_preferences(self, user_id) -> dict | None:
+        """Fetch a user's own locale override columns by ID."""
+        parsed = parse_id(user_id)
+        if not isinstance(parsed, int | UUID):
+            return None
+        row = await self.pool.fetchrow(
+            "SELECT preferred_language, preferred_timezone FROM users WHERE id = $1",
+            parsed,
+        )
+        return dict(row) if row else None
+
+    async def update_user_preferences(
+        self, user_id, preferred_language: str | None, preferred_timezone: str | None
+    ) -> dict | None:
+        """Update a user's own locale override columns; returns the new values."""
+        parsed = parse_id(user_id)
+        if not isinstance(parsed, int | UUID):
+            return None
+        row = await self.pool.fetchrow(
+            """
+            UPDATE users
+            SET preferred_language = $1, preferred_timezone = $2
+            WHERE id = $3
+            RETURNING preferred_language, preferred_timezone
+            """,
+            preferred_language,
+            preferred_timezone,
+            parsed,
+        )
+        return dict(row) if row else None
 
     async def delete_user(self, user_id) -> dict | None:
         """Hard-delete a tenant user row and return the deleted record, or
@@ -318,37 +349,36 @@ class UserRepository:
         than the raw DB error, and that audit trail is never silently lost.
         """
         parsed = parse_id(user_id)
-        if not isinstance(parsed, (int, UUID)):
+        if not isinstance(parsed, int | UUID):
             return None
 
-        async with self.pool.acquire() as conn:
-            async with conn.transaction():
-                row = await conn.fetchrow(
-                    """
+        async with self.pool.acquire() as conn, conn.transaction():
+            row = await conn.fetchrow(
+                """
                     SELECT id, email, role,
                            COALESCE(roles, ARRAY[]::TEXT[]) as roles,
                            COALESCE(permissions, ARRAY[]::TEXT[]) as permissions
                     FROM users
                     WHERE id = $1
                     """,
-                    parsed,
-                )
-                if not row:
-                    return None
+                parsed,
+            )
+            if not row:
+                return None
 
-                await conn.execute(
-                    "UPDATE event SET manager_reviewer_id = NULL WHERE manager_reviewer_id = $1",
-                    parsed,
-                )
-                await conn.execute(
-                    "UPDATE event SET finance_reviewer_id = NULL WHERE finance_reviewer_id = $1",
-                    parsed,
-                )
-                try:
-                    await conn.execute("DELETE FROM users WHERE id = $1", parsed)
-                except asyncpg.exceptions.ForeignKeyViolationError as exc:
-                    raise ValueError(
-                        "This user has added or priced event resources and cannot be deleted "
-                        "until those records are reassigned to another staff member."
-                    ) from exc
-                return dict(row)
+            await conn.execute(
+                "UPDATE event SET manager_reviewer_id = NULL WHERE manager_reviewer_id = $1",
+                parsed,
+            )
+            await conn.execute(
+                "UPDATE event SET finance_reviewer_id = NULL WHERE finance_reviewer_id = $1",
+                parsed,
+            )
+            try:
+                await conn.execute("DELETE FROM users WHERE id = $1", parsed)
+            except asyncpg.exceptions.ForeignKeyViolationError as exc:
+                raise ValueError(
+                    "This user has added or priced event resources and cannot be deleted "
+                    "until those records are reassigned to another staff member."
+                ) from exc
+            return dict(row)

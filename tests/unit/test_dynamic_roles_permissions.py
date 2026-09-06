@@ -13,21 +13,19 @@ Tests cover:
 9. Role catalog validation and edge-case payload safety
 """
 
-import pytest
 from unittest.mock import AsyncMock, patch
 
-from app.core.dependencies import CurrentUser, COMPOSITE_ROLE_PERMISSIONS
-from app.domains.tenant.service import TenantService
+import pytest
+
+from app.core import authz
+from app.core.dependencies import COMPOSITE_ROLE_PERMISSIONS, CurrentUser
 
 
 class TestDynamicRolesAndPermissions:
     # 1. Single role baseline test
     def test_single_role_teacher_permissions(self):
         user = CurrentUser(
-            user_id="usr_teacher_1",
-            tenant_id="tenant_a",
-            role="teacher",
-            roles=["teacher"]
+            user_id="usr_teacher_1", tenant_id="tenant_a", role="teacher", roles=["teacher"]
         )
         assert user.has_role("teacher") is True
         assert user.has_role("event:create") is True
@@ -42,10 +40,7 @@ class TestDynamicRolesAndPermissions:
     # 2. Multi-role assignment (Teacher + Parent)
     def test_multi_role_teacher_and_parent_composite_union(self):
         user = CurrentUser(
-            user_id="usr_dual_1",
-            tenant_id="tenant_a",
-            role="teacher",
-            roles=["teacher", "parent"]
+            user_id="usr_dual_1", tenant_id="tenant_a", role="teacher", roles=["teacher", "parent"]
         )
         assert user.has_role("teacher") is True
         assert user.has_role("parent") is True
@@ -63,10 +58,7 @@ class TestDynamicRolesAndPermissions:
     # 3. Multi-role assignment (Teacher + Manager)
     def test_multi_role_teacher_and_manager(self):
         user = CurrentUser(
-            user_id="usr_tm_1",
-            tenant_id="tenant_a",
-            role="teacher",
-            roles=["teacher", "manager"]
+            user_id="usr_tm_1", tenant_id="tenant_a", role="teacher", roles=["teacher", "manager"]
         )
         assert user.has_role("event:create") is True
         assert user.has_role("event:review") is True
@@ -80,7 +72,7 @@ class TestDynamicRolesAndPermissions:
             user_id="usr_student_cust",
             tenant_id="tenant_a",
             role="student",
-            roles=["student", "event:create"]
+            roles=["student", "event:create"],
         )
         assert user.has_role("student") is True
         assert user.has_role("event:create") is True
@@ -94,7 +86,7 @@ class TestDynamicRolesAndPermissions:
             user_id="usr_teacher_cust",
             tenant_id="tenant_a",
             role="teacher",
-            roles=["teacher", "billing:refund"]
+            roles=["teacher", "billing:refund"],
         )
         assert user.has_role("teacher") is True
         assert user.has_role("event:create") is True
@@ -107,7 +99,7 @@ class TestDynamicRolesAndPermissions:
             user_id="usr_parent_cust",
             tenant_id="tenant_a",
             role="parent",
-            roles=["parent", "health:view"]
+            roles=["parent", "health:view"],
         )
         assert user.has_role("parent") is True
         assert user.has_role("health:view") is True
@@ -120,7 +112,7 @@ class TestDynamicRolesAndPermissions:
             user_id="usr_manager_cust",
             tenant_id="tenant_a",
             role="manager",
-            roles=["manager", "resource:create"]
+            roles=["manager", "resource:create"],
         )
         assert user.has_role("manager") is True
         assert user.has_role("event:review") is True
@@ -132,13 +124,25 @@ class TestDynamicRolesAndPermissions:
             user_id="usr_manager_1",
             tenant_id="tenant_a",
             role="manager",
-            roles=["manager", "resource:price", "resource:set_cost", "billing:invoice", "billing:audit", "billing:refund"]
+            roles=[
+                "manager",
+                "resource:price",
+                "resource:set_cost",
+                "billing:invoice",
+                "billing:audit",
+                "billing:refund",
+            ],
         )
         assert user.has_role("manager") is True
         assert user.has_role("resource:price") is True
         assert user.has_role("billing:audit") is True
         assert user.has_role("billing:refund") is True
-        assert user.has_role("class:create") is False
+        # class:create (and level:create/level:manage/class:update/user:create)
+        # became default manager permissions this session -- COMPOSITE_ROLE_
+        # PERMISSIONS["manager"] now includes them, and has_role() checks
+        # membership there dynamically, so any manager has it regardless of
+        # whether it's also literally present in `roles`.
+        assert user.has_role("class:create") is True
         assert user.has_role("finance") is False
 
     # 9. Super Admin universal bypass on all permission checks
@@ -147,7 +151,7 @@ class TestDynamicRolesAndPermissions:
             user_id="usr_super_admin",
             tenant_id="tenant_a",
             role="super_admin",
-            roles=["super_admin"]
+            roles=["super_admin"],
         )
         assert user.has_role("any_arbitrary_permission") is True
         assert user.has_role("system:full_wipe") is True
@@ -157,10 +161,7 @@ class TestDynamicRolesAndPermissions:
     # 10. Admin role aliases map cleanly to school_admin
     def test_admin_role_alias_maps_to_school_admin(self):
         user = CurrentUser(
-            user_id="usr_admin_alias",
-            tenant_id="tenant_a",
-            role="admin",
-            roles=["admin"]
+            user_id="usr_admin_alias", tenant_id="tenant_a", role="admin", roles=["admin"]
         )
         assert user.has_role("school_admin") is True
         assert user.has_role("admin") is True
@@ -170,43 +171,36 @@ class TestDynamicRolesAndPermissions:
 
     # 11. has_any_role helper check
     def test_has_any_role_matches_subset(self):
-        user = CurrentUser(
-            user_id="usr_1",
-            tenant_id="tenant_a",
-            role="teacher",
-            roles=["teacher"]
-        )
+        user = CurrentUser(user_id="usr_1", tenant_id="tenant_a", role="teacher", roles=["teacher"])
         assert user.has_any_role("school_admin", "manager", "teacher") is True
         assert user.has_any_role("super_admin", "manager") is False
 
-    # 12. TenantService._has_intersection capability check with custom permissions
+    # 12. authz.require capability check with custom permissions
     def test_tenant_service_has_intersection_capabilities(self):
-        assert TenantService._has_intersection(
-            user_role=["teacher", "billing:refund"],
-            allowed_roles={"billing:refund"}
-        ) is True
+        assert (
+            authz.require(user_role=["teacher", "billing:refund"], allowed_roles={"billing:refund"})
+            is True
+        )
 
-        assert TenantService._has_intersection(
-            user_role=["student"],
-            allowed_roles={"teacher", "manager"}
-        ) is False
+        assert authz.require(user_role=["student"], allowed_roles={"teacher", "manager"}) is False
 
-        assert TenantService._has_intersection(
-            user_role=["super_admin"],
-            allowed_roles={"teacher"}
-        ) is True
+        assert authz.require(user_role=["super_admin"], allowed_roles={"teacher"}) is True
 
-    # 13. TenantService._has_intersection admin guard
+    # 13. authz.require admin guard
     def test_tenant_service_admin_guard_intersection(self):
-        assert TenantService._has_intersection(
-            user_role=["school_admin"],
-            allowed_roles={"school_admin", "super_admin", "admin"}
-        ) is True
+        assert (
+            authz.require(
+                user_role=["school_admin"], allowed_roles={"school_admin", "super_admin", "admin"}
+            )
+            is True
+        )
 
-        assert TenantService._has_intersection(
-            user_role=["teacher"],
-            allowed_roles={"school_admin", "super_admin", "admin"}
-        ) is False
+        assert (
+            authz.require(
+                user_role=["teacher"], allowed_roles={"school_admin", "super_admin", "admin"}
+            )
+            is False
+        )
 
     # 13b. Regression: get_current_user() never hands _has_intersection a bare
     # role list — it flattens each composite role's granular permissions into
@@ -221,41 +215,48 @@ class TestDynamicRolesAndPermissions:
         for base_role in ("student", "parent", "manager"):
             flattened = [base_role, *COMPOSITE_ROLE_PERMISSIONS[base_role]]
             assert "school:read" in flattened
-            assert TenantService._has_intersection(
-                user_role=flattened,
-                allowed_roles={"school_admin", "super_admin", "admin"},
-            ) is False, f"{base_role}'s flattened roles must not satisfy an admin-only gate"
+            assert (
+                authz.require(
+                    user_role=flattened,
+                    allowed_roles={"school_admin", "super_admin", "admin"},
+                )
+                is False
+            ), f"{base_role}'s flattened roles must not satisfy an admin-only gate"
 
     def test_tenant_service_staff_guard_rejects_flattened_student_and_parent(self):
         for base_role in ("student", "parent"):
             flattened = [base_role, *COMPOSITE_ROLE_PERMISSIONS[base_role]]
-            assert TenantService._has_intersection(
-                user_role=flattened,
-                allowed_roles={"school_admin", "teacher"},
-            ) is False, f"{base_role}'s flattened roles must not satisfy a staff-only gate"
+            assert (
+                authz.require(
+                    user_role=flattened,
+                    allowed_roles={"school_admin", "teacher"},
+                )
+                is False
+            ), f"{base_role}'s flattened roles must not satisfy a staff-only gate"
 
     def test_tenant_service_admin_guard_still_accepts_flattened_admin_and_teacher(self):
         admin_flattened = ["school_admin", "admin", *COMPOSITE_ROLE_PERMISSIONS["school_admin"]]
-        assert TenantService._has_intersection(
-            user_role=admin_flattened,
-            allowed_roles={"school_admin", "super_admin", "admin"},
-        ) is True
+        assert (
+            authz.require(
+                user_role=admin_flattened,
+                allowed_roles={"school_admin", "super_admin", "admin"},
+            )
+            is True
+        )
 
         teacher_flattened = ["teacher", *COMPOSITE_ROLE_PERMISSIONS["teacher"]]
-        assert TenantService._has_intersection(
-            user_role=teacher_flattened,
-            allowed_roles={"school_admin", "teacher"},
-        ) is True
+        assert (
+            authz.require(
+                user_role=teacher_flattened,
+                allowed_roles={"school_admin", "teacher"},
+            )
+            is True
+        )
 
     # 14. OPA verify_opa_authorization success in CurrentUser.can()
     @pytest.mark.asyncio
     async def test_current_user_can_opa_allowed(self):
-        user = CurrentUser(
-            user_id="usr_1",
-            tenant_id="tenant_a",
-            role="teacher",
-            roles=["teacher"]
-        )
+        user = CurrentUser(user_id="usr_1", tenant_id="tenant_a", role="teacher", roles=["teacher"])
         with patch("app.core.opa.verify_opa_authorization", new_callable=AsyncMock) as mock_opa:
             mock_opa.return_value = True
             allowed = await user.can("event:edit", {"status": "draft", "tenant_id": "tenant_a"})
@@ -266,10 +267,7 @@ class TestDynamicRolesAndPermissions:
     @pytest.mark.asyncio
     async def test_current_user_can_denied_when_no_role(self):
         user = CurrentUser(
-            user_id="usr_student_1",
-            tenant_id="tenant_a",
-            role="student",
-            roles=["student"]
+            user_id="usr_student_1", tenant_id="tenant_a", role="student", roles=["student"]
         )
         with patch("app.core.opa.verify_opa_authorization", new_callable=AsyncMock) as mock_opa:
             mock_opa.return_value = False
@@ -282,10 +280,7 @@ class TestDynamicRolesAndPermissions:
         from app.core.opa import OPAUnavailableError
 
         user = CurrentUser(
-            user_id="usr_teacher_2",
-            tenant_id="tenant_a",
-            role="teacher",
-            roles=["teacher"]
+            user_id="usr_teacher_2", tenant_id="tenant_a", role="teacher", roles=["teacher"]
         )
         with patch("app.core.opa.verify_opa_authorization", new_callable=AsyncMock) as mock_opa:
             # Only OPAUnavailableError triggers the local fallback — see
@@ -304,10 +299,7 @@ class TestDynamicRolesAndPermissions:
     @pytest.mark.asyncio
     async def test_current_user_can_real_deny_not_masked_by_fallback(self):
         user = CurrentUser(
-            user_id="usr_teacher_3",
-            tenant_id="tenant_a",
-            role="teacher",
-            roles=["teacher"]
+            user_id="usr_teacher_3", tenant_id="tenant_a", role="teacher", roles=["teacher"]
         )
         # has_role("event:create") is True for a teacher (COMPOSITE_ROLE_PERMISSIONS),
         # but OPA — reachable, no exception — explicitly denies. The deny must win.
@@ -323,7 +315,7 @@ class TestDynamicRolesAndPermissions:
             user_id="usr_revoked",
             tenant_id="tenant_a",
             role="student",
-            roles=["student", "event:create"]
+            roles=["student", "event:create"],
         )
         assert user.has_role("event:create") is True
 
@@ -333,12 +325,7 @@ class TestDynamicRolesAndPermissions:
 
     # 18. Empty or unauthenticated roles return False safely
     def test_empty_roles_safety(self):
-        user = CurrentUser(
-            user_id="usr_anon",
-            tenant_id=None,
-            role="",
-            roles=[]
-        )
+        user = CurrentUser(user_id="usr_anon", tenant_id=None, role="", roles=[])
         assert user.has_role("event:create") is False
         assert user.has_role("school:read") is False
         assert user.has_role("user:view") is False
@@ -346,10 +333,7 @@ class TestDynamicRolesAndPermissions:
     # 19. None/empty input parameter checks in has_role
     def test_has_role_edge_cases(self):
         user = CurrentUser(
-            user_id="usr_edge",
-            tenant_id="tenant_a",
-            role="teacher",
-            roles=["teacher"]
+            user_id="usr_edge", tenant_id="tenant_a", role="teacher", roles=["teacher"]
         )
         assert user.has_role("") is False
         assert user.has_role("non_existent_role_xyz") is False
@@ -358,6 +342,6 @@ class TestDynamicRolesAndPermissions:
     def test_composite_role_permissions_catalog_integrity(self):
         required_roles = {"super_admin", "school_admin", "manager", "teacher", "parent", "student"}
         assert required_roles.issubset(set(COMPOSITE_ROLE_PERMISSIONS.keys()))
-        for role, perms in COMPOSITE_ROLE_PERMISSIONS.items():
+        for _role, perms in COMPOSITE_ROLE_PERMISSIONS.items():
             assert isinstance(perms, set)
             assert len(perms) > 0

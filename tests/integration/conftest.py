@@ -1,3 +1,5 @@
+import contextlib
+
 import asyncpg
 import pytest
 
@@ -14,17 +16,36 @@ async def clean_db(db_pool: asyncpg.Pool):
             await conn.execute('SET search_path TO "tenant_a", public;')
             # Truncate tenant and control plane tables safely
             tables = [
-                "user_tenant_map", "parent_child_links", "parent_tenant_links",
-                "invitations", "parents", "super_admins", "event_feedback",
-                "payments", "enrollment", "event_class_map", "resource_cost",
-                "resources", "resource_types", "notifications", "student_health_and_records",
-                "student_parent_map", "student_class_history", "students", "class", "academic_years",
-                "teachers", "parenets", "levels", "users", "academic_settings", "blackout_dates"
+                "user_tenant_map",
+                "parent_child_links",
+                "parent_tenant_links",
+                "invitations",
+                "parents",
+                "super_admins",
+                "event_feedback",
+                "payments",
+                "enrollment",
+                "event_class_map",
+                "resource_cost",
+                "resources",
+                "resource_types",
+                "notifications",
+                "student_health_and_records",
+                "student_parent_map",
+                "student_class_history",
+                "audit_log",
+                "students",
+                "class",
+                "academic_years",
+                "teachers",
+                "parenets",
+                "levels",
+                "users",
+                "academic_settings",
+                "blackout_dates",
             ]
             for t in tables:
-                try:
+                with contextlib.suppress(Exception):
                     await conn.execute(f"TRUNCATE TABLE {t} RESTART IDENTITY CASCADE;")
-                except Exception:
-                    pass
         except Exception:
             pass

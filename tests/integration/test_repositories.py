@@ -144,10 +144,12 @@ class TestTenantRepository:
             school_subsidy=5.00,
             date_val=datetime.now(UTC),
             created_by=t_uid,
-            class_mappings=[{
-                "class_id": class_id,
-                "ticket_price": 7.50,
-            }]
+            class_mappings=[
+                {
+                    "class_id": class_id,
+                    "ticket_price": 7.50,
+                }
+            ],
         )
         assert event["id"] is not None
         assert len(event["class_mappings"]) == 1
@@ -155,9 +157,7 @@ class TestTenantRepository:
 
         # Enroll student in event class map
         enroll_id = await repo.create_enrollment(
-            student_id=student_id,
-            event_class_map_id=ecm_id,
-            state="requested_by_student"
+            student_id=student_id, event_class_map_id=ecm_id, state="requested_by_student"
         )
         assert enroll_id is not None
 
@@ -232,9 +232,7 @@ class TestTenantRepository:
         student = await repo.get_student_by_id(student_id)
         assert student["class_id"] is None
 
-    async def test_delete_class_raises_for_nonexistent_class(
-        self, db_pool: asyncpg.Pool, clean_db
-    ):
+    async def test_delete_class_raises_for_nonexistent_class(self, db_pool: asyncpg.Pool, clean_db):
         repo = TenantRepository(db_pool)
         with pytest.raises(ValueError):
             await repo.delete_class(999999)
@@ -278,9 +276,7 @@ class TestTenantRepository:
         assert await repo.get_class_by_id(paid_class_id) is not None
         assert await repo.get_level_by_id(lvl_id) is not None
 
-    async def test_delete_level_raises_for_nonexistent_level(
-        self, db_pool: asyncpg.Pool, clean_db
-    ):
+    async def test_delete_level_raises_for_nonexistent_level(self, db_pool: asyncpg.Pool, clean_db):
         repo = TenantRepository(db_pool)
         with pytest.raises(ValueError):
             await repo.delete_level(999999)
@@ -481,31 +477,33 @@ class TestSaveAcademicStructure:
         repo = TenantRepository(db_pool)
 
         await repo.save_academic_structure(
-            self._payload(blackout_dates=[
-                {"date": "2026-12-25", "title": "Christmas", "tags": []},
-                {"date": "2027-01-01", "title": "New Year", "tags": []},
-            ])
+            self._payload(
+                blackout_dates=[
+                    {"date": "2026-12-25", "title": "Christmas", "tags": []},
+                    {"date": "2027-01-01", "title": "New Year", "tags": []},
+                ]
+            )
         )
-        row = await db_pool.fetchrow(
-            "SELECT id FROM blackout_dates WHERE date = '2026-12-25'"
-        )
+        row = await db_pool.fetchrow("SELECT id FROM blackout_dates WHERE date = '2026-12-25'")
         original_id = row["id"]
         assert (await db_pool.fetchval("SELECT COUNT(*) FROM blackout_dates")) == 2
 
         # Second save: New Year's title is updated, Christmas is untouched,
         # nothing is removed.
         await repo.save_academic_structure(
-            self._payload(blackout_dates=[
-                {"date": "2026-12-25", "title": "Christmas", "tags": []},
-                {"date": "2027-01-01", "title": "New Year's Day", "tags": ["updated"]},
-            ])
+            self._payload(
+                blackout_dates=[
+                    {"date": "2026-12-25", "title": "Christmas", "tags": []},
+                    {"date": "2027-01-01", "title": "New Year's Day", "tags": ["updated"]},
+                ]
+            )
         )
         christmas_row = await db_pool.fetchrow(
             "SELECT id FROM blackout_dates WHERE date = '2026-12-25'"
         )
-        assert christmas_row["id"] == original_id, (
-            "an untouched date must keep the same row, not get deleted and recreated"
-        )
+        assert (
+            christmas_row["id"] == original_id
+        ), "an untouched date must keep the same row, not get deleted and recreated"
         new_year_row = await db_pool.fetchrow(
             "SELECT title, tags FROM blackout_dates WHERE date = '2027-01-01'"
         )
@@ -529,10 +527,12 @@ class TestSaveAcademicStructure:
         repo = TenantRepository(db_pool)
 
         await repo.save_academic_structure(
-            self._payload(levels=[
-                {"name": "Grade 2", "ordinal": 2, "is_active": True, "sections": []},
-                {"name": "Grade 3", "ordinal": 3, "is_active": True, "sections": []},
-            ])
+            self._payload(
+                levels=[
+                    {"name": "Grade 2", "ordinal": 2, "is_active": True, "sections": []},
+                    {"name": "Grade 3", "ordinal": 3, "is_active": True, "sections": []},
+                ]
+            )
         )
         structure = await repo.get_academic_structure()
         grade_2 = next(lvl for lvl in structure["levels"] if lvl["name"] == "Grade 2")
@@ -541,10 +541,24 @@ class TestSaveAcademicStructure:
         # Swap ordinals, identified by their stable level_id -- exactly what
         # the fixed frontend now sends.
         await repo.save_academic_structure(
-            self._payload(levels=[
-                {"level_id": grade_2["level_id"], "name": "Grade 2", "ordinal": 3, "is_active": True, "sections": []},
-                {"level_id": grade_3["level_id"], "name": "Grade 3", "ordinal": 2, "is_active": True, "sections": []},
-            ])
+            self._payload(
+                levels=[
+                    {
+                        "level_id": grade_2["level_id"],
+                        "name": "Grade 2",
+                        "ordinal": 3,
+                        "is_active": True,
+                        "sections": [],
+                    },
+                    {
+                        "level_id": grade_3["level_id"],
+                        "name": "Grade 3",
+                        "ordinal": 2,
+                        "is_active": True,
+                        "sections": [],
+                    },
+                ]
+            )
         )
         after = await repo.get_academic_structure()
         after_by_id = {lvl["level_id"]: lvl for lvl in after["levels"]}
@@ -563,10 +577,16 @@ class TestSaveAcademicStructure:
         user_repo = UserRepository(db_pool)
 
         await repo.save_academic_structure(
-            self._payload(levels=[
-                {"name": "Grade 7", "ordinal": 7, "is_active": True,
-                 "sections": [{"name": "7A", "capacity": 25}]},
-            ])
+            self._payload(
+                levels=[
+                    {
+                        "name": "Grade 7",
+                        "ordinal": 7,
+                        "is_active": True,
+                        "sections": [{"name": "7A", "capacity": 25}],
+                    },
+                ]
+            )
         )
         structure = await repo.get_academic_structure()
         grade_7 = next(lvl for lvl in structure["levels"] if lvl["name"] == "Grade 7")
@@ -576,12 +596,17 @@ class TestSaveAcademicStructure:
         student_id = await repo.create_student(s_uid, "Roster Student", section["id"])
 
         await repo.save_academic_structure(
-            self._payload(levels=[
-                {
-                    "level_id": grade_7["level_id"], "name": "Grade 7", "ordinal": 7, "is_active": True,
-                    "sections": [{"id": section["id"], "name": "7A West", "capacity": 25}],
-                },
-            ])
+            self._payload(
+                levels=[
+                    {
+                        "level_id": grade_7["level_id"],
+                        "name": "Grade 7",
+                        "ordinal": 7,
+                        "is_active": True,
+                        "sections": [{"id": section["id"], "name": "7A West", "capacity": 25}],
+                    },
+                ]
+            )
         )
 
         classes = await db_pool.fetch(
@@ -589,12 +614,14 @@ class TestSaveAcademicStructure:
         )
         assert len(classes) == 1, "renaming must not create a second, duplicate section"
         assert classes[0]["name"] == "7A West"
-        assert classes[0]["id"] == section["id"], "the original row's identity must survive the rename"
+        assert (
+            classes[0]["id"] == section["id"]
+        ), "the original row's identity must survive the rename"
 
         student = await repo.get_student_by_id(student_id)
-        assert student["class_id"] == section["id"], (
-            "the student's roster placement must not be split off onto an invisible old row"
-        )
+        assert (
+            student["class_id"] == section["id"]
+        ), "the student's roster placement must not be split off onto an invisible old row"
 
     async def test_removed_section_is_deleted_when_no_history_exists(
         self, db_pool: asyncpg.Pool, clean_db
@@ -605,24 +632,40 @@ class TestSaveAcademicStructure:
         repo = TenantRepository(db_pool)
 
         await repo.save_academic_structure(
-            self._payload(levels=[
-                {"name": "Grade 8", "ordinal": 8, "is_active": True,
-                 "sections": [{"name": "8A", "capacity": 25}, {"name": "8B", "capacity": 25}]},
-            ])
+            self._payload(
+                levels=[
+                    {
+                        "name": "Grade 8",
+                        "ordinal": 8,
+                        "is_active": True,
+                        "sections": [
+                            {"name": "8A", "capacity": 25},
+                            {"name": "8B", "capacity": 25},
+                        ],
+                    },
+                ]
+            )
         )
         structure = await repo.get_academic_structure()
         grade_8 = next(lvl for lvl in structure["levels"] if lvl["name"] == "Grade 8")
         section_a = next(s for s in grade_8["sections"] if s["name"] == "8A")
 
         await repo.save_academic_structure(
-            self._payload(levels=[
-                {
-                    "level_id": grade_8["level_id"], "name": "Grade 8", "ordinal": 8, "is_active": True,
-                    "sections": [{"id": section_a["id"], "name": "8A", "capacity": 25}],
-                },
-            ])
+            self._payload(
+                levels=[
+                    {
+                        "level_id": grade_8["level_id"],
+                        "name": "Grade 8",
+                        "ordinal": 8,
+                        "is_active": True,
+                        "sections": [{"id": section_a["id"], "name": "8A", "capacity": 25}],
+                    },
+                ]
+            )
         )
-        remaining = await db_pool.fetch("SELECT name FROM class WHERE level_id = $1", grade_8["level_id"])
+        remaining = await db_pool.fetch(
+            "SELECT name FROM class WHERE level_id = $1", grade_8["level_id"]
+        )
         assert [r["name"] for r in remaining] == ["8A"]
 
     async def test_removing_a_section_with_enrollment_history_is_blocked(
@@ -635,10 +678,19 @@ class TestSaveAcademicStructure:
         user_repo = UserRepository(db_pool)
 
         await repo.save_academic_structure(
-            self._payload(levels=[
-                {"name": "Grade 9", "ordinal": 9, "is_active": True,
-                 "sections": [{"name": "9A", "capacity": 25}, {"name": "9B", "capacity": 25}]},
-            ])
+            self._payload(
+                levels=[
+                    {
+                        "name": "Grade 9",
+                        "ordinal": 9,
+                        "is_active": True,
+                        "sections": [
+                            {"name": "9A", "capacity": 25},
+                            {"name": "9B", "capacity": 25},
+                        ],
+                    },
+                ]
+            )
         )
         structure = await repo.get_academic_structure()
         grade_9 = next(lvl for lvl in structure["levels"] if lvl["name"] == "Grade 9")
@@ -667,16 +719,23 @@ class TestSaveAcademicStructure:
 
         with pytest.raises(ValueError):
             await repo.save_academic_structure(
-                self._payload(levels=[
-                    {
-                        "level_id": grade_9["level_id"], "name": "Grade 9", "ordinal": 9, "is_active": True,
-                        "sections": [{"id": section_a["id"], "name": "9A", "capacity": 25}],
-                    },
-                ])
+                self._payload(
+                    levels=[
+                        {
+                            "level_id": grade_9["level_id"],
+                            "name": "Grade 9",
+                            "ordinal": 9,
+                            "is_active": True,
+                            "sections": [{"id": section_a["id"], "name": "9A", "capacity": 25}],
+                        },
+                    ]
+                )
             )
 
         # Blocked save must leave everything exactly as it was.
-        remaining = await db_pool.fetch("SELECT name FROM class WHERE level_id = $1", grade_9["level_id"])
+        remaining = await db_pool.fetch(
+            "SELECT name FROM class WHERE level_id = $1", grade_9["level_id"]
+        )
         assert {r["name"] for r in remaining} == {"9A", "9B"}
         assert await repo.get_payment_by_enrollment(enroll_id) is not None
         student = await repo.get_student_by_id(student_id)
@@ -692,10 +751,12 @@ class TestSaveAcademicStructure:
         repo = TenantRepository(db_pool)
 
         await repo.save_academic_structure(
-            self._payload(levels=[
-                {"name": "Grade 10", "ordinal": 10, "is_active": True, "sections": []},
-                {"name": "Grade 11", "ordinal": 11, "is_active": True, "sections": []},
-            ])
+            self._payload(
+                levels=[
+                    {"name": "Grade 10", "ordinal": 10, "is_active": True, "sections": []},
+                    {"name": "Grade 11", "ordinal": 11, "is_active": True, "sections": []},
+                ]
+            )
         )
         structure = await repo.get_academic_structure()
         grade_11 = next(lvl for lvl in structure["levels"] if lvl["name"] == "Grade 11")
@@ -703,15 +764,24 @@ class TestSaveAcademicStructure:
         # Grade 11 explicitly deactivated and still sent (the fixed
         # frontend no longer drops inactive levels from the payload).
         await repo.save_academic_structure(
-            self._payload(levels=[
-                {"name": "Grade 10", "ordinal": 10, "is_active": True, "sections": []},
-                {"level_id": grade_11["level_id"], "name": "Grade 11", "ordinal": 11, "is_active": False, "sections": []},
-            ])
+            self._payload(
+                levels=[
+                    {"name": "Grade 10", "ordinal": 10, "is_active": True, "sections": []},
+                    {
+                        "level_id": grade_11["level_id"],
+                        "name": "Grade 11",
+                        "ordinal": 11,
+                        "is_active": False,
+                        "sections": [],
+                    },
+                ]
+            )
         )
         after = await repo.get_academic_structure()
-        assert any(lvl["level_id"] == grade_11["level_id"] and lvl["is_active"] is False for lvl in after["levels"]), (
-            "the level row must still exist, just marked inactive"
-        )
+        assert any(
+            lvl["level_id"] == grade_11["level_id"] and lvl["is_active"] is False
+            for lvl in after["levels"]
+        ), "the level row must still exist, just marked inactive"
 
     async def test_default_head_teacher_is_null_not_a_foreign_key_violation(
         self, db_pool: asyncpg.Pool, clean_db
@@ -729,10 +799,16 @@ class TestSaveAcademicStructure:
         assert (await db_pool.fetchval("SELECT COUNT(*) FROM teachers")) == 0
 
         await repo.save_academic_structure(
-            self._payload(levels=[
-                {"name": "Grade 12", "ordinal": 12, "is_active": True,
-                 "sections": [{"name": "12A", "capacity": 25}]},
-            ])
+            self._payload(
+                levels=[
+                    {
+                        "name": "Grade 12",
+                        "ordinal": 12,
+                        "is_active": True,
+                        "sections": [{"name": "12A", "capacity": 25}],
+                    },
+                ]
+            )
         )
         row = await db_pool.fetchrow("SELECT head_teacher_id FROM class WHERE name = '12A'")
         assert row["head_teacher_id"] is None
@@ -760,9 +836,9 @@ class TestSaveAcademicStructure:
         await repo.save_academic_structure(self._payload(start_month=1))
 
         structure = await repo.get_academic_structure()
-        assert structure["calendar"]["start_month"] == 1, (
-            "the reader's row must reflect what was just saved"
-        )
+        assert (
+            structure["calendar"]["start_month"] == 1
+        ), "the reader's row must reflect what was just saved"
 
 
 # =============================================================================
@@ -799,13 +875,20 @@ class TestGuardianAuthority:
         student_id = await repo.create_student(s_uid, "Guardian Student", class_id)
 
         p_uid = await self._link_parent(
-            repo, user_repo, "mother@school.com", "Mother", student_id,
-            relationship_type="mother", is_primary_contact=True, can_approve=True,
+            repo,
+            user_repo,
+            "mother@school.com",
+            "Mother",
+            student_id,
+            relationship_type="mother",
+            is_primary_contact=True,
+            can_approve=True,
         )
         row = await db_pool.fetchrow(
             "SELECT relationship_type, is_primary_contact, can_approve FROM student_parent_map "
             "WHERE student_id = $1 AND parent_id = $2",
-            student_id, p_uid,
+            student_id,
+            p_uid,
         )
         assert row["relationship_type"] == "mother"
         assert row["is_primary_contact"] is True
@@ -813,11 +896,16 @@ class TestGuardianAuthority:
 
         # Re-link the same pair with different metadata -- must update, not no-op.
         await repo.add_student_parent_link(
-            student_id, p_uid, relationship_type="mother", is_primary_contact=True, can_approve=False,
+            student_id,
+            p_uid,
+            relationship_type="mother",
+            is_primary_contact=True,
+            can_approve=False,
         )
         row_after = await db_pool.fetchrow(
             "SELECT can_approve FROM student_parent_map WHERE student_id = $1 AND parent_id = $2",
-            student_id, p_uid,
+            student_id,
+            p_uid,
         )
         assert row_after["can_approve"] is False
 
@@ -833,18 +921,28 @@ class TestGuardianAuthority:
         student_id = await repo.create_student(s_uid, "Approve Student", class_id)
 
         custodial = await self._link_parent(
-            repo, user_repo, "custodial@school.com", "Custodial", student_id, can_approve=True,
+            repo,
+            user_repo,
+            "custodial@school.com",
+            "Custodial",
+            student_id,
+            can_approve=True,
         )
         non_custodial = await self._link_parent(
-            repo, user_repo, "noncustodial@school.com", "Non-Custodial", student_id, can_approve=False,
+            repo,
+            user_repo,
+            "noncustodial@school.com",
+            "Non-Custodial",
+            student_id,
+            can_approve=False,
         )
         stranger_uid = await user_repo.create_user("stranger@school.com", "hash", "parent")
 
         assert await repo.can_parent_approve_for_student(student_id, custodial) is True
         assert await repo.can_parent_approve_for_student(student_id, non_custodial) is False
-        assert await repo.can_parent_approve_for_student(student_id, stranger_uid) is False, (
-            "no link at all must not be treated as approval authority"
-        )
+        assert (
+            await repo.can_parent_approve_for_student(student_id, stranger_uid) is False
+        ), "no link at all must not be treated as approval authority"
 
         # is_student_linked_to_parent is the bare membership check -- it must
         # stay True for the non-custodial parent (they ARE linked, just not
@@ -868,12 +966,20 @@ class TestGuardianAuthority:
         # Linked first (would win under the old LIMIT-1-no-ORDER-BY code on
         # most query plans) but NOT the primary contact.
         await self._link_parent(
-            repo, user_repo, "first_linked@school.com", "First Linked", student_id,
+            repo,
+            user_repo,
+            "first_linked@school.com",
+            "First Linked",
+            student_id,
             is_primary_contact=False,
         )
         # Linked second, but flagged primary -- must win regardless of link order.
         primary_uid = await self._link_parent(
-            repo, user_repo, "primary_contact@school.com", "Primary Contact", student_id,
+            repo,
+            user_repo,
+            "primary_contact@school.com",
+            "Primary Contact",
+            student_id,
             is_primary_contact=True,
         )
 
@@ -899,9 +1005,9 @@ class TestGuardianAuthority:
         await self._link_parent(repo, user_repo, "parent_y@school.com", "Parent Y", student_id)
 
         results = [await repo.get_parent_for_student(student_id) for _ in range(5)]
-        assert len({r["id"] for r in results}) == 1, (
-            "the same parent must be returned on every call, not whichever the planner favors"
-        )
+        assert (
+            len({r["id"] for r in results}) == 1
+        ), "the same parent must be returned on every call, not whichever the planner favors"
 
     async def test_sso_parent_provisioning_writes_to_parenets_not_parents(
         self, db_pool: asyncpg.Pool, clean_db
@@ -918,23 +1024,22 @@ class TestGuardianAuthority:
         app/core/dependencies.py's Keycloak JIT-provisioning block now runs,
         directly against the tenant pool (bypassing Keycloak token
         verification, which is out of scope for a repository-level test)."""
-        async with db_pool.acquire() as conn:
-            async with conn.transaction():
-                local_id = await conn.fetchval(
-                    "INSERT INTO users (email, role, password_hash) VALUES ($1, 'parent', 'keycloak_managed') RETURNING id",
-                    "sso_parent@school.com",
-                )
-                await conn.execute(
-                    "INSERT INTO parenets (id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-                    local_id,
-                    "Sso_parent",
-                )
+        async with db_pool.acquire() as conn, conn.transaction():
+            local_id = await conn.fetchval(
+                "INSERT INTO users (email, role, password_hash) VALUES ($1, 'parent', 'keycloak_managed') RETURNING id",
+                "sso_parent@school.com",
+            )
+            await conn.execute(
+                "INSERT INTO parenets (id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+                local_id,
+                "Sso_parent",
+            )
 
         repo = TenantRepository(db_pool)
         parents = await repo.get_all_parents()
-        assert any(p["id"] == local_id for p in parents), (
-            "the JIT-provisioned parent must be visible to GET /parents"
-        )
+        assert any(
+            p["id"] == local_id for p in parents
+        ), "the JIT-provisioned parent must be visible to GET /parents"
 
         # link-parent must not 500 with a foreign key violation now that the
         # parent has a real parenets row to reference.
@@ -1005,11 +1110,17 @@ class TestCrossCuttingFixes:
         from app.domains.school.repository import SchoolRepository
 
         repo = SchoolRepository(db_pool)
-        created = await repo.create_contact({
-            "role_title": "Principal", "name": "Dr. Test", "phone": "+15551234",
-            "email": None, "is_emergency_contact": False, "escalation_order": None,
-            "visible_to": ["staff"],
-        })
+        created = await repo.create_contact(
+            {
+                "role_title": "Principal",
+                "name": "Dr. Test",
+                "phone": "+15551234",
+                "email": None,
+                "is_emergency_contact": False,
+                "escalation_order": None,
+                "visible_to": ["staff"],
+            }
+        )
         await repo.delete_contact(created["id"])
         remaining = await repo.list_contacts()
         assert all(c["id"] != created["id"] for c in remaining)

@@ -11,7 +11,8 @@ Tests:
 """
 
 import pytest
-from app.domains.tenant.service import _encrypt, _decrypt, _mask_field
+
+from app.domains.tenant.service import _decrypt, _encrypt, _mask_field
 
 
 # =============================================================================
@@ -48,7 +49,7 @@ class TestPIIDataMasking:
         nat_id = "1234567890"
         masked = _mask_field(nat_id, "national_id")
         assert masked == "********7890"
-        assert not ("123456" in masked)
+        assert "123456" not in masked
 
     def test_mask_short_national_id(self):
         nat_id = "123"
@@ -101,7 +102,9 @@ class TestAudienceAndPricingCalculations:
         predicted_attendance = 50
 
         student_pool_cost = max(0.0, total_trip_cost - school_subsidy)
-        ticket_price_per_student = student_pool_cost / predicted_attendance if predicted_attendance > 0 else 0.0
+        ticket_price_per_student = (
+            student_pool_cost / predicted_attendance if predicted_attendance > 0 else 0.0
+        )
 
         assert student_pool_cost == 0.0
         assert ticket_price_per_student == 0.0
@@ -155,7 +158,9 @@ class TestEventLifecycleStateMachine:
         assert new_status == "published"
 
     def test_valid_proposed_to_draft_with_reason(self):
-        new_status = self._apply_transition("proposed", "manager_reject", reason="Budget exceeds threshold")
+        new_status = self._apply_transition(
+            "proposed", "manager_reject", reason="Budget exceeds threshold"
+        )
         assert new_status == "draft"
 
     def test_reject_without_reason_raises_error(self):
@@ -190,13 +195,17 @@ class TestEnrollmentLifecycleStateMachine:
             return target_state
         elif role == "teacher":
             if current_state != "approved_by_parent":
-                raise ValueError(f"Teacher cannot approve before parent approval (current: '{current_state}')")
+                raise ValueError(
+                    f"Teacher cannot approve before parent approval (current: '{current_state}')"
+                )
             if target_state not in ("approved_by_teacher", "rejected_by_teacher"):
                 raise ValueError("Teacher can only set approved_by_teacher or rejected_by_teacher")
             return target_state
         elif role == "billing":
             if current_state != "approved_by_teacher":
-                raise ValueError(f"Cannot process payment until teacher has approved (current: '{current_state}')")
+                raise ValueError(
+                    f"Cannot process payment until teacher has approved (current: '{current_state}')"
+                )
             if target_state != "paid":
                 raise ValueError("Invalid target state for payment")
             return target_state

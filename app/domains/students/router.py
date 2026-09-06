@@ -1,6 +1,7 @@
 """Students and Classes router."""
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from pydantic import BaseModel
 
 from app.core.database import get_db_pool
 from app.core.dependencies import (
@@ -88,8 +89,6 @@ async def create_level(
         return LevelResponse(**lvl_info)
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router_gated.get("/levels", response_model=list[LevelResponse], summary="List all school levels")
@@ -104,11 +103,8 @@ async def list_levels(
             status_code=403,
             detail="Forbidden: Students and unauthorized users cannot list school levels",
         )
-    try:
-        results = await TenantService.get_all_levels(current_user.tenant_id)
-        return [LevelResponse(**r) for r in results]
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    results = await TenantService.get_all_levels(current_user.tenant_id)
+    return [LevelResponse(**r) for r in results]
 
 
 @router_gated.put(
@@ -136,8 +132,6 @@ async def update_level(
         raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router_gated.delete("/levels/{level_id}", summary="Delete school level")
@@ -157,8 +151,6 @@ async def delete_level(
         raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.get("/structure", summary="Get current Academic Structure and Calendar")
@@ -173,8 +165,6 @@ async def get_academic_structure(
         )
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.post("/structure/setup", summary="Save Academic Structure and Calendar (admin only)")
@@ -195,8 +185,6 @@ async def setup_academic_structure(
         raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.post(
@@ -222,8 +210,6 @@ async def preview_structure_import(
         raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router.post(
@@ -249,8 +235,6 @@ async def commit_structure_import(
         raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 # =============================================================================
@@ -276,11 +260,6 @@ async def create_teacher(
         raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
-
-
-from pydantic import BaseModel
 
 
 class StaffUserCreateRequest(BaseModel):
@@ -327,8 +306,6 @@ async def create_manager(
         raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router_gated.post(
@@ -361,8 +338,6 @@ async def create_school_admin(
         raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router_gated.get("/teachers", response_model=list[TeacherResponse], summary="List all teachers")
@@ -377,11 +352,8 @@ async def list_teachers(
             status_code=403,
             detail="Forbidden: Students and unauthorized users cannot list teachers",
         )
-    try:
-        results = await TenantService.get_all_teachers(current_user.tenant_id)
-        return [TeacherResponse(**r) for r in results]
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    results = await TenantService.get_all_teachers(current_user.tenant_id)
+    return [TeacherResponse(**r) for r in results]
 
 
 @router_gated.get("/parents", response_model=list[ParentResponse], summary="List all parents")
@@ -395,11 +367,8 @@ async def list_parents(
         raise HTTPException(
             status_code=403, detail="Forbidden: Students and unauthorized users cannot list parents"
         )
-    try:
-        results = await TenantService.get_all_parents(current_user.tenant_id)
-        return [ParentResponse(**r) for r in results]
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    results = await TenantService.get_all_parents(current_user.tenant_id)
+    return [ParentResponse(**r) for r in results]
 
 
 # =============================================================================
@@ -431,8 +400,6 @@ async def create_student(
         raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router_gated.get("", response_model=list[StudentResponse], summary="List all students")
@@ -451,11 +418,8 @@ async def list_students(
             status_code=403,
             detail="Forbidden: Students and unauthorized users cannot list all students",
         )
-    try:
-        results = await TenantService.get_all_students(current_user.tenant_id)
-        return [StudentResponse(**r) for r in results]
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    results = await TenantService.get_all_students(current_user.tenant_id)
+    return [StudentResponse(**r) for r in results]
 
 
 @router_gated.post("/link-parent", summary="Link parent and student (staff only)")
@@ -477,8 +441,6 @@ async def link_parent_student(
         return {"status": "ok", "message": "Student linked to parent"}
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router_gated.get(
@@ -491,26 +453,23 @@ async def list_linked_students(
 ) -> list[StudentResponse]:
     if not current_user.has_role("parent"):
         raise HTTPException(status_code=403, detail="Only parents can view their linked children")
-    try:
-        pool = await get_db_pool(current_user.tenant_id)
-        user_repo = UserRepository(pool)
-        local_user = None
-        if current_user.email:
-            local_user = await user_repo.get_user_by_email(current_user.email)
+    pool = await get_db_pool(current_user.tenant_id)
+    user_repo = UserRepository(pool)
+    local_user = None
+    if current_user.email:
+        local_user = await user_repo.get_user_by_email(current_user.email)
 
-        target_id = local_user["id"] if local_user else parse_id(current_user.id)
-        results = await TenantService.get_linked_students_for_parent(
-            current_user.tenant_id, target_id
-        )
-        return [StudentResponse(**r) for r in results]
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    target_id = local_user["id"] if local_user else parse_id(current_user.id)
+    results = await TenantService.get_linked_students_for_parent(current_user.tenant_id, target_id)
+    return [StudentResponse(**r) for r in results]
 
 
 # =============================================================================
 # Classes
 # =============================================================================
-@router_gated.post("/classes", response_model=ClassResponse, summary="Create a class (school_admin only)")
+@router_gated.post(
+    "/classes", response_model=ClassResponse, summary="Create a class (school_admin only)"
+)
 async def create_class(
     payload: ClassCreateRequest,
     current_user: CurrentUser = Depends(get_current_user),
@@ -533,8 +492,6 @@ async def create_class(
         raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router_gated.get("/classes", response_model=list[ClassResponse], summary="List all classes")
@@ -552,11 +509,8 @@ async def list_classes(
         raise HTTPException(
             status_code=403, detail="Forbidden: Students and unauthorized users cannot list classes"
         )
-    try:
-        results = await TenantService.get_all_classes(current_user.tenant_id)
-        return [ClassResponse(**r) for r in results]
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    results = await TenantService.get_all_classes(current_user.tenant_id)
+    return [ClassResponse(**r) for r in results]
 
 
 @router_gated.get(
@@ -580,7 +534,9 @@ async def get_class(
 
 
 @router_gated.put(
-    "/classes/{class_id}", response_model=ClassResponse, summary="Update class details (school_admin only)"
+    "/classes/{class_id}",
+    response_model=ClassResponse,
+    summary="Update class details (school_admin only)",
 )
 async def update_class(
     class_id: int,
@@ -621,8 +577,6 @@ async def update_class(
         raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router_gated.delete("/classes/{class_id}", summary="Delete a class")
@@ -642,8 +596,6 @@ async def delete_class(
         raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router_gated.get("/classes/{class_id}/students", summary="List students in a class (staff only)")
@@ -656,10 +608,7 @@ async def get_class_students(
             status_code=403,
             detail="Forbidden: Students and unauthorized users cannot view class rosters",
         )
-    try:
-        return await TenantService.get_students_for_class(current_user.tenant_id, class_id)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    return await TenantService.get_students_for_class(current_user.tenant_id, class_id)
 
 
 @router_gated.get(
@@ -677,8 +626,6 @@ async def get_student_class_history(
         )
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router_gated.put("/{student_id}/class", summary="Reassign student to class")
@@ -700,8 +647,6 @@ async def reassign_student_class(
         raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router_gated.post("/bulk-enroll", summary="Bulk enroll/reassign students to a class section")
@@ -730,8 +675,6 @@ async def bulk_reassign_students(
         }
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 # =============================================================================
@@ -796,8 +739,6 @@ async def enroll_student(
         return EnrollmentResponse(**details)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router_gated.get(
@@ -808,13 +749,10 @@ async def enroll_student(
 async def get_enrollments(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[EnrollmentResponse]:
-    try:
-        results = await TenantService.get_enrollments_for_user(
-            current_user.tenant_id, current_user.id, current_user.roles
-        )
-        return [EnrollmentResponse(**r) for r in results]
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    results = await TenantService.get_enrollments_for_user(
+        current_user.tenant_id, current_user.id, current_user.roles
+    )
+    return [EnrollmentResponse(**r) for r in results]
 
 
 @router_gated.post(
@@ -886,20 +824,17 @@ async def update_enrollment_approval(
     else:
         raise HTTPException(status_code=403, detail="Unauthorized role for approval")
 
-    try:
-        await TenantService.update_enrollment_state(
-            tenant_id=current_user.tenant_id,
-            enrollment_id=enrollment_id,
-            state=payload.state,
-            teacher_id=teacher_id,
-            parent_id=parent_id,
-        )
-        pool = await get_db_pool(current_user.tenant_id)
-        repo = TenantRepository(pool)
-        details = await repo.get_enrollment_by_id(enrollment_id)
-        return EnrollmentResponse(**details)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    await TenantService.update_enrollment_state(
+        tenant_id=current_user.tenant_id,
+        enrollment_id=enrollment_id,
+        state=payload.state,
+        teacher_id=teacher_id,
+        parent_id=parent_id,
+    )
+    pool = await get_db_pool(current_user.tenant_id)
+    repo = TenantRepository(pool)
+    details = await repo.get_enrollment_by_id(enrollment_id)
+    return EnrollmentResponse(**details)
 
 
 @router_gated.delete("/enrollments/{enrollment_id}", summary="Cancel/Unenroll an enrollment")
@@ -922,8 +857,6 @@ async def cancel_enrollment(
         raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 # =============================================================================
@@ -950,8 +883,6 @@ async def create_or_update_health(
         return {"status": "success", "health_record_id": str(rec_id)}
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router_gated.get(
@@ -979,8 +910,6 @@ async def get_health(
         raise HTTPException(status_code=403, detail=str(exc))
     except HTTPException:
         raise
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 # =============================================================================
@@ -1003,18 +932,13 @@ async def create_academic_year(
         raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router_gated.get("/academic-years", summary="List academic years")
 async def list_academic_years(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> list[dict]:
-    try:
-        return await TenantService.list_academic_years(current_user.tenant_id)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+    return await TenantService.list_academic_years(current_user.tenant_id)
 
 
 @router_gated.post("/rollovers", summary="Generate a year-rollover plan (school admin only)")
@@ -1034,8 +958,6 @@ async def create_rollover(
         raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router_gated.get("/rollovers/{rollover_id}", summary="Get a rollover plan and its lines")
@@ -1053,8 +975,6 @@ async def get_rollover(
         raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router_gated.put(
@@ -1079,8 +999,6 @@ async def override_rollover_line(
         raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router_gated.post(
@@ -1101,8 +1019,6 @@ async def preview_rollover(
         raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @router_gated.post(
@@ -1124,5 +1040,3 @@ async def commit_rollover(
         raise HTTPException(status_code=403, detail=str(exc))
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
