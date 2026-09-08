@@ -13,6 +13,7 @@ from uuid import UUID
 import jwt
 from passlib.context import CryptContext
 from passlib.exc import UnknownHashError
+from starlette.concurrency import run_in_threadpool
 
 from app.core.config import (
     JWT_EXPIRATION_MINUTES,
@@ -86,6 +87,25 @@ class AuthService:
             return _pwd_context.verify(plain_password, hashed_password)
         except UnknownHashError:
             return False
+
+    @staticmethod
+    async def hash_password_async(password: str) -> str:
+        """hash_password, off the event loop.
+
+        bcrypt-sha256 hashing is synchronous and CPU-bound (~150-300ms). Called
+        straight from an `async def` request handler it blocks the entire event
+        loop for the duration -- every concurrent request stalls, not just the
+        caller's. Every call site inside a live request (registration, password
+        change) must use this instead of the sync method; one-off scripts/seed
+        data/tests that run outside the event loop can keep calling the sync
+        version directly.
+        """
+        return await run_in_threadpool(AuthService.hash_password, password)
+
+    @staticmethod
+    async def verify_password_async(plain_password: str, hashed_password: str) -> bool:
+        """verify_password, off the event loop. See hash_password_async."""
+        return await run_in_threadpool(AuthService.verify_password, plain_password, hashed_password)
 
     @staticmethod
     def create_access_token(
@@ -207,7 +227,7 @@ class AuthService:
 
             invitation = inv_record
 
-        password_hash = AuthService.hash_password(password)
+        password_hash = await AuthService.hash_password_async(password)
 
         if role == "super_admin":
             if not invitation:
@@ -235,7 +255,9 @@ class AuthService:
             # 1. Register parent globally in control plane
             global_parent = await cp_repo.get_parent_by_email(email)
             if global_parent:
-                if not AuthService.verify_password(password, global_parent["password_hash"]):
+                if not await AuthService.verify_password_async(
+                    password, global_parent["password_hash"]
+                ):
                     raise ValueError("Email already registered with a different password")
                 global_parent_id = global_parent["id"]
             else:
@@ -326,7 +348,7 @@ class AuthService:
                         # Auto-create dummy staff user
                         t_user_id = await user_repo.create_user(
                             f"teacher_{tenant_id}@school.com",
-                            AuthService.hash_password("password"),
+                            await AuthService.hash_password_async("password"),
                             "teacher",
                         )
                         t_id = await tenant_repo.create_teacher(t_user_id, "Primary Head Teacher")
@@ -363,7 +385,7 @@ class AuthService:
         # Check Super Admins
         super_admin = await cp_repo.get_super_admin_by_email(email)
         if super_admin:
-            if not AuthService.verify_password(password, super_admin["password_hash"]):
+            if not await AuthService.verify_password_async(password, super_admin["password_hash"]):
                 raise ValueError("Invalid email or password")
             return AuthService.create_access_token(
                 super_admin["id"], tenant_id="", role="super_admin", email=email
@@ -419,7 +441,7 @@ class AuthService:
         # Check Parents (Global database checks)
         parent = await cp_repo.get_parent_by_email(email)
         if parent:
-            if not AuthService.verify_password(password, parent["password_hash"]):
+            if not await AuthService.verify_password_async(password, parent["password_hash"]):
                 raise ValueError("Invalid email or password")
 
             is_linked = await cp_repo.check_parent_tenant_link(parent["id"], tenant_id)
@@ -451,7 +473,7 @@ class AuthService:
         tenant_pool = await get_db_pool(tenant_id)
         user_repo = UserRepository(tenant_pool)
         user = await user_repo.get_user_by_email(email)
-        if not user or not AuthService.verify_password(password, user["password_hash"]):
+        if not user or not await AuthService.verify_password_async(password, user["password_hash"]):
             raise ValueError("Invalid email or password")
 
         # Save email→tenant mapping so Keycloak logins resolve correctly

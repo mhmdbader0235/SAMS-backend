@@ -146,7 +146,7 @@ class TenantService:
         user_repo = UserRepository(pool)
         tenant_repo = TenantRepository(pool)
 
-        password_hash = AuthService.hash_password(password)
+        password_hash = await AuthService.hash_password_async(password)
         user_id = await user_repo.create_user(email, password_hash, "teacher")
         sync_user_to_keycloak(email, password, "teacher", tenant_id, first_name=name)
         await _upsert_user_tenant_mapping(email, tenant_id, "teacher")
@@ -194,7 +194,7 @@ class TenantService:
         if await user_repo.get_user_by_email(email):
             raise ValueError("Email already registered")
 
-        password_hash = AuthService.hash_password(password)
+        password_hash = await AuthService.hash_password_async(password)
         user_id = await user_repo.create_user(email, password_hash, role)
         sync_user_to_keycloak(email, password, role, tenant_id)
         await _upsert_user_tenant_mapping(email, tenant_id, role)
@@ -241,7 +241,7 @@ class TenantService:
         tenant_repo = TenantRepository(pool)
 
         # Create tenant user with 'student' role
-        password_hash = AuthService.hash_password(password)
+        password_hash = await AuthService.hash_password_async(password)
         user_id = await user_repo.create_user(email, password_hash, "student")
         sync_user_to_keycloak(email, password, "student", tenant_id, first_name=name)
         await _upsert_user_tenant_mapping(email, tenant_id, "student")
