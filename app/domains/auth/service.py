@@ -5,10 +5,13 @@ Does not import FastAPI or asyncpg directly. Enforces 3-tier layering and
 Control-Plane vs. Tenant DB boundaries.
 """
 
+import asyncio
 import contextlib
+import hashlib
 import os
+import secrets
 from datetime import UTC, datetime, timedelta
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import jwt
 from passlib.context import CryptContext
@@ -20,14 +23,24 @@ from app.core.config import (
     JWT_PRIVATE_KEY_PATH,
     JWT_PUBLIC_KEY_PATH,
     JWT_SECRET,
+    REFRESH_TOKEN_EXPIRATION_DAYS,
 )
 from app.core.database import get_control_plane_pool, get_db_pool
-from app.core.keycloak_admin import create_keycloak_organization, sync_user_to_keycloak
+from app.core.keycloak_admin import (
+    create_keycloak_organization,
+    sync_user_to_keycloak,
+)
 from app.domains.tenant.control_plane_repository import ControlPlaneRepository
 from app.domains.tenant.tenant_repository import TenantRepository
 from app.domains.tenant.user_repository import UserRepository
 
 _pwd_context = CryptContext(schemes=["bcrypt_sha256"], deprecated="auto")
+
+# Holds references to fire-and-forget background tasks (see
+# AuthService._schedule_keycloak_sync) so asyncio cannot garbage-collect one
+# mid-flight -- a bare asyncio.create_task() result with nothing else
+# referencing it is only weakly held by the event loop.
+_background_tasks: set[asyncio.Task] = set()
 
 
 def _get_signing_key() -> tuple[str | bytes, str]:
@@ -109,9 +122,28 @@ class AuthService:
 
     @staticmethod
     def create_access_token(
-        user_id, tenant_id: str | None, role: str, email: str = "", roles: list[str] | None = None
+        user_id,
+        tenant_id: str | None,
+        role: str,
+        email: str = "",
+        roles: list[str] | None = None,
+        identity_id: str | None = None,
     ) -> str:
-        """Create a signed JWT containing user_id, tenant_id, role, roles, and email."""
+        """Create a signed JWT containing user_id, tenant_id, role, roles, and email.
+
+        `identity_id` (added for the Multi-School Membership work) is the
+        immutable owner from `identities` -- a companion to `sub`, not a
+        replacement for it, since `sub` stays the tenant-local user id every
+        existing permission check and audit row already keys on. It is
+        optional and omitted (None) for callers that mint a token without an
+        identity to hand (there are none left after login_user/register_user,
+        but the default keeps this signature backward compatible for any
+        other caller). Role/permissions are still baked in at mint time and
+        still only prove "who you were and what you could do at login" --
+        dependencies.py treats the token's role as a stale hint and reads the
+        live membership row as authority, exactly as before this field
+        existed.
+        """
         expires_at = datetime.now(UTC) + timedelta(minutes=JWT_EXPIRATION_MINUTES)
         payload = {
             "sub": str(user_id),
@@ -121,8 +153,142 @@ class AuthService:
             "email": email,
             "exp": int(expires_at.timestamp()),
         }
+        if identity_id:
+            payload["identity_id"] = str(identity_id)
         key, algorithm = _get_signing_key()
         return jwt.encode(payload, key, algorithm=algorithm)
+
+    # ─── Refresh tokens (rotation) ──────────────────────────────────────────
+    # Opaque, high-entropy, stored hashed -- same reasoning as the selection
+    # challenge below: for as long as it lives, it is momentarily equivalent
+    # to a password, and the database is not a place to keep one in the
+    # clear. sha256 rather than bcrypt: this is a 256-bit random secret, not
+    # a human-chosen password, so there is no dictionary to defend against
+    # and no reason to pay bcrypt's deliberate slowness on every refresh.
+    @staticmethod
+    def _hash_opaque_token(raw: str) -> bytes:
+        return hashlib.sha256(raw.encode("utf-8")).digest()
+
+    @staticmethod
+    def _new_opaque_token() -> str:
+        return secrets.token_urlsafe(32)
+
+    @staticmethod
+    async def issue_refresh_token(
+        cp_repo, identity_id, tenant_id: str, role: str, client_ip: str | None = None
+    ) -> str:
+        """Mint the first refresh token in a new rotation family."""
+        raw = AuthService._new_opaque_token()
+        family_id = uuid4()
+        expires_at = datetime.now(UTC) + timedelta(days=REFRESH_TOKEN_EXPIRATION_DAYS)
+        await cp_repo.create_refresh_token(
+            token_hash=AuthService._hash_opaque_token(raw),
+            identity_id=identity_id,
+            tenant_id=tenant_id or "",
+            role=role,
+            family_id=family_id,
+            expires_at=expires_at,
+            created_ip=client_ip,
+        )
+        return raw
+
+    @staticmethod
+    async def _resolve_local_account(
+        cp_repo, identity_id, tenant_id: str, role: str
+    ) -> tuple[str, str, list[str]]:
+        """The tenant-local `sub` a fresh access token must carry, plus the
+        role/roles to bake in -- re-derived from the account itself rather
+        than trusted from a refresh_tokens/challenge row, since neither
+        stores a tenant-local user id (that id lives in a per-tenant schema
+        the control-plane refresh_tokens table has no business joining
+        against). Shared by rotate_refresh_token and login_redeem so the two
+        session-issuing paths that don't start from a fresh password check
+        agree on how to look an account back up.
+
+        Raises ValueError if the account can no longer be found -- e.g. a
+        super_admin/user row deleted after the refresh/selection token was
+        issued -- which the caller maps to the same 401 an invalid token gets.
+        """
+        identity = await cp_repo.get_identity_by_id(identity_id)
+        if not identity:
+            raise ValueError("Account no longer exists")
+        email = identity["email"]
+
+        if tenant_id == "" or role == "super_admin":
+            super_admin = await cp_repo.get_super_admin_by_email(email)
+            if not super_admin:
+                raise ValueError("Account no longer exists")
+            return str(super_admin["id"]), "super_admin", ["super_admin"]
+
+        tenant_pool = await get_db_pool(tenant_id)
+        user_repo = UserRepository(tenant_pool)
+        user = await user_repo.get_user_by_email(email)
+        if not user:
+            raise ValueError("Account no longer exists")
+
+        if role == "parent" and user.get("role") == "parent":
+            return str(user["id"]), "parent", ["parent"]
+
+        user_roles = list(
+            dict.fromkeys(
+                ([user["role"]] if user.get("role") else [])
+                + list(user.get("roles") or [])
+                + list(user.get("permissions") or [])
+            )
+        )
+        return str(user["id"]), user["role"], user_roles
+
+    @staticmethod
+    async def rotate_refresh_token(cp_repo, raw_token: str, client_ip: str | None = None) -> dict:
+        """Redeem a refresh token for a new access token + a new refresh token,
+        revoking the one just presented (rotation) so it cannot be replayed.
+
+        A presented token that is ALREADY revoked is not treated as an
+        ordinary expiry/race -- it is the reuse signal rotation exists to
+        catch (someone else redeemed this exact token first, or the
+        legitimate holder did and this is a stolen copy), so the entire
+        family is revoked rather than just failing this one request. Raises
+        ValueError on any invalid/expired/reused/unknown token -- the router
+        maps that to 401, same as an invalid access token.
+        """
+        token_hash = AuthService._hash_opaque_token(raw_token)
+        row = await cp_repo.get_refresh_token(token_hash)
+        if not row:
+            raise ValueError("Invalid refresh token")
+
+        if row["revoked_at"] is not None:
+            await cp_repo.revoke_refresh_token_family(row["family_id"])
+            raise ValueError("Invalid refresh token")
+
+        if row["expires_at"] <= datetime.now(UTC):
+            raise ValueError("Refresh token expired")
+
+        user_id, role, roles = await AuthService._resolve_local_account(
+            cp_repo, row["identity_id"], row["tenant_id"], row["role"]
+        )
+
+        new_raw = AuthService._new_opaque_token()
+        expires_at = datetime.now(UTC) + timedelta(days=REFRESH_TOKEN_EXPIRATION_DAYS)
+        await cp_repo.create_refresh_token(
+            token_hash=AuthService._hash_opaque_token(new_raw),
+            identity_id=row["identity_id"],
+            tenant_id=row["tenant_id"],
+            role=role,
+            family_id=row["family_id"],
+            expires_at=expires_at,
+            created_ip=client_ip,
+        )
+        new_row = await cp_repo.get_refresh_token(AuthService._hash_opaque_token(new_raw))
+        await cp_repo.rotate_refresh_token(row["id"], new_row["id"])
+
+        access_token = AuthService.create_access_token(
+            user_id,
+            tenant_id=row["tenant_id"] or None,
+            role=role,
+            roles=roles,
+            identity_id=row["identity_id"],
+        )
+        return {"access_token": access_token, "refresh_token": new_raw}
 
     @staticmethod
     def decode_access_token(token: str) -> dict | None:
@@ -377,79 +543,209 @@ class AuthService:
             raise ValueError(f"Invalid registration role: {role}")
 
     @staticmethod
-    async def login_user(email: str, password: str, tenant_id: str | None = None) -> str:
-        """Business logic for user login."""
-        cp_pool = await get_control_plane_pool()
-        cp_repo = ControlPlaneRepository(cp_pool)
+    async def _enumerate_login_tenants(
+        cp_repo, email: str
+    ) -> tuple[set[str], dict | None, dict | None]:
+        """Which tenant_ids this email could plausibly authenticate against,
+        WITHOUT fetching any per-tenant user row yet -- a cheap membership
+        check (matches the pre-Phase-1 code's own laziness: an explicitly
+        requested tenant_id that isn't even a member gets rejected here,
+        before ever opening that tenant's pool). Fetching the actual
+        password hash to verify against is `_fetch_login_candidate`'s job,
+        called only for tenant_ids this function says are worth checking.
 
-        # Check Super Admins
+        Returns (tenant_ids, parent_record, super_admin_record). "" is
+        included in tenant_ids when a super_admin record exists, matching
+        create_access_token's own "" convention for a super_admin's tenant.
+        """
         super_admin = await cp_repo.get_super_admin_by_email(email)
-        if super_admin:
-            if not await AuthService.verify_password_async(password, super_admin["password_hash"]):
-                raise ValueError("Invalid email or password")
-            return AuthService.create_access_token(
-                super_admin["id"], tenant_id="", role="super_admin", email=email
-            )
-
-        # Auto-resolve tenant_id from control plane or tenant search if not explicitly passed
-        if not tenant_id:
-            mapped = await cp_repo.get_tenant_for_email(email)
-            if mapped and mapped.get("tenant_id"):
-                tenant_id = mapped["tenant_id"]
-            else:
-                all_tenants = await cp_repo.get_all_tenants()
-                for t in all_tenants:
-                    tid = t.get("tenant_id") or t.get("id")
-                    if not tid:
-                        continue
-                    try:
-                        t_pool = await get_db_pool(tid)
-                        u_repo = UserRepository(t_pool)
-                        u = await u_repo.get_user_by_email(email)
-                        if u:
-                            tenant_id = tid
-                            break
-                    except Exception:
-                        continue
-        # A control-plane parent may have no tenant-local `users` row yet -- the
-        # scan above only looks at tenant `users` tables -- but will have rows in
-        # parent_tenant_links. Resolve from those before giving up. Without this,
-        # the parent branch below would call create_parent_tenant_link() with
-        # whatever tenant the old "tenant_a" default named, linking the parent into
-        # the wrong school AND creating a parent user row inside it.
-        if not tenant_id:
-            _parent = await cp_repo.get_parent_by_email(email)
-            if _parent:
-                _linked = await cp_repo.get_tenants_for_parent(_parent["id"])
-                if len(_linked) == 1:
-                    tenant_id = _linked[0]
-                elif len(_linked) > 1:
-                    raise ValueError(
-                        "This account is linked to more than one school. "
-                        "Specify which school to sign in to."
-                    )
-
-        # FAIL CLOSED. This used to be `tenant_id = "tenant_a"` -- the first real
-        # school -- so any login whose tenant could not be resolved was
-        # authenticated against school A's users table.
-        if not tenant_id:
-            raise ValueError(
-                "This account is not associated with a school. Ask an "
-                "administrator to invite you to one."
-            )
-
-        # Check Parents (Global database checks)
+        membership_tenants = {
+            m["tenant_id"] for m in await cp_repo.get_tenants_for_email(email) if m.get("tenant_id")
+        }
         parent = await cp_repo.get_parent_by_email(email)
+        # A parent record short-circuits the tenant-local `users` lookup
+        # entirely for every tenant this email is linked to from EITHER
+        # source (user_tenant_map or parent_tenant_links) -- exactly the
+        # pre-existing branch order (a global parents row was always
+        # checked before, never alongside, a tenant's own users table).
+        # `check_parent_tenant_link` (in _fetch_login_candidate) is the
+        # actual authorization gate for each of these; excluding a
+        # membership-only tenant_id here just because its user_tenant_map
+        # role happens to say 'parent' would drop exactly the case that
+        # gate exists to catch -- a claimed relationship parent_tenant_links
+        # does not confirm.
         if parent:
-            if not await AuthService.verify_password_async(password, parent["password_hash"]):
-                raise ValueError("Invalid email or password")
+            membership_tenants |= set(await cp_repo.get_tenants_for_parent(parent["id"]))
 
+        tenant_ids = set(membership_tenants)
+        if super_admin:
+            tenant_ids.add("")
+        return tenant_ids, parent, super_admin
+
+    @staticmethod
+    async def _fetch_login_candidate(
+        cp_repo, email: str, tenant_id: str, parent: dict | None, super_admin: dict | None
+    ) -> dict | None:
+        """The real password hash (and account record) to check for one
+        already-enumerated tenant_id. None if the account backing this
+        tenant_id has since disappeared (e.g. a users row deleted between
+        enumeration and this fetch) -- treated as a non-match, not an error."""
+        if tenant_id == "" and super_admin:
+            return {
+                "tenant_id": "",
+                "kind": "super_admin",
+                "hash": super_admin["password_hash"],
+                "record": super_admin,
+            }
+        # A global `parents` row is keyed by email alone, not per tenant --
+        # the same email can ALSO be a distinct tenant-local user (e.g. a
+        # teacher) in a tenant this parent identity has no link to. Gating on
+        # check_parent_tenant_link, not just `parent`'s existence, is what
+        # keeps that tenant's candidate on its own local password hash
+        # instead of silently being checked against the parent's hash --
+        # otherwise a shared/coincidentally-matching password lets the parent
+        # branch "win" a tenant where the account is actually a teacher, and
+        # every choice for that email gets mislabeled "parent" in the
+        # selection challenge (redeem still resolves the role correctly via
+        # _resolve_local_account, so this was a mislabeling + spurious-match
+        # bug, not a privilege escalation -- but a real bug all the same).
+        if parent and await cp_repo.check_parent_tenant_link(parent["id"], tenant_id):
+            return {
+                "tenant_id": tenant_id,
+                "kind": "parent",
+                "hash": parent["password_hash"],
+                "record": parent,
+            }
+        try:
+            pool = await get_db_pool(tenant_id)
+            u = await UserRepository(pool).get_user_by_email(email)
+        except Exception:
+            return None
+        if u and u.get("password_hash"):
+            return {
+                "tenant_id": tenant_id,
+                "kind": "tenant_user",
+                "hash": u["password_hash"],
+                "record": u,
+            }
+        return None
+
+    @staticmethod
+    async def _legacy_scan_for_candidate(cp_repo, email: str) -> dict | None:
+        """No membership row anywhere. Last resort: locate the account by
+        scanning tenant `users` tables. This only exists for accounts that
+        predate user_tenant_map, and it is a tenant-enumeration primitive --
+        but a hit here is not by itself trust: it still has to verify
+        against that tenant's own password hash like any other candidate."""
+        for t in await cp_repo.get_all_tenants():
+            tid = t.get("tenant_id") or t.get("id")
+            if not tid:
+                continue
+            try:
+                pool = await get_db_pool(tid)
+                u = await UserRepository(pool).get_user_by_email(email)
+            except Exception:
+                continue
+            if u and u.get("password_hash"):
+                print(
+                    f"[login_user] Note: '{email}' has no user_tenant_map/"
+                    f"parent_tenant_links row; found via tenant users table "
+                    f"scan '{tid}'. This fallback is deprecated."
+                )
+                return {
+                    "tenant_id": tid,
+                    "kind": "tenant_user",
+                    "hash": u["password_hash"],
+                    "record": u,
+                }
+        return None
+
+    @staticmethod
+    async def _verify_candidates_padded(candidates: list[dict], password: str) -> list[dict]:
+        """Verify concurrently, padded to a fixed floor, so a FAILED login's
+        wall-clock time does not reveal how many schools this email belongs
+        to. Bcrypt is slow by design: N sequential comparisons take N times
+        as long as one, and an attacker submitting garbage passwords could
+        otherwise read the membership count straight off the response time.
+        Concurrency removes the "N times" and padding removes the "N" --
+        one candidate and PADDING_FLOOR candidates cost the same wall-clock.
+        """
+        PADDING_FLOOR = 3
+        dummy_hash = AuthService.hash_password("padding-comparison-not-a-real-account")
+        pad_count = max(0, PADDING_FLOOR - len(candidates))
+
+        results = await asyncio.gather(
+            *[AuthService.verify_password_async(password, c["hash"]) for c in candidates],
+            *[AuthService.verify_password_async(password, dummy_hash) for _ in range(pad_count)],
+        )
+        return [c for c, ok in zip(candidates, results[: len(candidates)], strict=False) if ok]
+
+    @staticmethod
+    def _schedule_keycloak_sync(email: str, password: str, chosen: dict) -> None:
+        """Fire-and-forget: guarantee that any account which just proved its
+        password locally also exists in Keycloak.
+
+        This is what closes the gap for accounts that were ever written
+        straight into Postgres -- seed_data.py, a manual SQL insert, a
+        migration, or a registration that happened while Keycloak was down
+        -- and so never went through sync_user_to_keycloak. Without this, such
+        an account can log in locally forever but can never use Keycloak SSO,
+        and nothing here would ever notice.
+
+        Runs on every successful local password check, not just once, but
+        that is safe: sync_user_to_keycloak only sets a Keycloak credential
+        when it CREATES the Keycloak user (see keycloak_admin.py); an
+        existing Keycloak user's password is left alone on every later call,
+        so this cannot clobber a password someone set directly in Keycloak.
+        Deliberately not awaited -- sync_user_to_keycloak already swallows
+        its own errors and logs them, and a slow or unreachable Keycloak must
+        never add latency to, or fail, the login response that already
+        succeeded against Postgres.
+        """
+        role = chosen["record"].get("role") if chosen["kind"] == "tenant_user" else chosen["kind"]
+        tenant_id = chosen["tenant_id"] or None
+        task = asyncio.create_task(
+            run_in_threadpool(sync_user_to_keycloak, email, password, role, tenant_id)
+        )
+        _background_tasks.add(task)
+        task.add_done_callback(_background_tasks.discard)
+
+    @staticmethod
+    async def _complete_login(
+        cp_repo, chosen: dict, email: str, parent: dict | None, client_ip: str | None
+    ) -> dict:
+        """Mint a real session for exactly one already-password-verified
+        candidate. Reuses the per-kind side effects (parent local-user
+        provisioning, upsert_user_tenant_map) the single-tenant code path
+        always had -- only how `chosen` was arrived at has changed."""
+        tenant_id = chosen["tenant_id"]
+        kind = chosen["kind"]
+        identity = await cp_repo.get_or_create_identity(email)
+
+        if kind == "super_admin":
+            super_admin = chosen["record"]
+            access_token = AuthService.create_access_token(
+                super_admin["id"],
+                tenant_id="",
+                role="super_admin",
+                email=email,
+                identity_id=identity["id"],
+            )
+            refresh_token = await AuthService.issue_refresh_token(
+                cp_repo, identity["id"], "", "super_admin", client_ip
+            )
+            return {"access_token": access_token, "refresh_token": refresh_token}
+
+        if kind == "parent":
+            # Membership is REQUIRED here, never created. This used to
+            # auto-link the parent into whatever school `tenant_id` named --
+            # see git history on this branch for why that was an
+            # escalation; parent_tenant_links membership is checked, never
+            # written, by a login attempt.
             is_linked = await cp_repo.check_parent_tenant_link(parent["id"], tenant_id)
             if not is_linked:
-                # Link parent to the resolved tenant automatically
-                await cp_repo.create_parent_tenant_link(parent["id"], tenant_id)
+                raise ValueError("Invalid email or password")
 
-            # Check/Create parent locally inside tenant DB to keep consistency
             tenant_pool = await get_db_pool(tenant_id)
             user_repo = UserRepository(tenant_pool)
             tenant_repo = TenantRepository(tenant_pool)
@@ -463,23 +759,22 @@ class AuthService:
                 )
             else:
                 local_user_id = local_user["id"]
-            # Save email→tenant mapping so Keycloak logins resolve correctly
             await cp_repo.upsert_user_tenant_map(email, tenant_id, "parent")
-            return AuthService.create_access_token(
-                local_user_id, tenant_id=tenant_id, role="parent", email=email
+            access_token = AuthService.create_access_token(
+                local_user_id,
+                tenant_id=tenant_id,
+                role="parent",
+                email=email,
+                identity_id=identity["id"],
             )
+            refresh_token = await AuthService.issue_refresh_token(
+                cp_repo, identity["id"], tenant_id, "parent", client_ip
+            )
+            return {"access_token": access_token, "refresh_token": refresh_token}
 
-        # Check Tenant users (school_admin, teacher, student, parent)
-        tenant_pool = await get_db_pool(tenant_id)
-        user_repo = UserRepository(tenant_pool)
-        user = await user_repo.get_user_by_email(email)
-        if not user or not await AuthService.verify_password_async(password, user["password_hash"]):
-            raise ValueError("Invalid email or password")
-
-        # Save email→tenant mapping so Keycloak logins resolve correctly
+        # kind == "tenant_user"
+        user = chosen["record"]
         await cp_repo.upsert_user_tenant_map(email, tenant_id, user["role"])
-
-        # Include all custom roles and permissions from database
         user_roles = list(
             dict.fromkeys(
                 ([user["role"]] if user.get("role") else [])
@@ -487,9 +782,193 @@ class AuthService:
                 + list(user.get("permissions") or [])
             )
         )
-        return AuthService.create_access_token(
-            user["id"], tenant_id, user["role"], email=email, roles=user_roles
+        access_token = AuthService.create_access_token(
+            user["id"],
+            tenant_id,
+            user["role"],
+            email=email,
+            roles=user_roles,
+            identity_id=identity["id"],
         )
+        refresh_token = await AuthService.issue_refresh_token(
+            cp_repo, identity["id"], tenant_id, user["role"], client_ip
+        )
+        return {"access_token": access_token, "refresh_token": refresh_token}
+
+    @staticmethod
+    async def _issue_login_selection_challenge(
+        cp_repo, email: str, matched: list[dict], client_ip: str | None
+    ) -> dict:
+        """The step between "password verified against several schools" and
+        "session issued for one of them" -- an opaque, single-use, server-side
+        secret (see cp_0006_selection_challenges) naming ONLY the schools
+        that matched, never the account's full membership set."""
+        identity = await cp_repo.get_or_create_identity(email)
+        raw = AuthService._new_opaque_token()
+        expires_at = datetime.now(UTC) + timedelta(minutes=2)
+        await cp_repo.create_selection_challenge(
+            token_hash=AuthService._hash_opaque_token(raw),
+            identity_id=identity["id"],
+            matched_tenants=[c["tenant_id"] for c in matched],
+            expires_at=expires_at,
+            created_ip=client_ip,
+        )
+        choices = [
+            {
+                "tenant_id": c["tenant_id"],
+                "role": c["record"].get("role") if c["kind"] == "tenant_user" else c["kind"],
+            }
+            for c in matched
+        ]
+        return {
+            "status": "select_tenant",
+            "selection_token": raw,
+            "expires_in": 120,
+            "choices": choices,
+        }
+
+    @staticmethod
+    async def login_user(
+        email: str, password: str, tenant_id: str | None = None, client_ip: str | None = None
+    ) -> dict:
+        """Business logic for user login.
+
+        Returns EITHER a session dict {"access_token": str, "refresh_token": str}
+        -- exactly one school matched the submitted password, or the caller
+        explicitly named a school that matched -- OR, when the password
+        verifies against more than one candidate school and none was named,
+        a selection-required dict {"status": "select_tenant",
+        "selection_token": str, "expires_in": int, "choices": [...]}. Only
+        raises ValueError for a genuine credential/account failure; ambiguity
+        is a return value, not an exception (see login_redeem for how a
+        selection_token becomes a real session).
+        """
+        cp_pool = await get_control_plane_pool()
+        cp_repo = ControlPlaneRepository(cp_pool)
+        email = email.strip().lower()
+
+        tenant_ids, parent, super_admin = await AuthService._enumerate_login_tenants(cp_repo, email)
+
+        if tenant_id:
+            # `tenant_id` reaches here straight from the request body
+            # (UserLoginRequest.tenant_id -> auth/router.py), so it is
+            # arbitrary caller-controlled input naming any school on the
+            # platform. Rejected on membership alone, before ever fetching a
+            # per-tenant password hash -- the message is deliberately the
+            # generic credential error: whether a given school exists, and
+            # whether this person belongs to it, are both things an
+            # unauthenticated caller must not be able to probe.
+            if tenant_id not in tenant_ids:
+                raise ValueError("Invalid email or password")
+            chosen = await AuthService._fetch_login_candidate(
+                cp_repo, email, tenant_id, parent, super_admin
+            )
+            if not chosen or not await AuthService.verify_password_async(password, chosen["hash"]):
+                raise ValueError("Invalid email or password")
+            AuthService._schedule_keycloak_sync(email, password, chosen)
+            return await AuthService._complete_login(cp_repo, chosen, email, parent, client_ip)
+
+        if not tenant_ids:
+            # No membership row anywhere -- try the deprecated tenant-scan
+            # fallback before giving up. FAIL CLOSED either way: this used
+            # to be `tenant_id = "tenant_a"` -- the first real school -- so
+            # any login whose tenant could not be resolved was
+            # authenticated against school A's users table.
+            fallback = await AuthService._legacy_scan_for_candidate(cp_repo, email)
+            if not fallback:
+                raise ValueError(
+                    "This account is not associated with a school. Ask an "
+                    "administrator to invite you to one."
+                )
+            if not await AuthService.verify_password_async(password, fallback["hash"]):
+                raise ValueError("Invalid email or password")
+            AuthService._schedule_keycloak_sync(email, password, fallback)
+            return await AuthService._complete_login(cp_repo, fallback, email, parent, client_ip)
+
+        # Bounds both the threadpool consumption and the timing surface below --
+        # an address with an implausible number of memberships cannot turn one
+        # login attempt into an ever-larger verification burst.
+        candidates = [
+            c
+            for c in await asyncio.gather(
+                *[
+                    AuthService._fetch_login_candidate(cp_repo, email, tid, parent, super_admin)
+                    for tid in list(tenant_ids)[:8]
+                ]
+            )
+            if c
+        ]
+        matched = await AuthService._verify_candidates_padded(candidates, password)
+        if not matched:
+            raise ValueError("Invalid email or password")
+        # Every matched candidate just had this password verified against it
+        # (whether or not it ends up being the one the caller lands in), so
+        # each is a legitimate opportunity to self-heal a missing Keycloak
+        # account -- not just the one eventually chosen via _complete_login
+        # or a later login_redeem, which never sees the plaintext password.
+        for candidate in matched:
+            AuthService._schedule_keycloak_sync(email, password, candidate)
+        if len(matched) == 1:
+            return await AuthService._complete_login(cp_repo, matched[0], email, parent, client_ip)
+
+        # Refuse to guess. Which school a two-school user lands in must be
+        # their choice, not an ORDER BY.
+        return await AuthService._issue_login_selection_challenge(
+            cp_repo, email, matched, client_ip
+        )
+
+    @staticmethod
+    async def login_redeem(
+        selection_token: str, tenant_id: str, client_ip: str | None = None
+    ) -> dict:
+        """Exchange a single-use selection challenge for a real session.
+
+        Redemption (the atomic UPDATE ... RETURNING in
+        redeem_selection_challenge) is itself the credential proof -- the
+        password was already verified against this exact tenant_id's store
+        when the challenge was minted, seconds ago, inside its 2-minute
+        window. No second password check happens here.
+        """
+        cp_pool = await get_control_plane_pool()
+        cp_repo = ControlPlaneRepository(cp_pool)
+
+        row = await cp_repo.redeem_selection_challenge(
+            AuthService._hash_opaque_token(selection_token)
+        )
+        if not row or tenant_id not in row["matched_tenants"]:
+            raise ValueError("Invalid or expired selection token")
+
+        identity_id = row["identity_id"]
+        try:
+            # membership.role (when there is one) tells _resolve_local_account
+            # whether this is the parent branch; a matched super_admin
+            # candidate carries tenant_id == "" and no membership row.
+            membership = None
+            if tenant_id:
+                membership = await cp_repo.get_membership(identity_id, tenant_id)
+            hint_role = "super_admin" if tenant_id == "" else (membership or {}).get("role", "")
+            user_id, role, roles = await AuthService._resolve_local_account(
+                cp_repo, identity_id, tenant_id, hint_role
+            )
+        except ValueError as exc:
+            raise ValueError("Invalid or expired selection token") from exc
+
+        email = (await cp_repo.get_identity_by_id(identity_id))["email"]
+        access_token = AuthService.create_access_token(
+            user_id,
+            tenant_id=tenant_id or None,
+            role=role,
+            email=email,
+            roles=roles,
+            identity_id=identity_id,
+        )
+        if tenant_id:
+            await cp_repo.touch_membership_last_active(identity_id, tenant_id)
+
+        refresh_token = await AuthService.issue_refresh_token(
+            cp_repo, identity_id, tenant_id, role, client_ip
+        )
+        return {"access_token": access_token, "refresh_token": refresh_token}
 
     @staticmethod
     async def list_tenants() -> list[dict]:

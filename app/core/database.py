@@ -15,7 +15,19 @@ import os
 
 import asyncpg
 
-from app.core.config import CONTROL_PLANE_DB_NAME, DB_HOST, DB_PASSWORD, DB_PORT, DB_USER
+from app.core.config import (
+    CONTROL_PLANE_DB_NAME,
+    CP_POOL_ACQUIRE_TIMEOUT,
+    CP_POOL_MAX,
+    CP_POOL_MIN,
+    DB_HOST,
+    DB_PASSWORD,
+    DB_PORT,
+    DB_USER,
+    TENANT_POOL_ACQUIRE_TIMEOUT,
+    TENANT_POOL_MAX,
+    TENANT_POOL_MIN,
+)
 
 
 # =============================================================================
@@ -192,6 +204,212 @@ async def _initialize_control_plane_tables(pool: asyncpg.Pool) -> None:
                 created_at    TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
             """
+        )
+
+        # ─── Multi-School Membership (mirrors alembic cp_0003-cp_0008) ──────
+        # This inline path is what a fresh dev/test database actually gets
+        # provisioned from (tests/conftest.py's db_pool fixture calls this,
+        # not Alembic) -- so it has to carry the same schema Alembic does,
+        # same as user_tenant_map's PK-widening DO $$ block above already
+        # does for cp_0002. The migrations remain the source of truth for a
+        # real deployment; this keeps a fresh local/test database from
+        # silently missing tables the migrations already describe.
+        #
+        # The migration-time human-review gate (identity_merge_decisions +
+        # the collision abort in cp_0003) is deliberately NOT reproduced
+        # here: that gate protects against merging two different people's
+        # data on a live database with real history, which a freshly
+        # provisioned dev/test database has none of. The ledger table itself
+        # is still created, so `scripts/check_identity_clashes.py` and the
+        # repository methods that reference it work in every environment.
+        await conn.execute("CREATE EXTENSION IF NOT EXISTS citext;")
+        await conn.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto;")
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS identity_merge_decisions (
+                email       CITEXT      PRIMARY KEY,
+                decision    TEXT        NOT NULL CHECK (decision IN ('same_person', 'distinct_people')),
+                keeps_email TEXT,
+                decided_by  TEXT        NOT NULL,
+                note        TEXT,
+                decided_at  TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS identities (
+                id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+                email            CITEXT      UNIQUE NOT NULL,
+                keycloak_user_id TEXT        UNIQUE,
+                display_name     TEXT,
+                phone            TEXT,
+                created_at       TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
+        await conn.execute(
+            """
+            INSERT INTO identities (email)
+            SELECT email FROM user_tenant_map
+            UNION SELECT email FROM parents
+            UNION SELECT email FROM super_admins
+            ON CONFLICT (email) DO NOTHING;
+            """
+        )
+
+        await conn.execute(
+            """
+            ALTER TABLE user_tenant_map
+                ADD COLUMN IF NOT EXISTS identity_id     UUID REFERENCES identities(id) ON DELETE CASCADE,
+                ADD COLUMN IF NOT EXISTS status          TEXT NOT NULL DEFAULT 'active'
+                    CHECK (status IN ('invited', 'pending_approval', 'active', 'suspended', 'revoked')),
+                ADD COLUMN IF NOT EXISTS roles           TEXT[] NOT NULL DEFAULT '{}',
+                ADD COLUMN IF NOT EXISTS invited_by      TEXT,
+                ADD COLUMN IF NOT EXISTS decided_by      TEXT,
+                ADD COLUMN IF NOT EXISTS decided_at      TIMESTAMPTZ,
+                ADD COLUMN IF NOT EXISTS decline_reason  TEXT,
+                ADD COLUMN IF NOT EXISTS created_at      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                ADD COLUMN IF NOT EXISTS last_active_at  TIMESTAMPTZ,
+                ADD COLUMN IF NOT EXISTS is_default      BOOLEAN NOT NULL DEFAULT FALSE;
+            """
+        )
+        await conn.execute(
+            """
+            UPDATE user_tenant_map m
+            SET    identity_id = i.id,
+                   roles       = CASE WHEN m.roles = '{}' THEN ARRAY[m.role] ELSE m.roles END
+            FROM   identities i
+            WHERE  i.email = m.email
+            AND    m.identity_id IS NULL;
+            """
+        )
+        await conn.execute(
+            """
+            DO $$
+            BEGIN
+                IF NOT EXISTS (SELECT 1 FROM user_tenant_map WHERE identity_id IS NULL) THEN
+                    IF EXISTS (
+                        SELECT 1
+                        FROM   pg_constraint c
+                        JOIN   pg_class t ON t.oid = c.conrelid
+                        JOIN   pg_namespace n ON n.oid = t.relnamespace
+                        WHERE  c.conname = 'user_tenant_map_pkey'
+                        AND    t.relname = 'user_tenant_map'
+                        AND    n.nspname = current_schema()
+                        AND    c.contype = 'p'
+                        AND    (
+                            SELECT array_agg(a.attname::text ORDER BY a.attname::text)
+                            FROM   unnest(c.conkey) AS k(attnum)
+                            JOIN   pg_attribute a ON a.attrelid = c.conrelid AND a.attnum = k.attnum
+                        ) != ARRAY['identity_id', 'tenant_id']
+                    ) THEN
+                        ALTER TABLE user_tenant_map ALTER COLUMN identity_id SET NOT NULL;
+                        ALTER TABLE user_tenant_map DROP CONSTRAINT user_tenant_map_pkey;
+                        ALTER TABLE user_tenant_map ADD CONSTRAINT user_tenant_map_pkey
+                            PRIMARY KEY (identity_id, tenant_id);
+                    END IF;
+                END IF;
+            END $$;
+            """
+        )
+        await conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_utm_email_tenant ON user_tenant_map (email, tenant_id);"
+        )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_utm_tenant_status ON user_tenant_map (tenant_id, status);"
+        )
+        await conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_utm_one_default ON user_tenant_map (identity_id) "
+            "WHERE is_default;"
+        )
+        await conn.execute(
+            """
+            INSERT INTO user_tenant_map (identity_id, email, tenant_id, role, roles, status)
+            SELECT i.id, p.email, l.tenant_id, 'parent', ARRAY['parent'], 'active'
+            FROM   parent_tenant_links l
+            JOIN   parents p    ON p.id = l.parent_id
+            JOIN   identities i ON i.email = p.email
+            ON CONFLICT (identity_id, tenant_id) DO NOTHING;
+            """
+        )
+
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS access_requests (
+                id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+                identity_id     UUID        NOT NULL REFERENCES identities(id) ON DELETE CASCADE,
+                tenant_id       VARCHAR(50) NOT NULL REFERENCES tenants(tenant_id) ON DELETE CASCADE,
+                requested_role  TEXT        NOT NULL,
+                note            TEXT,
+                status          TEXT        NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending', 'approved', 'rejected', 'withdrawn')),
+                reject_reason   TEXT,
+                decided_by      TEXT,
+                decided_at      TIMESTAMPTZ,
+                created_at      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
+        await conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_ar_one_open ON access_requests (identity_id, tenant_id) "
+            "WHERE status = 'pending';"
+        )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_ar_queue ON access_requests (tenant_id, status, created_at DESC);"
+        )
+
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS auth_selection_challenges (
+                id              UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+                token_hash      BYTEA       NOT NULL UNIQUE,
+                identity_id     UUID        NOT NULL REFERENCES identities(id) ON DELETE CASCADE,
+                matched_tenants TEXT[]      NOT NULL,
+                consumed_at     TIMESTAMPTZ,
+                expires_at      TIMESTAMPTZ NOT NULL,
+                created_ip      INET,
+                created_at      TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_asc_identity ON auth_selection_challenges (identity_id);"
+        )
+
+        await conn.execute(
+            """
+            ALTER TABLE tenants
+                ADD COLUMN IF NOT EXISTS school_code   CITEXT UNIQUE,
+                ADD COLUMN IF NOT EXISTS display_name  TEXT,
+                ADD COLUMN IF NOT EXISTS brand_color   TEXT;
+            """
+        )
+        await conn.execute("UPDATE tenants SET display_name = name WHERE display_name IS NULL;")
+
+        await conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS refresh_tokens (
+                id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+                token_hash   BYTEA       NOT NULL UNIQUE,
+                identity_id  UUID        NOT NULL REFERENCES identities(id) ON DELETE CASCADE,
+                tenant_id    VARCHAR(50) NOT NULL DEFAULT '',
+                role         TEXT        NOT NULL,
+                family_id    UUID        NOT NULL,
+                revoked_at   TIMESTAMPTZ,
+                replaced_by  UUID        REFERENCES refresh_tokens(id),
+                expires_at   TIMESTAMPTZ NOT NULL,
+                created_ip   INET,
+                created_at   TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            );
+            """
+        )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_refresh_tokens_identity ON refresh_tokens (identity_id);"
+        )
+        await conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_refresh_tokens_family ON refresh_tokens (family_id) "
+            "WHERE revoked_at IS NULL;"
         )
 
         # Seed default tenants if table is empty
@@ -1025,7 +1243,14 @@ class Database:
         self._schema_name = schema_name
         self.pool: asyncpg.Pool | None = None
 
-    async def connect(self, init_fn, setup_conn_fn=None) -> asyncpg.Pool:
+    async def connect(
+        self,
+        init_fn,
+        setup_conn_fn=None,
+        min_size: int = 1,
+        max_size: int = 5,
+        acquire_timeout: float | None = None,
+    ) -> asyncpg.Pool:
         if self.pool is None:
             server_settings = {}
             if self._schema_name:
@@ -1037,8 +1262,21 @@ class Database:
                 user=self._user,
                 password=self._password,
                 database=self._database,
-                min_size=1,
-                max_size=5,  # Enforces connection pooling limit of 5 max
+                min_size=min_size,
+                max_size=max_size,
+                # NOTE: this is asyncpg's per-connection *establishment*
+                # timeout (forwarded to asyncpg.connect() for each new
+                # physical connection the pool opens), not an acquire-from-a-
+                # saturated-pool timeout -- asyncpg has no pool-wide setting
+                # for that; it exists per call as `timeout=` on
+                # pool.acquire()/fetchrow()/execute(), which none of this
+                # codebase's call sites currently pass. So an unreachable
+                # database now fails fast instead of hanging, but a pool that
+                # is merely saturated (every connection in use, max_size
+                # already reached) still queues an acquire indefinitely --
+                # closing that fully means threading `timeout=` through the
+                # call sites themselves, not done here.
+                timeout=acquire_timeout,
                 server_settings=server_settings if server_settings else None,
                 init=setup_conn_fn,
             )
@@ -1073,7 +1311,12 @@ class DatabaseManager:
             if self._control_plane_db is None:
                 await _ensure_database_exists(CONTROL_PLANE_DB_CONFIG)
                 self._control_plane_db = Database(**CONTROL_PLANE_DB_CONFIG)
-            return await self._control_plane_db.connect(_initialize_control_plane_tables)
+            return await self._control_plane_db.connect(
+                _initialize_control_plane_tables,
+                min_size=CP_POOL_MIN,
+                max_size=CP_POOL_MAX,
+                acquire_timeout=CP_POOL_ACQUIRE_TIMEOUT,
+            )
 
     async def get_pool(self, tenant_id: str) -> asyncpg.Pool:
         """Get the connection pool for the requested tenant."""
@@ -1153,7 +1396,11 @@ class DatabaseManager:
                 await _initialize_tenant_tables(pool, tenant_id)
 
             return await self._databases[tenant_id].connect(
-                init_tenant_tables, setup_conn_fn=setup_conn_fn
+                init_tenant_tables,
+                setup_conn_fn=setup_conn_fn,
+                min_size=TENANT_POOL_MIN,
+                max_size=TENANT_POOL_MAX,
+                acquire_timeout=TENANT_POOL_ACQUIRE_TIMEOUT,
             )
 
     async def disconnect_all(self) -> None:

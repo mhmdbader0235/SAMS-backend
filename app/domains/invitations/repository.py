@@ -62,15 +62,29 @@ class InvitationRepository:
 
         Conflicts on (email, tenant_id) -- inviting someone to a second school
         adds a membership instead of moving them out of the first. Mirrors
-        ControlPlaneRepository.upsert_user_tenant_map; see alembic cp_0002."""
+        ControlPlaneRepository.upsert_user_tenant_map; see alembic cp_0002.
+
+        cp_0004 made `identity_id` NOT NULL on this table, so an invitee never
+        seen before needs an `identities` row resolved (or created) before the
+        INSERT below -- otherwise a brand-new invitation fails NOT NULL."""
         async with self.pool.acquire() as conn:
+            identity_id = await conn.fetchval(
+                """
+                INSERT INTO identities (email)
+                VALUES ($1)
+                ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
+                RETURNING id
+                """,
+                email.strip().lower(),
+            )
             await conn.execute(
                 """
-                INSERT INTO user_tenant_map (email, tenant_id, role, updated_at)
-                VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+                INSERT INTO user_tenant_map (identity_id, email, tenant_id, role, updated_at)
+                VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
                 ON CONFLICT (email, tenant_id) DO UPDATE
                 SET role = EXCLUDED.role, updated_at = CURRENT_TIMESTAMP
                 """,
+                identity_id,
                 email.strip().lower(),
                 tenant_id.strip(),
                 role.strip(),

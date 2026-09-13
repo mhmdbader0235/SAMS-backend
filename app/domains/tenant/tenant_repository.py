@@ -1754,7 +1754,8 @@ class TenantRepository:
         row = await self.pool.fetchrow(
             """
             SELECT en.id, en.student_id, en.event_class_map_id, en.state, en.teacher_id, en.parent_id, en.created_at,
-                   s.name AS student_name, c.name AS class_name, e.title AS event_title, ecm.ticket_price
+                   s.name AS student_name, c.name AS class_name, e.title AS event_title, ecm.ticket_price,
+                   e.created_by AS event_created_by
             FROM enrollment en
             JOIN students s ON en.student_id = s.id
             JOIN event_class_map ecm ON en.event_class_map_id = ecm.id
@@ -1791,6 +1792,11 @@ class TenantRepository:
         # `rejected_by_parent` stays excluded on purpose: that's a dead end
         # the UI treats as "not enrolled" so the row disappears and a fresh
         # request can be made, not as an active state to keep showing.
+        #
+        # Scoped by event ownership (`e.created_by`), not class headship
+        # (`c.head_teacher_id`): a trip's roster is only for the teacher who
+        # created that trip, even if another teacher heads a class the trip
+        # is mapped to.
         rows = await self.pool.fetch(
             """
             SELECT en.id, en.student_id, en.event_class_map_id, en.state, en.teacher_id, en.parent_id, en.created_at,
@@ -1801,7 +1807,7 @@ class TenantRepository:
             JOIN event_class_map ecm ON en.event_class_map_id = ecm.id
             JOIN class c ON ecm.class_id = c.id
             JOIN event e ON ecm.event_id = e.id
-            WHERE c.head_teacher_id = $1
+            WHERE e.created_by = $1
               AND en.state != 'rejected_by_parent'
             """,
             parse_id(teacher_id),
@@ -1887,6 +1893,28 @@ class TenantRepository:
         )
         return dict(row) if row else None
 
+    async def get_payments_by_enrollment_ids(self, enrollment_ids: list) -> dict:
+        """Bulk payment lookup keyed by enrollment_id -> {status, amount}.
+
+        Exists so a caller listing N enrollments (e.g. the family overview's
+        per-school fan-out) can fetch every payment in ONE query instead of
+        N calls to get_payment_by_enrollment -- an N+1 that would multiply
+        across every school in a cross-tenant read. Only the most recent
+        payment per enrollment is kept, matching the "one payment per
+        enrollment" invariant elsewhere in this codebase.
+        """
+        if not enrollment_ids:
+            return {}
+        rows = await self.pool.fetch(
+            "SELECT enrollment_id, status, amount FROM payments "
+            "WHERE enrollment_id = ANY($1::bigint[]) ORDER BY created_at DESC",
+            [parse_id(i) for i in enrollment_ids],
+        )
+        out: dict = {}
+        for row in rows:
+            out.setdefault(row["enrollment_id"], {"status": row["status"], "amount": row["amount"]})
+        return out
+
     # =========================================================================
     # Feedbacks
     # =========================================================================
@@ -1958,10 +1986,19 @@ class TenantRepository:
         )
         return [dict(row) for row in rows]
 
-    async def mark_notification_read(self, notif_id: UUID) -> bool:
+    async def mark_notification_read(self, notif_id: UUID, recipient_user_id) -> bool:
+        # recipient_user_id is part of the WHERE clause, not just a courtesy: this
+        # used to match on `id` alone, so any authenticated caller in the tenant
+        # could mark ANY user's notification read given only its UUID -- including
+        # notifications addressed to staff. Scoping the UPDATE to the caller's own
+        # row makes a mismatched id indistinguishable from a missing one (both
+        # return False -> 404), which is also what stops it being a probe for
+        # whether some other user's notification exists.
         result = await self.pool.execute(
-            "UPDATE notifications SET read_at = CURRENT_TIMESTAMP WHERE id = $1 AND read_at IS NULL",
+            "UPDATE notifications SET read_at = CURRENT_TIMESTAMP "
+            "WHERE id = $1 AND recipient_user_id = $2 AND read_at IS NULL",
             notif_id,
+            parse_id(recipient_user_id),
         )
         return result == "UPDATE 1"
 
@@ -2034,6 +2071,60 @@ class TenantRepository:
                 "event_count": 0,
             }
         )
+
+    async def get_active_academic_year_name(self) -> str | None:
+        return await self.pool.fetchval(
+            "SELECT name FROM academic_years WHERE status = 'active' ORDER BY id DESC LIMIT 1"
+        )
+
+    async def get_enrollment_by_class(self) -> list[dict]:
+        """Per-class headcount for the school report -- natural grade order
+        (ordinal), never alphabetical, same rule as everywhere else a level
+        list is rendered."""
+        rows = await self.pool.fetch(
+            """
+            SELECT c.id AS class_id, l.name AS level_name, c.name AS class_name,
+                   COUNT(s.id) AS student_count, c.capacity
+            FROM   class c
+            JOIN   levels l ON l.level_id = c.level_id
+            LEFT JOIN students s ON s.class_id = c.id
+            GROUP BY c.id, l.name, c.name, c.capacity, l.ordinal
+            ORDER BY l.ordinal NULLS LAST, l.name, c.name
+            """
+        )
+        return [dict(r) for r in rows]
+
+    async def get_event_participation_report(self) -> list[dict]:
+        """Enrollment counts per published trip -- 'confirmed' is the
+        teacher's final roster confirmation (approved_by_teacher), 'rejected'
+        covers either rejection point in the enrollment chain."""
+        rows = await self.pool.fetch(
+            """
+            SELECT e.id AS event_id, e.title, e.date,
+                   COUNT(en.id) AS total_enrollments,
+                   COUNT(en.id) FILTER (WHERE en.state = 'approved_by_teacher') AS confirmed,
+                   COUNT(en.id) FILTER (
+                       WHERE en.state IN ('rejected_by_parent', 'rejected_by_teacher')
+                   ) AS rejected
+            FROM   event e
+            LEFT JOIN event_class_map ecm ON ecm.event_id = e.id
+            LEFT JOIN enrollment en ON en.event_class_map_id = ecm.id
+            WHERE  e.status = 'published'
+            GROUP BY e.id, e.title, e.date
+            ORDER BY e.date DESC
+            """
+        )
+        return [dict(r) for r in rows]
+
+    async def get_payment_status_report(self) -> list[dict]:
+        rows = await self.pool.fetch(
+            """
+            SELECT status, COUNT(*) AS count, COALESCE(SUM(amount), 0) AS total_amount
+            FROM   payments
+            GROUP BY status
+            """
+        )
+        return [dict(r) for r in rows]
 
     # =========================================================================
     # Resource Types (workflow & resource schema)

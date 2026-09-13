@@ -1,7 +1,7 @@
 import os
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.security import HTTPBearer
 from pydantic import BaseModel
 
@@ -14,6 +14,9 @@ from app.core.dependencies import (
     require_tenant_live,
 )
 from app.core.schemas import (
+    LoginRedeemRequest,
+    LoginSelectionRequiredResponse,
+    RefreshTokenRequest,
     TokenResponse,
     UserLoginRequest,
     UserPreferencesResponse,
@@ -207,20 +210,72 @@ async def register(payload: UserRegisterRequest) -> TokenResponse:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
-@router.post("/login", response_model=TokenResponse, summary="Login and receive a JWT")
-async def login(payload: UserLoginRequest) -> TokenResponse:
+@router.post(
+    "/login",
+    summary="Login and receive a JWT, or a school-selection challenge",
+)
+async def login(payload: UserLoginRequest, request: Request):
     # Pass None through rather than defaulting to tenant_a: AuthService.login_user
     # resolves the caller's real tenant from user_tenant_map when this is None,
     # and defaulting here skipped that and authenticated against school A.
     tenant_id = payload.tenant_id
+    client_ip = request.client.host if request.client else None
 
     try:
-        token = await AuthService.login_user(
+        result = await AuthService.login_user(
             email=str(payload.email),
             password=payload.password,
             tenant_id=tenant_id,
+            client_ip=client_ip,
         )
-        return TokenResponse(access_token=token)
+        # login_user returns EITHER a session dict (single match, or the
+        # caller named a school that matched) OR a select_tenant dict (2+
+        # candidate schools matched and none was named) -- never raises to
+        # signal ambiguity. No response_model on this route because of that
+        # union; each branch below returns an already-validated model.
+        if result.get("status") == "select_tenant":
+            return LoginSelectionRequiredResponse(**result)
+        return TokenResponse(**result)
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post(
+    "/login/redeem",
+    response_model=TokenResponse,
+    summary="Exchange a single-use school-selection token for a real session",
+)
+async def login_redeem(payload: LoginRedeemRequest, request: Request) -> TokenResponse:
+    client_ip = request.client.host if request.client else None
+    try:
+        result = await AuthService.login_redeem(
+            selection_token=payload.selection_token,
+            tenant_id=payload.tenant_id,
+            client_ip=client_ip,
+        )
+        return TokenResponse(**result)
+    except ValueError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post(
+    "/refresh",
+    response_model=TokenResponse,
+    summary="Exchange a refresh token for a new access token (rotates the refresh token)",
+)
+async def refresh(payload: RefreshTokenRequest, request: Request) -> TokenResponse:
+    client_ip = request.client.host if request.client else None
+    try:
+        cp_pool = await get_control_plane_pool()
+        cp_repo = ControlPlaneRepository(cp_pool)
+        result = await AuthService.rotate_refresh_token(
+            cp_repo, payload.refresh_token, client_ip=client_ip
+        )
+        return TokenResponse(**result)
     except ValueError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except Exception as exc:
@@ -231,12 +286,41 @@ async def login(payload: UserLoginRequest) -> TokenResponse:
 async def me(
     current_user: CurrentUser = Depends(get_current_user),
 ) -> dict:
+    """Kept on the ungated `router`, not `router_gated`: a user whose only
+    school is mid-setup must still be able to see who they are and which
+    schools they belong to -- `require_tenant_live` would otherwise 400 them
+    out of their own identity endpoint. Already whitelisted in
+    school_policy.rego, so this needs no OPA policy change.
+    """
+    memberships: list[dict] = []
+    for m in current_user.memberships:
+        entry = {"tenant_id": m["tenant_id"], "role": m["role"]}
+        try:
+            from app.domains.school.service import SchoolService
+
+            summary = await SchoolService.get_locale_summary(m["tenant_id"])
+            setup_state = await SchoolService.get_setup_state(m["tenant_id"])
+            entry.update(
+                school_name=summary["school_name"],
+                currency=summary["currency"],
+                timezone=summary["timezone"],
+                setup_state=setup_state["status"],
+            )
+        except Exception:
+            # A wedged/unreachable school must not break the whole identity
+            # response for the other schools this person belongs to -- the
+            # switcher can render this entry disabled instead.
+            entry.update(school_name=None, currency=None, timezone=None, setup_state="error")
+        memberships.append(entry)
+
     return {
         "user_id": str(current_user.id),
         "tenant_id": current_user.tenant_id,
+        "active_tenant_id": current_user.tenant_id,
         "role": current_user.role,
         "roles": current_user.roles,
         "email": current_user.email,
+        "memberships": memberships,
     }
 
 

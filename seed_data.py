@@ -206,15 +206,27 @@ async def seed_tenant(tenant_id: str):
         CONFLICT specification" outright, since the table's real constraint
         is the wider one.
         """
+        # cp_0004 made identity_id NOT NULL on user_tenant_map; resolve/create
+        # the identities row first or this INSERT fails NOT NULL for any
+        # email seeded here for the first time.
+        identity_id = await conn.fetchval(
+            """
+            INSERT INTO identities (email)
+            VALUES ($1)
+            ON CONFLICT (email) DO UPDATE SET email = EXCLUDED.email
+            RETURNING id
+            """,
+            email.strip().lower(),
+        )
         await conn.execute(
             """
-            INSERT INTO user_tenant_map (email, tenant_id, role, updated_at)
-            VALUES ($1, $2, $3, CURRENT_TIMESTAMP)
+            INSERT INTO user_tenant_map (identity_id, email, tenant_id, role, updated_at)
+            VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
             ON CONFLICT (email, tenant_id) DO UPDATE
                 SET role = EXCLUDED.role,
                     updated_at = CURRENT_TIMESTAMP
             """,
-            email.strip().lower(), tenant_id, role,
+            identity_id, email.strip().lower(), tenant_id, role,
         )
 
     try:

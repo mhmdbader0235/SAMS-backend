@@ -3,6 +3,12 @@ matches the old hardcoded literal exactly, byte for byte in permission
 content (order-independent). This is the "prove nothing changed" commit that
 must land before _has_intersection's ~30 call sites are touched -- see the
 module roadmap Wave A2.
+
+Real catalog changes made after that migration (a permission genuinely added
+or removed) are reflected here deliberately, with a note, rather than left to
+silently fail this test -- it is a frozen-snapshot regression lock, not a
+change-freeze. `parent` gained `family:overview_read` for the multi-school
+family overview page (Phase 5 of the multi-school access plan).
 """
 
 from app.core.dependencies import COMPOSITE_ROLE_PERMISSIONS
@@ -32,6 +38,7 @@ _OLD_LITERAL: dict[str, set[str]] = {
         "teacher:read",
         "teacher:write",
         "parent:read",
+        "report:view",
         "student:create",
         "student:read",
         "event:create",
@@ -100,6 +107,7 @@ _OLD_LITERAL: dict[str, set[str]] = {
         "teacher:read",
         "teacher:write",
         "parent:read",
+        "report:view",
         "student:create",
         "student:read",
         "event:create",
@@ -244,6 +252,7 @@ _OLD_LITERAL: dict[str, set[str]] = {
         "notification:read",
         "notification:mark_read",
         "feedback:create",
+        "family:overview_read",
     },
     "student": {
         "school:read",

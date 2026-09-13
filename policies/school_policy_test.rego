@@ -87,6 +87,48 @@ test_parent_cross_tenant_view_denied if {
     }
 }
 
+test_parent_family_overview_allowed_with_no_resource_tenant if {
+    authz.allow with input as {
+        "user": {"id": "parent_a", "tenant_id": "tenant_a", "roles": ["parent"]},
+        "action": "family:overview_read",
+        "resource": {}
+    }
+}
+
+test_parent_family_overview_denied_when_resource_names_a_tenant if {
+    # The load-bearing guard: `not input.resource.tenant_id` makes this rule
+    # unreachable through require_permission(), which always injects the
+    # caller's own tenant_id -- so a caller that (mistakenly or maliciously)
+    # supplies one gets denied by this specific allowlist rule, not silently
+    # allowed some other way.
+    not authz.allow with input as {
+        "user": {"id": "parent_a", "tenant_id": "tenant_a", "roles": ["parent"]},
+        "action": "family:overview_read",
+        "resource": {"tenant_id": "tenant_a"}
+    }
+}
+
+test_teacher_family_overview_denied if {
+    # Closed allowlist: cross_tenant_action names the action, but only
+    # "parent" is in the role check -- a teacher must not reach it just
+    # because the action string is in the set.
+    not authz.allow with input as {
+        "user": {"id": "teacher_a", "tenant_id": "tenant_a", "roles": ["teacher"]},
+        "action": "family:overview_read",
+        "resource": {}
+    }
+}
+
+test_parent_family_overview_does_not_open_other_actions_cross_tenant if {
+    # The allowlist is scoped to exactly one action string -- it must not
+    # act as a general "parent, no resource tenant" bypass for anything else.
+    not authz.allow with input as {
+        "user": {"id": "parent_a", "tenant_id": "tenant_a", "roles": ["parent"]},
+        "action": "event:read",
+        "resource": {}
+    }
+}
+
 test_teacher_cross_tenant_propose_denied if {
     not authz.allow with input as {
         "user": {"id": "teacher_a", "tenant_id": "tenant_a", "roles": ["teacher"]},
@@ -699,4 +741,3 @@ test_user_with_cleared_permissions_denied if {
         "resource": {"tenant_id": "tenant_a"}
     }
 }
-

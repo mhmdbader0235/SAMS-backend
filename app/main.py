@@ -8,10 +8,11 @@ Registers all API routers (Auth, Events, Students, Analytics).
 import logging
 from contextlib import asynccontextmanager, suppress
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.core.dependencies import CurrentUser, get_current_user
 from app.core.database import db_manager, get_control_plane_pool
 from app.core.errors import AppError
 from app.core.keycloak_jwt import start_jwks_refresh_loop, stop_jwks_refresh_loop
@@ -21,6 +22,7 @@ from app.domains.audit.router import router as audit_router
 from app.domains.auth.router import router as auth_router
 from app.domains.auth.router import router_gated as auth_gated_router
 from app.domains.events.router import router as events_router
+from app.domains.family.router import router as family_router
 from app.domains.invitations.router import router as invitation_router
 from app.domains.notifications.router import router as notifications_router
 from app.domains.school.router import router as school_router
@@ -175,6 +177,7 @@ app.include_router(notifications_router)
 app.include_router(invitation_router)
 app.include_router(school_router)
 app.include_router(audit_router)
+app.include_router(family_router)
 
 
 @app.get("/health", tags=["health"])
@@ -229,6 +232,67 @@ async def ready() -> JSONResponse:
     )
     body = {"database": database_ok, "keycloak": keycloak_ok, "opa": opa_ok}
     return JSONResponse(status_code=200 if all(body.values()) else 503, content=body)
+
+
+@app.get("/api/v1/health/schema-status", tags=["health"])
+async def schema_status(
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Check migration status across control plane and all tenant schemas.
+    Restricted strictly to super_admin."""
+    if not current_user.has_role("super_admin"):
+        raise HTTPException(status_code=403, detail="Forbidden: super_admin role required")
+
+    from app.core.database import get_control_plane_pool, get_db_pool
+    from app.domains.tenant.control_plane_repository import ControlPlaneRepository
+
+    cp_pool = await get_control_plane_pool()
+    cp_repo = ControlPlaneRepository(cp_pool)
+
+    # Check control-plane alembic_version
+    cp_rev = None
+    try:
+        cp_rev = await cp_pool.fetchval("SELECT version_num FROM public.alembic_version LIMIT 1")
+    except Exception as exc:
+        cp_rev = f"error: {exc}"
+
+    # Query all registered tenants
+    tenant_statuses = []
+    all_healthy = True
+    try:
+        tenants = await cp_repo.get_all_tenants()
+        for t in tenants:
+            tid = t.get("tenant_id") or t.get("id")
+            if not tid:
+                continue
+            try:
+                t_pool = await get_db_pool(tid)
+                t_rev = await t_pool.fetchval(
+                    f'SELECT version_num FROM "{tid}".alembic_version LIMIT 1'
+                )
+                tenant_statuses.append({
+                    "tenant_id": tid,
+                    "current_revision": t_rev,
+                    "status": "ok" if t_rev else "unmigrated",
+                })
+            except Exception as exc:
+                all_healthy = False
+                tenant_statuses.append({
+                    "tenant_id": tid,
+                    "current_revision": None,
+                    "status": f"error: {exc}",
+                })
+    except Exception:
+        all_healthy = False
+
+    return {
+        "control_plane": {
+            "current_revision": cp_rev,
+            "status": "ok" if cp_rev and not str(cp_rev).startswith("error") else "error",
+        },
+        "tenants": tenant_statuses,
+        "all_healthy": all_healthy and bool(cp_rev) and not str(cp_rev).startswith("error"),
+    }
 
 
 if __name__ == "__main__":

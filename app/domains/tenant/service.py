@@ -958,6 +958,11 @@ class TenantService:
         return results
 
     @staticmethod
+    async def get_payments_for_enrollments(tenant_id: str, enrollment_ids: list) -> dict:
+        pool = await get_db_pool(tenant_id)
+        return await TenantRepository(pool).get_payments_by_enrollment_ids(enrollment_ids)
+
+    @staticmethod
     async def cancel_enrollment(
         tenant_id: str,
         enrollment_id: int,
@@ -1296,10 +1301,10 @@ class TenantService:
         return await repo.get_academic_structure()
 
     @staticmethod
-    async def mark_notification_read(tenant_id: str, notif_id: UUID) -> bool:
+    async def mark_notification_read(tenant_id: str, notif_id: UUID, user_id) -> bool:
         pool = await get_db_pool(tenant_id)
         repo = TenantRepository(pool)
-        return await repo.mark_notification_read(notif_id)
+        return await repo.mark_notification_read(notif_id, user_id)
 
     @staticmethod
     async def check_and_send_reminders() -> None:
@@ -1792,6 +1797,25 @@ class TenantService:
         was_super_admin = bool(existing) and (
             existing.get("role") == "super_admin" or "super_admin" in (existing.get("roles") or [])
         )
+
+        if (
+            primary_role == "super_admin" or "super_admin" in (roles or [])
+        ) and not was_super_admin:
+            from app.core.config import SUPER_ADMIN_ALLOWED_EMAIL
+
+            # The platform has exactly one super_admin identity (same invariant
+            # as AuthService.register_user / assign_user_role). Only reject a
+            # NEW grant -- an already-super_admin row being re-saved with the
+            # same role must not suddenly 403.
+            target_email = (existing or {}).get("email")
+            if (
+                not target_email
+                or target_email.strip().lower() != SUPER_ADMIN_ALLOWED_EMAIL.strip().lower()
+            ):
+                raise PermissionError(
+                    "super_admin is restricted to the platform's single designated "
+                    "operator account and cannot be granted to another email."
+                )
 
         updated = await user_repo.update_user_roles_and_permissions(
             user_id=user_id,

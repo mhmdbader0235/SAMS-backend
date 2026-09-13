@@ -82,6 +82,27 @@ action_allow if {
     valid_parent_resource_status
 }
 
+# Closed cross-tenant allowlist -- the ONLY action_allow rule that does not
+# require valid_tenant (a caller's own tenant matching the resource's). Every
+# other cross-tenant surface in this codebase is analytics, which is
+# super_admin-only and bypasses this whole file via the "super_admin bypasses
+# all authorization checks" rule above. This is the second, narrower kind:
+# an ordinary user reading data that spans their OWN verified memberships,
+# never someone else's. Deliberately NOT a loosened valid_tenant -- widening
+# that would open every action_allow rule above to cross-tenant use, not just
+# this one read. `not input.resource.tenant_id` is load-bearing: it makes
+# this rule unreachable through require_permission(), which always injects
+# the caller's own tenant_id into resource, so only a direct
+# current_user.can(action, resource=None) call (see family/router.py) can
+# reach it.
+cross_tenant_action := {"family:overview_read"}
+
+action_allow if {
+    input.action in cross_tenant_action
+    "parent" in input.user.roles
+    not input.resource.tenant_id
+}
+
 action_allow if {
     valid_tenant
     "student" in input.user.roles
@@ -156,7 +177,8 @@ school_admin_permission := {
     "resource_type:read", "enrollment:teacher_approve", "enrollment:cancel", "enrollment:view_roster",
     "enrollment:read", "billing:audit", "billing:invoice", "billing:view_payment", "subsidy:manage",
     "audit:view", "health:view", "health:manage", "safety:manage", "announcement:manage",
-    "notification:send", "notification:read", "notification:mark_read", "feedback:view"
+    "notification:send", "notification:read", "notification:mark_read", "feedback:view",
+    "report:view"
 }
 
 # --- Manager Permissions Set ---
@@ -381,6 +403,7 @@ parent_http_route("POST", ["api", "v1", "students", "enrollments", _, "approve"]
 parent_http_route("DELETE", ["api", "v1", "students", "enrollments", _])
 parent_http_route("GET", ["api", "v1", "students", _, "health"])
 parent_http_route("POST", ["api", "v1", "students", _, "health"])
+parent_http_route("GET", ["api", "v1", "family", "overview"])
 
 # --- Student HTTP Routes ---
 student_http_route(m, p) if common_http_route(m, p)

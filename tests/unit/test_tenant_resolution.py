@@ -191,8 +191,16 @@ class TestFailClosed:
 
         assert user.tenant_id == "tenant_b"
 
-    async def test_non_super_admin_header_override_ignored_and_own_tenant_kept(self):
-        """A teacher of tenant_a sending X-Tenant-ID: tenant_b stays on tenant_a."""
+    async def test_non_member_header_selection_is_rejected(self):
+        """A teacher of tenant_a with no membership at tenant_b gets 403, not a silent keep.
+
+        Renamed from test_non_super_admin_header_override_ignored_and_own_tenant_kept:
+        the header is now a verified SELECTION against the caller's own
+        membership set, not an ignored assertion -- naming a tenant they
+        don't belong to is a loud denial, never a silent fallback to their
+        own tenant (see test_tenant_override_security.py for the fuller
+        rationale and the sibling positive-selection test).
+        """
         payload = {
             "sub": "user-teacher",
             "email": "teacher@tenant-a.example.com",
@@ -202,14 +210,18 @@ class TestFailClosed:
         fake_pool = FakePool(user_row={"id": 42, "role": "teacher", "roles": [], "permissions": []})
         p1, p2 = _patches(fake_pool)
 
-        with patch.object(AuthService, "decode_access_token", return_value=payload), p1, p2:
-            user = await get_current_user(
+        with (
+            patch.object(AuthService, "decode_access_token", return_value=payload),
+            p1,
+            p2,
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await get_current_user(
                 request=FakeRequest(headers={"x-tenant-id": "tenant_b"}),
                 credentials=_credentials(),
             )
 
-        assert user.tenant_id == "tenant_a"
-        assert user.tenant_id != "tenant_b"
+        assert exc_info.value.status_code == 403
 
 
 class TestOrganizationClaim:
@@ -254,6 +266,40 @@ class TestOrganizationClaim:
             await get_current_user(request=FakeRequest(), credentials=_credentials())
 
         assert exc_info.value.status_code == 400
+
+    async def test_multiple_memberships_with_verified_rows_offer_a_select_tenant_challenge(self):
+        """A real multi-school SSO account (verified rows in user_tenant_map, not
+        just an ambiguous token claim) gets the same select_tenant challenge shape
+        password login already returns, instead of a flat, dead-end 400 -- see
+        dependencies.py's org_ambiguous FAIL CLOSED branch."""
+        payload = {
+            "sub": "kc-multi-2",
+            "email": "multitest@example.com",
+            "organization": ["tenant_a", "tenant_b"],
+        }
+        fake_pool = FakePool(
+            user_row=None,
+            rows=[
+                {"tenant_id": "tenant_a", "role": "teacher"},
+                {"tenant_id": "tenant_b", "role": "parent"},
+            ],
+        )
+        p1, p2 = _patches(fake_pool)
+
+        with (
+            patch.object(AuthService, "decode_access_token", return_value=payload),
+            p1,
+            p2,
+            pytest.raises(HTTPException) as exc_info,
+        ):
+            await get_current_user(request=FakeRequest(), credentials=_credentials())
+
+        assert exc_info.value.status_code == 400
+        detail = exc_info.value.detail
+        assert isinstance(detail, dict)
+        assert detail["code"] == "select_tenant"
+        choices = {c["tenant_id"]: c["role"] for c in detail["params"]["choices"]}
+        assert choices == {"tenant_a": "teacher", "tenant_b": "parent"}
 
     async def test_organization_claim_as_bare_string_still_resolves(self):
         """Defensive: a non-multivalued mapper config emits a string, not an array."""

@@ -85,6 +85,37 @@ class UserLoginRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    # Optional and additive: existing callers that only read access_token are
+    # unaffected. Present on login_user's single-match result and on
+    # login_redeem/refresh; absent for callers minting a token some other
+    # way (e.g. register_user, which does not yet issue a refresh token).
+    refresh_token: str | None = None
+
+
+class SelectionChoice(BaseModel):
+    tenant_id: str
+    role: str
+
+
+class LoginSelectionRequiredResponse(BaseModel):
+    """Returned by POST /auth/login, in place of TokenResponse, when the
+    submitted password verifies against more than one candidate school
+    (AuthService.login_user). `selection_token` is single-use and expires in
+    `expires_in` seconds -- exchange it via POST /auth/login/redeem."""
+
+    status: Literal["select_tenant"] = "select_tenant"
+    selection_token: str
+    expires_in: int
+    choices: list[SelectionChoice]
+
+
+class LoginRedeemRequest(BaseModel):
+    selection_token: str
+    tenant_id: str
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
 
 
 # =============================================================================

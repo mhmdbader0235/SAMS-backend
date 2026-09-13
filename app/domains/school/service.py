@@ -5,8 +5,11 @@ Structure / Curriculum Wizard (Stage 2, see domains/tenant) -> Activate
 (Stage 3), which permanently locks the curriculum system.
 """
 
-from app.core.database import get_db_pool
+import asyncpg
+
+from app.core.database import get_control_plane_pool, get_db_pool
 from app.domains.school.repository import SchoolRepository
+from app.domains.tenant.control_plane_repository import ControlPlaneRepository
 from app.domains.tenant.tenant_repository import TenantRepository
 
 _ADMIN_ROLES = {"school_admin", "super_admin", "admin"}
@@ -19,6 +22,19 @@ _REQUIRED_PROFILE_FIELDS = (
     "timezone",
     "currency",
 )
+
+# Human labels for the commit-profile error. "country" in particular gets a
+# clarifying suffix: the Campus step (Stage 1's next screen) has its own,
+# separate "Country" field for the physical address, and admins repeatedly
+# fill that one in and assume it satisfies this check.
+_PROFILE_FIELD_LABELS = {
+    "legal_name": "Legal Name",
+    "display_name": "Display Name",
+    "school_code": "School Code",
+    "country": "Country (School Identity step, not the Campus address)",
+    "timezone": "Time Zone",
+    "currency": "Currency",
+}
 
 
 class SchoolService:
@@ -39,6 +55,25 @@ class SchoolService:
             roles = set()
         if not roles.intersection(_ADMIN_ROLES):
             raise PermissionError("Only school_admin or super_admin can manage school setup.")
+
+    @staticmethod
+    async def _sync_tenant_mirror(tenant_id: str, profile: dict) -> None:
+        """Push this tenant's current identity fields onto the control-plane
+        `tenants` mirror (see alembic cp_0007) every time school_profile
+        changes, since nothing else keeps it current. Best-effort: a
+        school_code collision with another tenant's mirror must not fail
+        the caller's actual write to their own tenant schema."""
+        cp_pool = await get_control_plane_pool()
+        cp_repo = ControlPlaneRepository(cp_pool)
+        try:
+            await cp_repo.sync_tenant_mirror(
+                tenant_id,
+                display_name=profile.get("display_name"),
+                school_code=profile.get("school_code"),
+                brand_color=profile.get("primary_color"),
+            )
+        except asyncpg.PostgresError:
+            pass
 
     # =========================================================================
     # Setup state
@@ -104,6 +139,25 @@ class SchoolService:
         return {**profile, "campuses": campuses, "contacts": contacts}
 
     @staticmethod
+    async def get_locale_summary(tenant_id: str) -> dict:
+        """The handful of school facts a switcher/membership list may show.
+
+        Deliberately narrow -- NOT get_profile_bundle, which also carries
+        licence numbers, tax registration, and contact PII that a caller has
+        no business seeing for every school they merely belong to, only the
+        one they're currently acting in.
+        """
+        pool = await get_db_pool(tenant_id)
+        profile = await SchoolRepository(pool).ensure_profile_row()
+        return {
+            "tenant_id": tenant_id,
+            "school_name": profile.get("display_name") or profile.get("legal_name"),
+            "currency": profile.get("currency"),
+            "timezone": profile.get("timezone"),
+            "activated_at": profile.get("activated_at"),
+        }
+
+    @staticmethod
     async def update_profile(tenant_id: str, fields: dict, user_role: str | list[str]) -> dict:
         SchoolService._require_admin(user_role)
         pool = await get_db_pool(tenant_id)
@@ -138,7 +192,9 @@ class SchoolService:
 
         if not clean:
             return current
-        return await repo.update_profile(clean)
+        updated = await repo.update_profile(clean)
+        await SchoolService._sync_tenant_mirror(tenant_id, updated)
+        return updated
 
     # =========================================================================
     # Campus
@@ -203,7 +259,8 @@ class SchoolService:
 
         missing = [f for f in _REQUIRED_PROFILE_FIELDS if not profile.get(f)]
         if missing:
-            raise ValueError(f"Missing required school information: {', '.join(missing)}")
+            labels = [_PROFILE_FIELD_LABELS.get(f, f) for f in missing]
+            raise ValueError(f"Missing required school information: {', '.join(labels)}")
 
         if not await repo.list_campuses():
             raise ValueError("Add at least one campus address before continuing.")
@@ -214,7 +271,9 @@ class SchoolService:
             )
 
         await repo.stamp_profile_committed()
-        return await repo.get_profile_row()
+        committed = await repo.get_profile_row()
+        await SchoolService._sync_tenant_mirror(tenant_id, committed)
+        return committed
 
     @staticmethod
     async def activate(tenant_id: str, user_role: str | list[str]) -> dict:
@@ -240,4 +299,6 @@ class SchoolService:
             )
 
         await repo.activate()
-        return await repo.get_profile_row()
+        activated = await repo.get_profile_row()
+        await SchoolService._sync_tenant_mirror(tenant_id, activated)
+        return activated

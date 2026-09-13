@@ -6,6 +6,7 @@ Extracts current user context from JWT tokens and performs role-based authorizat
 
 import json
 from pathlib import Path
+import time
 
 from fastapi import Depends, HTTPException, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -14,6 +15,18 @@ from app.core.keycloak_jwt import KeycloakTokenError, verify_keycloak_token
 from app.domains.auth.service import AuthService
 
 _security = HTTPBearer(auto_error=False)
+
+_MEMBERSHIP_CACHE_TTL_SECONDS = 30.0
+# Normalized email -> (timestamp, list_of_membership_dicts)
+_MEMBERSHIP_CACHE: dict[str, tuple[float, list[dict]]] = {}
+
+
+def invalidate_membership_cache(email: str | None = None) -> None:
+    """Invalidate membership cache for a specific email or all emails."""
+    if email:
+        _MEMBERSHIP_CACHE.pop(email.strip().lower(), None)
+    else:
+        _MEMBERSHIP_CACHE.clear()
 
 
 class RoleList(list):
@@ -33,12 +46,21 @@ class CurrentUser:
         role: str,
         email: str = "",
         roles: list[str] | None = None,
+        memberships: list[dict] | None = None,
     ) -> None:
         self.id = user_id
         self.tenant_id = tenant_id
         self.role = role
         self.email = email
         self.roles = RoleList(roles or [role])
+        # Every {tenant_id, role} this user is a verified member of, read live
+        # from the control plane on this request -- never from the JWT. Empty
+        # for a super_admin, who already has unrestricted cross-tenant access
+        # via the allowlist-free X-Tenant-ID path below and needs no membership
+        # list of their own. See the "Multi-school access" plan for why this
+        # exists: a parent with children at two schools, or a teacher who is
+        # also a parent elsewhere, is a real account shape here.
+        self.memberships = memberships or []
 
     def has_role(self, role_name: str) -> bool:
         """Check if user has a specific role or permission."""
@@ -266,6 +288,53 @@ async def get_current_user(
         except Exception as _e:
             print(f"[get_current_user] Warning: could not check super_admins for '{email}': {_e}")
 
+    is_super_admin = role == "super_admin" or "super_admin" in extracted_roles
+
+    # Multi-school membership set -- every {tenant_id, role} this email is a
+    # verified member of, read live from the control plane on every request
+    # (never cached, never taken from the JWT). Computed here, before tenant_id
+    # resolution below, so the SSO multi-organization case (several Keycloak
+    # `organization` aliases, none preferred -- see org_ambiguous below) can
+    # offer the caller a picker naming only these VERIFIED schools, instead of
+    # either guessing one (the bug this replaced) or refusing outright with no
+    # way forward. Also what /me exposes so the frontend can render a
+    # switcher, and what the X-Tenant-ID selection check below verifies
+    # against. Empty for super_admin, who doesn't need one -- see
+    # CurrentUser.memberships.
+    memberships: list[dict] = []
+    if not is_super_admin and email:
+        norm_email = email.strip().lower()
+        now = time.monotonic()
+        cached = _MEMBERSHIP_CACHE.get(norm_email)
+        if cached and (now - cached[0] < _MEMBERSHIP_CACHE_TTL_SECONDS):
+            memberships = [dict(m) for m in cached[1]]
+        else:
+            try:
+                from app.core.database import get_control_plane_pool as _get_cp_pool_m
+                from app.domains.tenant.control_plane_repository import (
+                    ControlPlaneRepository as _CpRepoM,
+                )
+
+                _cp_pool_m = await _get_cp_pool_m()
+                _cp_repo_m = _CpRepoM(_cp_pool_m)
+                _membership_map = {
+                    m["tenant_id"]: m["role"] for m in await _cp_repo_m.get_tenants_for_email(email)
+                }
+                # parent_tenant_links carries no role column of its own -- every
+                # row in it is a parent membership by construction, so a link
+                # with no matching user_tenant_map row (a parent who has never
+                # logged in locally at that school yet) still needs to surface.
+                _parent_id = await _cp_pool_m.fetchval(
+                    "SELECT id FROM parents WHERE email = $1", norm_email
+                )
+                if _parent_id:
+                    for _tid in await _cp_repo_m.get_tenants_for_parent(_parent_id):
+                        _membership_map.setdefault(_tid, "parent")
+                memberships = [{"tenant_id": t, "role": r} for t, r in _membership_map.items()]
+                _MEMBERSHIP_CACHE[norm_email] = (now, [dict(m) for m in memberships])
+            except Exception as _e:
+                print(f"[get_current_user] Warning: could not resolve memberships for '{email}': {_e}")
+
     tenant_id = payload.get("tenant_id")
 
     # Keycloak Organization membership -> tenant. The organization alias is the
@@ -295,18 +364,32 @@ async def get_current_user(
     elif isinstance(org, str) and org.strip():
         org_aliases = [org.strip()]
 
+    # SEVERAL organization aliases with none preferred is ambiguous, never
+    # resolved by picking one -- that was the exact bug this replaced (`org[0]`
+    # / an ORDER BY last-touched guess). It used to fail closed here with a
+    # flat 400 telling the caller SSO didn't support their account shape at
+    # all. It no longer does: `org_ambiguous` instead skips every remaining
+    # guessing step below (attrs/groups/realm/last-resort email lookup, and
+    # the last-ditch cross-tenant scan further down) so none of them can
+    # silently pick a school either, and the FAIL CLOSED block at the bottom
+    # of this function turns the still-unresolved tenant_id into a
+    # `select_tenant` challenge built from `memberships` -- the same verified,
+    # never-guessed membership set the X-Tenant-ID selection below already
+    # trusts -- rather than a dead end. See auth/router.py's /login for the
+    # password-login equivalent of this same challenge shape.
+    org_ambiguous = len(org_aliases) > 1
     if not tenant_id and len(org_aliases) == 1:
         tenant_id = org_aliases[0]
 
     # Try User Attributes claim
-    if not tenant_id:
+    if not tenant_id and not org_ambiguous:
         attrs = payload.get("attributes", {})
         if isinstance(attrs, dict) and "tenant_id" in attrs:
             val = attrs["tenant_id"]
             tenant_id = val[0] if isinstance(val, list) and val else str(val)
 
     # Try Groups path claim (e.g., /tenant_b/Teachers)
-    if not tenant_id:
+    if not tenant_id and not org_ambiguous:
         raw_groups = payload.get("groups", [])
         if isinstance(raw_groups, list):
             for g in raw_groups:
@@ -319,7 +402,7 @@ async def get_current_user(
                     break
 
     # Fallback for Realm-per-tenant architecture
-    if not tenant_id:
+    if not tenant_id and not org_ambiguous:
         iss = payload.get("iss", "")
         if "/realms/" in iss:
             realm = iss.split("/realms/")[-1]
@@ -329,11 +412,18 @@ async def get_current_user(
     # ── Last resort: look up email → tenant from control-plane user_tenant_map ──
     # This is the primary resolution path for Keycloak SSO users whose token
     # does not carry a tenant_id claim, OR does not carry a role claim.
+    # get_tenant_for_email returns a single row, so it must never run for an
+    # org_ambiguous caller -- that is exactly the "guess one of several real
+    # schools" bug org_ambiguous exists to prevent.
     if (
-        not tenant_id
-        or tenant_id.lower() in ("sams", "schooldesk", "master")
-        or role in ("student", "pending")
-    ) and email:
+        not org_ambiguous
+        and (
+            not tenant_id
+            or tenant_id.lower() in ("sams", "schooldesk", "master")
+            or role in ("student", "pending")
+        )
+        and email
+    ):
         try:
             from app.core.database import get_control_plane_pool
             from app.domains.tenant.control_plane_repository import ControlPlaneRepository
@@ -378,44 +468,101 @@ async def get_current_user(
                 f"[get_current_user] Warning: could not resolve tenant from control plane for '{email}': {_e}"
             )
 
-    # X-Tenant-ID header / ?tenant_id= query param override — super_admin ONLY.
-    # This lets a platform operator switch which tenant they're inspecting; it
-    # must NEVER apply to an ordinary school_admin/teacher/parent/student,
-    # since a client fully controls its own request headers — trusting this
-    # for anyone else would let any authenticated user read or write any
-    # other tenant's data just by sending a header.
-    is_super_admin = role == "super_admin" or "super_admin" in extracted_roles
-    if request and is_super_admin:
+    # X-Tenant-ID header / ?tenant_id= query param — selects which tenant
+    # this request acts in. Two tiers:
+    #
+    # super_admin: an ASSERTION. A platform operator can name any tenant on
+    # the platform; trusted because their access is already total.
+    #
+    # everyone else: a SELECTION verified against `memberships` above, never
+    # trusted as an assertion -- a client fully controls its own request
+    # headers, so accepting an unverified header here would let any
+    # authenticated user read or write any other tenant's data just by
+    # sending one. A header naming a tenant NOT in the caller's own
+    # membership set is a 403, never a silent fallback to their home tenant
+    # -- a fallback would let the client mistake "my header was ignored" for
+    # "my header succeeded" and render one school's data mislabelled as
+    # another's.
+    is_tenant_selection = False
+    if request:
         req_tenant = request.headers.get("x-tenant-id") or request.query_params.get("tenant_id")
         if req_tenant and req_tenant.strip():
-            tenant_id = req_tenant.strip().lower()
-            # A vendor-side account reading/writing a specific school's data via
-            # this override is exactly the "who looked at my tenant's data"
-            # question a school should be able to ask -- audit it. Non-fatal
-            # (an audit outage must not block a legitimate super_admin request)
-            # and written into the TARGET tenant's own audit_log, not a
-            # control-plane table, so the affected school can see it directly.
-            try:
-                from app.core.database import get_db_pool
-                from app.domains.audit.service import AuditService
+            req_tenant_norm = req_tenant.strip().lower()
+            if is_super_admin:
+                tenant_id = req_tenant_norm
+                # A vendor-side account reading/writing a specific school's data via
+                # this override is exactly the "who looked at my tenant's data"
+                # question a school should be able to ask -- audit it. Non-fatal
+                # (an audit outage must not block a legitimate super_admin request)
+                # and written into the TARGET tenant's own audit_log, not a
+                # control-plane table, so the affected school can see it directly.
+                try:
+                    from app.core.database import get_db_pool
+                    from app.domains.audit.service import AuditService
 
-                class _OverrideActor:
-                    id = user_id
-                    role = "super_admin"
-                    email = email
+                    class _OverrideActor:
+                        id = user_id
+                        role = "super_admin"
+                        email = email
 
-                async with (await get_db_pool(tenant_id)).acquire() as audit_conn:
-                    await AuditService.record(
-                        audit_conn,
-                        actor=_OverrideActor(),
-                        action="tenant_override.cross_tenant_access",
-                        entity_type="tenant",
-                        entity_id=tenant_id,
-                        outcome="allow",
-                        metadata={"target_tenant_id": tenant_id},
+                    async with (await get_db_pool(tenant_id)).acquire() as audit_conn:
+                        await AuditService.record(
+                            audit_conn,
+                            actor=_OverrideActor(),
+                            action="tenant_override.cross_tenant_access",
+                            entity_type="tenant",
+                            entity_id=tenant_id,
+                            outcome="allow",
+                            metadata={"target_tenant_id": tenant_id},
+                        )
+                except Exception:
+                    pass
+            else:
+                # Match case-insensitively but keep the STORED casing -- the
+                # header is client-controlled and case-mismatched headers
+                # against get_db_pool's case-sensitive, auto-registering
+                # lookup is exactly how a phantom tenant with a fresh empty
+                # schema gets created (hit once already in this codebase with
+                # a real tenant renamed SABIS -> sabis for this reason).
+                match = next(
+                    (m for m in memberships if m["tenant_id"].strip().lower() == req_tenant_norm),
+                    None,
+                )
+                if not match:
+                    try:
+                        from app.core.database import get_db_pool as _get_db_pool_deny
+                        from app.domains.audit.service import AuditService as _AuditDeny
+
+                        class _DeniedActor:
+                            id = user_id
+                            role = role
+                            email = email
+
+                        if tenant_id:
+                            async with (await _get_db_pool_deny(tenant_id)).acquire() as _deny_conn:
+                                await _AuditDeny.record(
+                                    _deny_conn,
+                                    actor=_DeniedActor(),
+                                    action="tenant_selection.denied",
+                                    entity_type="tenant",
+                                    entity_id=req_tenant_norm,
+                                    outcome="deny",
+                                    metadata={"requested_tenant_id": req_tenant_norm},
+                                )
+                    except Exception:
+                        pass
+                    raise HTTPException(
+                        status_code=403,
+                        detail="You are not a member of that school.",
                     )
-            except Exception:
-                pass
+                # Home tenant unchanged (no header, or header repeats the
+                # token's own tenant) needs no rebuild below -- only mark a
+                # genuine switch, so the role-resolution block knows to
+                # rebuild `role`/`extracted_roles` from this tenant's own
+                # `users` row instead of unioning into the token's roles.
+                if match["tenant_id"] != tenant_id:
+                    tenant_id = match["tenant_id"]
+                    is_tenant_selection = True
 
     # Last-ditch cross-tenant scan. Every prior resolution step depends on
     # user_tenant_map already having a row for this email; if it doesn't (a first
@@ -438,6 +585,8 @@ async def get_current_user(
         (not tenant_id or tenant_id.lower() in ("sams", "schooldesk", "master"))
         and email
         and not is_super_admin
+        and not org_ambiguous
+        and not memberships
     ):
         try:
             from app.core.database import get_db_pool as _get_db_pool
@@ -488,6 +637,34 @@ async def get_current_user(
             # tenant-scoped endpoints fail cleanly instead of defaulting into an
             # arbitrary school. CurrentUser.tenant_id is typed `str | None`.
             tenant_id = None
+        elif len(memberships) > 1:
+            # The SSO equivalent of AuthService.login_user's own
+            # select_tenant challenge (auth/router.py's POST /login) -- same
+            # shape, same rule (only verified memberships, never a guess),
+            # different trigger (a signed Keycloak token proves identity
+            # already, so there is no password step to redo). `code` is the
+            # existing coded-error convention the frontend's response
+            # interceptor already unwraps into `err.code`/`err.params` (see
+            # api.js) -- no new error channel, just this shape's first real
+            # producer. The frontend seeds its tenant switcher directly from
+            # `params.choices` and lets the caller pick via the same
+            # X-Tenant-ID + reload path any multi-membership user already
+            # switches schools with (store.js's switchTenant), rather than
+            # minting a redeemable selection_token: that token exists in the
+            # password flow to bridge "password just verified" to "a session
+            # exists yet", a gap that does not exist here since the caller
+            # already holds a valid, re-verified-every-request bearer token.
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "message": (
+                        "Your account belongs to more than one school. "
+                        "Choose one to continue."
+                    ),
+                    "code": "select_tenant",
+                    "params": {"choices": memberships},
+                },
+            )
         else:
             raise HTTPException(
                 status_code=400,
@@ -523,6 +700,16 @@ async def get_current_user(
                 if user_row:
                     user_id = str(user_row["id"])
                     db_role = user_row.get("role")
+                    # A tenant-selection (X-Tenant-ID naming a DIFFERENT
+                    # tenant than the token's own) must have this tenant's
+                    # role REPLACE the token's, not union into it -- a
+                    # teacher-at-school-A who selects school-B, where they
+                    # are only a parent, must not carry teacher's composite
+                    # permissions into B just because `extracted_roles`
+                    # already had them from A. Reset before applying db_role
+                    # below, same as every other branch in this block.
+                    if is_tenant_selection:
+                        extracted_roles = set()
                     # A super_admin has no real account in most tenants (see
                     # the JIT-provisioning branch below), but if one somehow
                     # already has a stray/legacy tenant-scoped `users` row
@@ -538,7 +725,11 @@ async def get_current_user(
                     else:
                         if db_role and db_role in VALID_ROLES:
                             extracted_roles.add(db_role)
-                            if not role or role in ("student", "pending"):
+                            # Same replace-not-union reasoning as the reset
+                            # above: on a genuine tenant selection this
+                            # tenant's own role is authoritative regardless
+                            # of what the token's home-tenant role was.
+                            if is_tenant_selection or not role or role in ("student", "pending"):
                                 role = db_role
 
                         db_roles = user_row.get("roles") or []
@@ -561,6 +752,18 @@ async def get_current_user(
                         for p in user_row.get("permissions") or []:
                             if p:
                                 extracted_roles.add(p)
+                elif is_tenant_selection:
+                    # A verified `user_tenant_map`/`parent_tenant_links` row
+                    # named this tenant, but it has no local `users` row yet
+                    # (e.g. a parent linked via invitation who has never
+                    # actually logged in at that school). Deny, never
+                    # JIT-provision -- provisioning belongs to login and
+                    # invitation redemption, not to a header on an
+                    # already-authenticated request for a different tenant.
+                    raise HTTPException(
+                        status_code=403,
+                        detail="You are not a member of that school.",
+                    )
                 elif is_super_admin:
                     # A super_admin has no real account in most tenants — they
                     # only ever pass through here because of the X-Tenant-ID
@@ -647,6 +850,12 @@ async def get_current_user(
                             print(
                                 f"[get_current_user] Warning: could not add JIT-provisioned user to user_tenant_map: {_e}"
                             )
+        except HTTPException:
+            # The is_tenant_selection 403 above must propagate, not be
+            # swallowed as an "infra hiccup" like every other error in this
+            # block -- a denied selection is the entire security property
+            # Phase 3 of the multi-school plan exists to enforce.
+            raise
         except Exception as exc:
             import traceback
 
@@ -780,12 +989,76 @@ async def get_current_user(
 
     final_roles_list = list(extracted_roles)
 
+    # Multi-School Membership: membership status, read live on every request.
+    #
+    # Deliberately narrower than "read role live too" -- for every
+    # tenant-scoped role, this function ALREADY re-reads role/roles/
+    # permissions straight from that tenant's own `users` table above (the
+    # `if email and tenant_id:` block a few hundred lines up), on every
+    # single request. That already makes a role change via the Permission
+    # Matrix editor take effect on the user's next request; overriding it
+    # again here from user_tenant_map.role would REGRESS that, since
+    # user_tenant_map.role is only refreshed at login time
+    # (upsert_user_tenant_map), not on every request -- it can be stale for
+    # an already-logged-in user whose role was just changed by an admin.
+    #
+    # What genuinely did not exist before this column did: an uncached,
+    # per-request check of whether the membership itself is still active at
+    # all. A suspended or revoked school no longer working is the actual
+    # "revocation takes effect on the next request, not on the next token"
+    # guarantee this feature promises -- a single primary-key-adjacent probe
+    # on the control-plane pool the request already holds open.
+    if not is_super_admin and tenant_id and email:
+        try:
+            # A LOCAL import, not a reuse of the module-level name -- every
+            # other call to get_control_plane_pool() in this function
+            # imports it fresh for exactly this reason. `from X import Y`
+            # anywhere in a function body makes Y local to the WHOLE
+            # function regardless of which branch it sits in, so relying on
+            # an earlier conditional branch (role == "pending", or the
+            # tenant-unresolved "last resort" block) having executed and
+            # bound the name is a latent UnboundLocalError for every request
+            # that takes neither of those branches -- i.e. the common case:
+            # an already-resolved tenant_id and a non-pending role. Found by
+            # actually running this against a live Postgres/OPA stack
+            # (test_family_overview.py) rather than the mocked unit tests,
+            # which never exercised this exact combination; caught here only
+            # because it's wrapped in `except Exception: <log and fail
+            # open>`, which means this whole suspended/revoked-membership
+            # check has likely never actually run in production.
+            from app.core.database import get_control_plane_pool
+
+            cp_pool = await get_control_plane_pool()
+            async with cp_pool.acquire() as conn:
+                membership_status = await conn.fetchval(
+                    "SELECT status FROM user_tenant_map WHERE email = $1 AND tenant_id = $2",
+                    email.strip().lower(),
+                    tenant_id,
+                )
+            if membership_status in ("suspended", "revoked"):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Your access to this school has been suspended or revoked.",
+                )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            # Fail open on infra errors, same posture as require_tenant_live's
+            # own school_profile probe just below in the dependency chain --
+            # a transient control-plane hiccup must not lock every tenant-
+            # scoped user out of every request.
+            print(
+                f"[get_current_user] Warning: could not read live membership status "
+                f"for '{email}'/'{tenant_id}': {exc}"
+            )
+
     return CurrentUser(
         user_id=user_id,
         tenant_id=tenant_id,
         role=role,
         email=email,
         roles=final_roles_list if final_roles_list else [role],
+        memberships=memberships,
     )
 
 
