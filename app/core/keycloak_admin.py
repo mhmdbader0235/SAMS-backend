@@ -188,6 +188,69 @@ def update_user_role_in_keycloak(email: str, new_role: str, tenant_id: str) -> b
         return False
 
 
+def update_user_password_in_keycloak(email: str, new_password: str) -> bool:
+    """Reset an existing Keycloak user's password, best-effort.
+
+    Called from AuthService.change_password so a self-service password change
+    also takes effect for SSO login -- without this, this module's own
+    sync_user_to_keycloak means every locally-registered account ALSO has a
+    Keycloak credential, and only overwriting the local hash left that
+    Keycloak credential (and therefore SSO login) on the old password.
+    Failure here is swallowed rather than raised: the local password change
+    has already succeeded by the time this runs, and a Keycloak outage or a
+    user Keycloak never provisioned (e.g. a JIT-created 'managed' account
+    change_password already rejects before reaching here) must not turn a
+    successful local change into a 500.
+    """
+    logger.info(f"Keycloak password sync starting for {email}")
+    try:
+        token_url = f"{KEYCLOAK_URL}/realms/master/protocol/openid-connect/token"
+        data = urllib.parse.urlencode(
+            {
+                "client_id": "admin-cli",
+                "username": KEYCLOAK_ADMIN,
+                "password": KEYCLOAK_ADMIN_PASSWORD,
+                "grant_type": "password",
+            }
+        ).encode()
+        req = urllib.request.Request(token_url, data=data, method="POST")
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            token_res = json.loads(resp.read().decode())
+            admin_token = token_res["access_token"]
+
+        headers = {"Authorization": f"Bearer {admin_token}", "Content-Type": "application/json"}
+
+        search_url = (
+            f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/users?email={urllib.parse.quote(email)}"
+        )
+        req = urllib.request.Request(search_url, headers=headers, method="GET")
+        kc_user_id = None
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            users = json.loads(resp.read().decode())
+            if users and isinstance(users, list) and len(users) > 0:
+                kc_user_id = users[0]["id"]
+
+        if not kc_user_id:
+            logger.warning(f"Cannot update password: user {email} not found in Keycloak.")
+            return False
+
+        reset_url = (
+            f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/users/{kc_user_id}/reset-password"
+        )
+        reset_payload = {"type": "password", "value": new_password, "temporary": False}
+        req_reset = urllib.request.Request(
+            reset_url, data=json.dumps(reset_payload).encode(), headers=headers, method="PUT"
+        )
+        with urllib.request.urlopen(req_reset, timeout=3):
+            pass
+
+        logger.info(f"Keycloak password sync succeeded for {email} (kc_user_id={kc_user_id})")
+        return True
+    except Exception as exc:
+        logger.warning(f"Keycloak password reset failed for {email}: {exc}")
+        return False
+
+
 def delete_user_from_keycloak(email: str) -> bool:
     """Delete a user's Keycloak account(s) by email, best-effort.
 

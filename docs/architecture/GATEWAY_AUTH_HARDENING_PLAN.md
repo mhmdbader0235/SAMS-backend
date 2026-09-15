@@ -2,7 +2,44 @@
 
 **Scope:** `back/gateway/apisix/`, `back/run.py`.
 **Goal:** make APISIX actually reject bad tokens and unfair traffic instead of only rate-limiting, and stop the backend from being reachable by walking around the gateway.
-**Status of this doc:** written as a plan to apply and test yourselves — no code has been changed yet. Each phase below is independently shippable; do them in order, test after each one, don't chain all three into a single untested change.
+**Status of this doc:** Phase 2 was applied to `apisix.yaml` and then **rolled back** (2026-09-08),
+per this doc's own prescribed rollback step, after actually running its "How to test" steps for the
+first time and finding it locked out every login in the running stack:
+
+1. `APISIX_KC_CLIENT_SECRET` was never set in `back/.env`, so the plugin rejected every request with
+   `invalid_client` regardless of token validity. Fixed by pulling the real secret from Keycloak's
+   admin console and setting it in `back/.env`.
+2. With that fixed, every request still failed — including a freshly-issued, genuine Keycloak token
+   for the realm's `frontend` client. Confirmed with `curl` directly against Keycloak (bypassing
+   APISIX and Docker networking entirely): `/protocol/openid-connect/token/introspect` returns
+   `{"active": false}` and `/protocol/openid-connect/userinfo` returns `403` for that same token,
+   seconds after issuance. This is a Keycloak realm/client-scope problem, not a gateway config typo.
+3. Separately, and not fixable by any Keycloak-side correction: this app has two token issuers.
+   `POST /api/v1/auth/login` (the local email+password path, used by every non-SSO account) mints
+   its own JWT via `AuthService.create_access_token` — never registered with Keycloak — so no
+   Keycloak-only introspection check can ever accept it. Phase 2 as designed only works for an
+   SSO-only deployment; this app is not one.
+
+**Superseded 2026-09-08 — read `docs/architecture/adr/0004-apisix-as-defense-in-depth-not-auth-authority.md`
+first.** Final status of this document's three phases:
+
+- **Phase 1 — applied, then found insufficient and re-fixed.** Keying `limit-count` on
+  `http_x_forwarded_for` was itself a bypass: `gateway/nginx.conf` sets that header with
+  `$proxy_add_x_forwarded_for`, which *appends* to whatever the caller sent, so rotating a fake
+  prefix produced a fresh bucket per request. Reproduced live: 30 login attempts with a rotating
+  `X-Forwarded-For` drew **zero** `429`s. Now keyed on `remote_addr` behind the `real-ip` plugin
+  (`X-Real-IP` is safe because nginx *overwrites* it) and re-verified. The
+  login/register/tenants split was also incomplete — `GET /auth/invitations/{code}` is a **fourth**
+  public endpoint and now has its own 30/min bucket.
+- **Phase 2 — closed as won't-fix, not deferred.** Item 3 below (two token issuers) is not a
+  configuration problem and has no gateway-side redesign: `openid-connect` cannot accept two
+  issuers, and `multi-auth` explicitly refuses `openid-connect` as a sub-plugin
+  (apache/apisix#11514). `use_jwks: true` would fix item 2 (the introspection failure) but not
+  item 3. Edge verification requires unifying issuance first — a decision about the login path.
+  APISIX instead enforces *credential presence* (`request-validation`), which cannot silently
+  grant access.
+- **Phase 3 — already applied**, contrary to what this line previously said: `run.py` and
+  `main.py` both bind `127.0.0.1`.
 
 ---
 

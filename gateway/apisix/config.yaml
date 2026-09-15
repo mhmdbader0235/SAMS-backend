@@ -6,3 +6,28 @@ deployment:
 apisix:
   node_listen: 9180
   enable_admin: false
+
+# The prometheus export server binds 127.0.0.1 INSIDE the container by default,
+# which is unreachable from the host. 0.0.0.0 here is safe only because
+# docker-compose.yml publishes this port to host loopback (127.0.0.1:9091) --
+# the endpoint is unauthenticated, so never publish it on 0.0.0.0 in production.
+plugin_attr:
+  prometheus:
+    export_addr:
+      ip: 0.0.0.0
+      port: 9091
+
+
+#🚫 1. Plugin Limitations with multi-auth
+#To make APISIX accept two different types of tokens on the same Route, the intuitive solution is to use a plugin called multi-auth. However, this plugin in APISIX explicitly refuses to work alongside the openid-connect plugin that we rely on to connect with Keycloak. This means the gateway cannot be programmed to say, "If the token is from Keycloak, use plugin X, and if it is internal, use plugin Y" simultaneously.
+
+#🔐 2. Cryptography Mismatch
+
+#Internal System Token (FastAPI): Signed using the HS256 algorithm (symmetric encryption based on a single shared secret password).
+
+#Keycloak Token: Signed using the RS256 algorithm (asymmetric encryption based on a private key and a public key).
+#The APISIX gateway is currently programmed to hit Keycloak's discovery URL to fetch the "public keys" and verify the token in-memory. It cannot apply this mechanism to an internal token encrypted with the older HS256 method.
+
+#💡 The Correct Architectural Solution (Best Practice)
+#Instead of trying to "patch" the gateway to accept two different types of tokens, the golden rule in systems engineering is Unifying Issuance.
+#We must make Keycloak the Single Source of Truth for issuing any token in the system. Once we get rid of the internal token generation code in FastAPI and let Keycloak handle the entire process, the APISIX gateway will be able to verify all requests seamlessly and with high security, and this vulnerability will be closed for good.

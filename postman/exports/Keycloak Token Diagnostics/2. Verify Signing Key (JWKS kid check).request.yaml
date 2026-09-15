@@ -1,0 +1,41 @@
+$kind: http-request
+description: Fetches the realm's JWKS and confirms it publishes the `kid` seen in the token's header from request 1. This is the same URL the backend's PyJWKClient (app/core/keycloak_jwt.py) fetches at runtime.
+url: "{{keycloak_url}}/realms/{{realm}}/protocol/openid-connect/certs"
+method: GET
+scripts:
+  - type: afterResponse
+    code: |-
+      var body = pm.response.json();
+      var keys = body.keys || [];
+
+      pm.test('Status code is 200', function () {
+          pm.response.to.have.status(200);
+      });
+      pm.test('JWKS endpoint returned at least one key', function () {
+          pm.expect(keys.length).to.be.above(0);
+      });
+
+      var tokenKid = pm.collectionVariables.get('token_kid');
+      if (!tokenKid) {
+          console.log('No token_kid saved — run "1. Get Keycloak Access Token" first.');
+      } else {
+          var match = keys.some(function (k) { return k.kid === tokenKid; });
+
+          console.log('token kid        :', tokenKid);
+          console.log('JWKS kids        :', keys.map(function (k) { return k.kid; }).join(', '));
+          console.log(match ? '  -> MATCH' : "  -> MISMATCH — JWKS URL does not serve this token's signing key");
+
+          pm.test("JWKS contains the token's kid", function () { pm.expect(match).to.be.true; });
+
+          var issOk = pm.collectionVariables.get('token_iss_ok') === 'true';
+          var audOk = pm.collectionVariables.get('token_aud_ok') === 'true';
+
+          console.log('='.repeat(60));
+          if (issOk && audOk && match) {
+              console.log('iss, aud, and kid all match. Safe to proceed.');
+          } else {
+              console.log('Mismatch found above — update .env (KEYCLOAK_ISSUER / KEYCLOAK_AUDIENCE / KEYCLOAK_JWKS_URL) accordingly before relying on this in production.');
+          }
+      }
+    language: text/javascript
+order: 2000

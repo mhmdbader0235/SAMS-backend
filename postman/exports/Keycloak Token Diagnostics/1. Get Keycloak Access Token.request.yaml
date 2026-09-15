@@ -1,0 +1,84 @@
+$kind: http-request
+description: Resource Owner Password Credentials grant against the realm's public `frontend` client (directAccessGrantsEnabled=true in SAMS-realm.json). Requires a real username/password of a user already provisioned in Keycloak.
+url: "{{keycloak_url}}/realms/{{realm}}/protocol/openid-connect/token"
+method: POST
+body:
+  type: urlencoded
+  content:
+    grant_type: password
+    client_id: "{{client_id}}"
+    username: "{{username}}"
+    password: "{{password}}"
+scripts:
+  - type: afterResponse
+    code: |-
+      // Portable Postman equivalent of back/check_token.py.
+      function base64UrlDecode(input) {
+          var b64 = input.replace(/-/g, '+').replace(/_/g, '/');
+          while (b64.length % 4) b64 += '=';
+          var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+          var output = '';
+          for (var bc = 0, bs = 0, buffer, idx = 0; (buffer = b64.charAt(idx++)); ) {
+              var pos = chars.indexOf(buffer);
+              if (pos === -1) continue;
+              bs = bc % 4 ? bs * 64 + pos : pos;
+              if (bc++ % 4) output += String.fromCharCode(255 & (bs >> (-2 * bc & 6)));
+          }
+          try {
+              return decodeURIComponent(output.split('').map(function (c) {
+                  return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+              }).join(''));
+          } catch (e) {
+              return output;
+          }
+      }
+
+      pm.test('Status code is 200', function () {
+          pm.response.to.have.status(200);
+      });
+
+      var body = pm.response.json();
+
+      pm.test('Response has access_token', function () {
+          pm.expect(body).to.have.property('access_token');
+      });
+
+      var token = body.access_token;
+      if (!token) {
+          console.log('No access_token in response:', JSON.stringify(body));
+      } else {
+          var parts = token.split('.');
+          var header = JSON.parse(base64UrlDecode(parts[0]));
+          var payload = JSON.parse(base64UrlDecode(parts[1]));
+
+          pm.collectionVariables.set('access_token', token);
+          pm.collectionVariables.set('token_kid', header.kid || '');
+
+          var expectedIssuer = pm.collectionVariables.get('expected_issuer');
+          var expectedAudience = (pm.collectionVariables.get('expected_audience') || '')
+              .split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+
+          var tokenAud = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+          var audOk = tokenAud.some(function (a) { return expectedAudience.indexOf(a) !== -1; });
+          var issOk = payload.iss === expectedIssuer;
+
+          pm.collectionVariables.set('token_iss_ok', String(issOk));
+          pm.collectionVariables.set('token_aud_ok', String(audOk));
+
+          console.log('='.repeat(60));
+          console.log('Header:', JSON.stringify(header, null, 2));
+          console.log('-'.repeat(60));
+          console.log('iss (token)      :', payload.iss);
+          console.log('expected_issuer  :', expectedIssuer);
+          console.log(issOk ? '  -> MATCH' : '  -> MISMATCH — set expected_issuer / KEYCLOAK_ISSUER to the token value above');
+          console.log('aud (token)      :', JSON.stringify(payload.aud));
+          console.log('expected_audience:', expectedAudience.join(','));
+          console.log(audOk ? '  -> MATCH' : '  -> MISMATCH — narrow expected_audience / KEYCLOAK_AUDIENCE to the token value(s) above');
+          console.log('kid (token)      :', header.kid, '(run request 2 to confirm this is in the JWKS)');
+          console.log('Full payload:', JSON.stringify(payload, null, 2));
+
+          pm.test('iss matches expected_issuer', function () { pm.expect(issOk).to.be.true; });
+          pm.test('aud matches expected_audience', function () { pm.expect(audOk).to.be.true; });
+      }
+    language: text/javascript
+order: 1000

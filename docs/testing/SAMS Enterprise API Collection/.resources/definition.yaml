@@ -1,0 +1,12 @@
+$kind: collection
+description: Comprehensive Postman Collection for SAMS multi-tenant FastAPI backend with Keycloak RBAC, event planning lifecycle, and enrollment workflows.
+variables:
+  baseUrl: http://localhost:9080
+  tenantId: tenant_a
+  invitePassphrase: regester123
+  teacherToken: ""
+  managerToken: ""
+  parentToken: ""
+  studentToken: ""
+  eventId: "1"
+  enrollmentId: "1"

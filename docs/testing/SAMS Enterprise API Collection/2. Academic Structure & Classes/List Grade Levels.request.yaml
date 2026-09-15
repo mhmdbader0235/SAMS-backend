@@ -1,0 +1,6 @@
+$kind: http-request
+url: "{{baseUrl}}/api/v1/students/levels"
+method: GET
+headers:
+  Authorization: Bearer {{teacherToken}}
+order: 1000

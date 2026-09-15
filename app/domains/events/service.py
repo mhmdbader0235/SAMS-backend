@@ -205,3 +205,60 @@ class EventService:
             )
         await EventRepository(pool).update_subsidy(event_id, subsidy)
         return subsidy
+
+    @staticmethod
+    async def get_event_by_id(tenant_id: str, event_id: int) -> dict | None:
+        pool = await get_db_pool(tenant_id)
+        return await TenantRepository(pool).get_event_by_id(event_id)
+
+    @staticmethod
+    async def delete_event(tenant_id: str, event_id: int) -> bool:
+        pool = await get_db_pool(tenant_id)
+        repo = TenantRepository(pool)
+        existing = await repo.get_event_by_id(event_id)
+        if not existing:
+            return False
+        await repo.delete_event(event_id)
+        return True
+
+    @staticmethod
+    async def get_classes_for_event(tenant_id: str, event_id: int) -> list[dict]:
+        pool = await get_db_pool(tenant_id)
+        return await TenantRepository(pool).get_classes_for_event(event_id)
+
+    @staticmethod
+    async def get_resources_for_event(tenant_id: str, event_id: int) -> list[dict]:
+        pool = await get_db_pool(tenant_id)
+        return await TenantRepository(pool).get_resources_for_event(event_id)
+
+    @staticmethod
+    async def get_resource_types(tenant_id: str) -> list[dict]:
+        pool = await get_db_pool(tenant_id)
+        return await TenantRepository(pool).get_resource_types()
+
+    @staticmethod
+    async def create_resource_type(
+        tenant_id: str,
+        name: str,
+        default_cost: float = 0.0,
+        currency: str = "USD",
+        description: str = "",
+    ) -> int:
+        pool = await get_db_pool(tenant_id)
+        return await TenantRepository(pool).create_resource_type(
+            name=name, default_cost=default_cost, currency=currency, description=description
+        )
+
+    @staticmethod
+    async def get_feedbacks(tenant_id: str, event_id: int) -> list[dict]:
+        pool = await get_db_pool(tenant_id)
+        return await TenantRepository(pool).get_event_feedbacks(event_id)
+
+    @staticmethod
+    async def create_feedback(
+        tenant_id: str, event_id: int, user_id: str, rating: int, comment: str
+    ) -> dict:
+        pool = await get_db_pool(tenant_id)
+        return await TenantRepository(pool).create_feedback(
+            event_id=event_id, user_id=user_id, rating=rating, comment=comment
+        )

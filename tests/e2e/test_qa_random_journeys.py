@@ -54,12 +54,23 @@ NO EMAIL DEPENDENCY
 -------------------
 Nothing in here uses `POST /api/v1/auth/invitations`: an invitation is delivered
 by email to a real mailbox, which a test cannot open. Accounts are created the
-way an operator creates them in-app instead -- the platform operator bootstraps
-with the super_admin passphrase, staff and pupils are created directly with a
-password (`/students/teachers`, `/students/managers`, `/students`), one staff
-account is promoted to school_admin through `PUT /auth/users/{id}/permissions`,
-and parents self-register with the shared passphrase. Every actor in the suite
-can therefore log in immediately.
+way an operator creates them in-app instead -- the run logs in as the platform's
+one fixed super_admin operator (SUPER_ADMIN_EMAIL below) to create each tenant,
+staff and pupils are created directly with a password (`/students/teachers`,
+`/students/managers`, `/students`), one staff account is promoted to
+school_admin through `PUT /auth/users/{id}/permissions`, and parents
+self-register with the shared passphrase. Every actor in the suite can
+therefore log in immediately.
+
+The platform has exactly one super_admin identity (`app/core/config.py`'s
+`SUPER_ADMIN_ALLOWED_EMAIL`); the backend rejects any attempt to register or
+promote a second one regardless of bootstrap code. This suite used to register
+a brand-new super_admin every run instead -- that produced one permanent,
+un-expiring, cross-tenant account per run, seventy-plus of them accumulated
+in the control-plane DB before anyone noticed. Logging into the existing
+operator account is both the only thing the backend still allows and the
+actually-correct fix: the suite never needed a *new* super_admin, only *a*
+super_admin to act as.
 
 The finance role was retired from the app (manager now owns resource costing,
 ticket pricing, and subsidy) -- there is no /students/finance endpoint and no
@@ -68,10 +79,10 @@ finance actor anywhere below.
 SIDE EFFECTS
 ------------
 The suite creates its own tenants (`qa_<seed>` and, for the day-one journey,
-`qa_<seed>_new`) plus one control-plane super_admin. It never writes to
-tenant_a / tenant_b or to any pre-existing school. Nothing is deleted
-automatically; the tenant ids are printed at the end of the run so they can be
-dropped deliberately, e.g.
+`qa_<seed>_new`) but no longer creates any super_admin account -- it logs into
+the pre-existing one. It never writes to tenant_a / tenant_b or to any
+pre-existing school. Nothing is deleted automatically; the tenant ids are
+printed at the end of the run so they can be dropped deliberately, e.g.
 
     docker exec -i doumind-db psql -U admin -d doumind_control \
         -c 'DROP SCHEMA "qa_<seed>" CASCADE;'
@@ -105,10 +116,14 @@ ENABLED = os.getenv("QA_E2E", "1") != "0"
 RUN_ID = f"{int(time.time()) % 100000:05d}{os.getpid() % 1000:03d}"
 EMAIL_DOMAIN = "qa-doumind.com"
 PASSWORD = "QaPass123!"
-# The platform operator has its own dedicated bootstrap code, separate from the
-# shared staff self-registration passphrases: a shared passphrase must never be
-# able to mint cross-tenant super_admin access (F-01).
-SUPER_ADMIN_CODE = os.getenv("SUPER_ADMIN_BOOTSTRAP_CODE", "sd-platform-bootstrap-2026")
+# The platform has exactly one super_admin identity (app/core/config.py's
+# SUPER_ADMIN_ALLOWED_EMAIL) -- the backend refuses to create a second one no
+# matter what bootstrap code is presented. The suite logs into this fixed
+# operator account rather than registering its own, so these must match
+# whatever the target environment's control-plane DB actually holds for it
+# (seeded by back/seed_data.py or the app's own first-run fallback).
+SUPER_ADMIN_EMAIL = os.getenv("SUPER_ADMIN_ALLOWED_EMAIL", "sa@desk.com")
+SUPER_ADMIN_PASSWORD = os.getenv("QA_SUPER_ADMIN_PASSWORD", "123321")
 STAFF_CODE = "regester123"  # shared staff/parent self-registration passphrase
 TIMEOUT = 30.0
 
@@ -489,13 +504,17 @@ def register(
     return actor
 
 
-def login(api: Api, *, email: str, tenant: str, role: str, name: str) -> Actor:
+def login(
+    api: Api, *, email: str, tenant: str, role: str, name: str, password: str = PASSWORD
+) -> Actor:
     resp = api.post(
         "/api/v1/auth/login",
-        json_body={"email": email, "password": PASSWORD, "tenant_id": tenant},
+        json_body={"email": email, "password": password, "tenant_id": tenant},
         label=f"login/{role}",
     ).expect(200)
-    actor = Actor(role=role, name=name, email=email, token=resp.json()["access_token"])
+    actor = Actor(
+        role=role, name=name, email=email, token=resp.json()["access_token"], password=password
+    )
     me = api.get("/api/v1/auth/me", actor=actor, tenant=tenant).expect(200).json()
     actor.user_id = me["user_id"]
     return actor
@@ -662,14 +681,16 @@ def school(api: Api) -> School:
     print(f"  tenant     : {tenant}\n{'=' * 78}")
 
     # -- platform operator creates the school ------------------------------
-    op_name = f"{rng.choice(FIRST_NAMES)} {rng.choice(LAST_NAMES)}"
-    operator = register(
+    # The backend allows exactly one super_admin identity (SUPER_ADMIN_EMAIL) and
+    # rejects registering a new one under any code, so the suite logs into that
+    # fixed operator account rather than minting a throwaway one per run.
+    operator = login(
         api,
-        email=email_for("ops", op_name),
+        email=SUPER_ADMIN_EMAIL,
+        tenant="",
         role="super_admin",
-        tenant=None,
-        code=SUPER_ADMIN_CODE,
-        name=op_name,
+        name="Platform Operator",
+        password=SUPER_ADMIN_PASSWORD,
     )
     api.post(
         "/api/v1/auth/tenants",

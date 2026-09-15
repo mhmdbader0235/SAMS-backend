@@ -292,6 +292,18 @@ class UserRepository:
                 return dict(row)
         return None
 
+    async def update_user_password_hash(self, user_id, password_hash: str) -> bool:
+        """Overwrite a tenant-local user's password hash. Returns True iff a row matched."""
+        parsed = parse_id(user_id)
+        if not isinstance(parsed, int | UUID):
+            return False
+        res = await self.pool.execute(
+            "UPDATE users SET password_hash = $1 WHERE id = $2",
+            password_hash,
+            parsed,
+        )
+        return res == "UPDATE 1"
+
     async def update_user_profile(self, user_id, phone: str | None, address: str | None) -> None:
         """Update tenant user profile fields."""
         parsed = parse_id(user_id)

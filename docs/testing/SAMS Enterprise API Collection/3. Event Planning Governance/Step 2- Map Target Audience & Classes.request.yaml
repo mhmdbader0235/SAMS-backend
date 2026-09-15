@@ -1,0 +1,21 @@
+$kind: http-request
+name: "Step 2: Map Target Audience & Classes"
+description: Binds event to target classes and calculates predicted attendance.
+url: "{{baseUrl}}/api/v1/events/{{eventId}}/audience"
+method: POST
+headers:
+  Content-Type: application/json
+  Authorization: Bearer {{teacherToken}}
+body:
+  type: text
+  content: |-
+    {
+      "class_ids": [1],
+      "class_mappings": [
+        {
+          "class_id": 1,
+          "ticket_price": 12.50
+        }
+      ]
+    }
+order: 2000

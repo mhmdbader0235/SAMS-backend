@@ -1,0 +1,14 @@
+$kind: http-request
+url: "{{baseUrl}}/api/v1/events/enrollments/{{enrollmentId}}/pay"
+method: POST
+headers:
+  Content-Type: application/json
+  Authorization: Bearer {{parentToken}}
+body:
+  type: text
+  content: |-
+    {
+      "payment_method": "credit_card",
+      "amount": 12.50
+    }
+order: 4000

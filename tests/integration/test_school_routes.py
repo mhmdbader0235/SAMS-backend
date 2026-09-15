@@ -41,8 +41,11 @@ async def _register(
         token = await register_school_admin(test_client, email)
         return {"Authorization": f"Bearer {token}"}
     if role == "super_admin":
-        from app.core.config import SUPER_ADMIN_BOOTSTRAP_CODE
+        from app.core.config import SUPER_ADMIN_ALLOWED_EMAIL, SUPER_ADMIN_BOOTSTRAP_CODE
 
+        # The platform allows exactly one super_admin identity; register_user
+        # rejects any other email regardless of bootstrap code.
+        email = SUPER_ADMIN_ALLOWED_EMAIL
         invite_code = SUPER_ADMIN_BOOTSTRAP_CODE
 
     payload = {
@@ -437,7 +440,9 @@ class TestRequireTenantLiveGate:
         self, test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
     ):
         await _reset_tenant_to_setup_state(db_pool)
-        headers = await _register(test_client, "sa_gate@desk.com", "super_admin")
+        # _register substitutes the platform's single allowed super_admin email
+        # for role == "super_admin"; the email argument here is unused for it.
+        headers = await _register(test_client, "", "super_admin")
 
         resp = await test_client.get("/api/v1/students/classes", headers=headers)
         assert resp.status_code == 200

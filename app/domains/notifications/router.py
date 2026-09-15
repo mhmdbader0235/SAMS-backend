@@ -57,7 +57,11 @@ async def mark_notification_read(
 ) -> dict:
     tenant_id = current_user.tenant_id
     try:
-        success = await TenantService.mark_notification_read(tenant_id, notif_id)
+        # current_user.id scopes the write to the caller's own notification. A
+        # notification belonging to someone else is reported as "not found"
+        # rather than as a permission error, so this can't be used to probe for
+        # the existence of another user's notifications.
+        success = await TenantService.mark_notification_read(tenant_id, notif_id, current_user.id)
         if not success:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,

@@ -141,12 +141,9 @@ async def delete_event(
         )
 
     try:
-        pool = await get_db_pool(current_user.tenant_id)
-        repo = TenantRepository(pool)
-        existing = await repo.get_event_by_id(event_id)
-        if not existing:
+        deleted = await EventService.delete_event(current_user.tenant_id, event_id)
+        if not deleted:
             raise HTTPException(status_code=404, detail="Event not found")
-        await repo.delete_event(event_id)
     except HTTPException:
         raise
     except Exception as exc:

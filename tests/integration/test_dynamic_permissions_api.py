@@ -14,7 +14,7 @@ import asyncpg
 from httpx import AsyncClient
 
 from app.core.config import TEACHER_INVITE_CODE
-from tests.integration._helpers import register_school_admin
+from tests.integration._helpers import get_super_admin_token, register_school_admin
 
 
 class TestDynamicPermissionsApi:
@@ -323,17 +323,10 @@ class TestDeleteUser:
     ):
         await register_school_admin(test_client, "admin_deletable@school.com")
 
-        from app.core.config import SUPER_ADMIN_BOOTSTRAP_CODE
-
-        sa_reg = await test_client.post(
-            "/api/v1/auth/register",
-            json={
-                "email": "root_sa@desk.com",
-                "password": "pass",
-                "role": "super_admin",
-                "invite_code": SUPER_ADMIN_BOOTSTRAP_CODE,
-            },
-        )
+        # register_school_admin above already registered the platform's one
+        # super_admin identity to issue its invitation; get_super_admin_token
+        # logs in instead of re-registering it.
+        sa_token = await get_super_admin_token(test_client)
         # A super_admin has no home tenant, so a tenant-scoped endpoint needs an
         # explicit X-Tenant-ID. This used to work without one only because
         # unresolved tenants silently defaulted to tenant_a -- which happens to be
@@ -341,7 +334,7 @@ class TestDeleteUser:
         # coincidence rather than by asking for the right school. Tenant selection
         # is now stated outright.
         sa_headers = {
-            "Authorization": f"Bearer {sa_reg.json()['access_token']}",
+            "Authorization": f"Bearer {sa_token}",
             "X-Tenant-ID": "tenant_a",
         }
 

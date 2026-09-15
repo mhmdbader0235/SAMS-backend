@@ -71,7 +71,9 @@ Tenant data isolation is paramount and enforced at the database level.
 - **Isolation Strategy:** Strict Database-per-Tenant / Schema Isolation (`PostgreSQL 16` via Docker).
 - **Zero Cross-Querying:** NEVER write SQL queries, joins, or repository methods that attempt to query across tenant schemas or databases.
 - **Tenant Context Propagation:**
-  1. Keycloak / APISIX passes the validated JWT containing the `tenant_id` claim.
+  1. FastAPI verifies the JWT (APISIX does not — see §3) and resolves `tenant_id` from it.
+     Note the claim is often absent: resolution is a nine-step cascade in `core/dependencies.py`,
+     six steps of which require control-plane or per-tenant DB reads.
   2. Router extracts `tenant_id`.
   3. Service passes `tenant_id` to Repository.
   4. Repository binds the connection explicitly to the target tenant scope BEFORE executing any SQL statement.
@@ -86,7 +88,14 @@ We decouple AuthN and AuthZ completely:
   - Handles login, user identity, and issues RS256/HS256 signed JWT tokens containing `sub`, `roles`, and `tenant_id`.
   - **STRICT RULE:** Keycloak is strictly used for **Authentication (AuthN)**. Keycloak is NOT used for authorization decisions, fine-grained policies, or access control enforcement.
 - **Apache APISIX (API Gateway):**
-  - Validates JWT signatures at the network edge and routes `/api/v1/*` traffic.
+  - Routes `/api/v1/*` traffic and enforces rate limiting, request correlation, body-size caps,
+    and the presence of an `Authorization: Bearer` header.
+  - **APISIX does NOT validate JWT signatures.** It cannot: this app has two token issuers
+    (`AuthService.create_access_token` mints HS256 locally; Keycloak issues RS256), and no single
+    APISIX auth plugin accepts both. An edge check was attempted and rolled back on 2026-09-08.
+    FastAPI's `KeycloakVerifier.verify()` and `AuthService.decode_access_token()` are the
+    load-bearing checks. See `docs/architecture/adr/0004-apisix-as-defense-in-depth-not-auth-authority.md`.
+    Never write code that assumes a request reaching FastAPI has a gateway-verified token.
 - **Open Policy Agent (OPA - Sole AuthZ Engine):**
   - OPA is the **SINGLE source of truth for Authorization (AuthZ)** across the entire application.
   - Runs in a dedicated Docker container (`openpolicyagent/opa:latest`) on port `8181`.
@@ -123,6 +132,37 @@ Aliasing rules that apply everywhere:
 | **`teacher`** | `school:read`, `level:read`, `class:read`, `teacher:read`, `student:read`, `user:view`, `event:create`, `event:read`, `event:view`, `event:edit`, `event:patch`, `event:delete`, `event:clone`, `event:propose`, `event:submit`, `event:view_draft`, `event:audience_edit`, `event:audience_predict`, `resource:create`, `resource:view`, `resource:edit`, `resource:update`, `resource:delete`, `resource_type:create`, `resource_type:read`, `enrollment:teacher_approve`, `enrollment:view_roster`, `enrollment:read`, `health:view`, `notification:read`, `feedback:view`, `feedback:create` | Class teacher & trip lead: create event drafts, allocate resources, submit for manager approval, approve student enrollments, and view attendee health info. |
 | **`parent`** | `school:read`, `user:profile_read`, `user:profile_edit`, `student:view_linked`, `event:read`, `event:view`, `enrollment:parent_approve`, `enrollment:cancel`, `enrollment:read`, `billing:pay`, `billing:view_payment`, `health:manage_child`, `notification:read`, `feedback:create` | Parent/guardian: view published trips for child's class, approve/enroll children, cancel enrollments, pay trip invoices, update child health info, and leave feedback. |
 | **`student`** | `school:read`, `user:profile_read`, `user:profile_edit`, `event:read`, `event:view`, `enrollment:request`, `enrollment:read`, `notification:read`, `feedback:create` | Student: browse published trips for their class, submit enrollment requests, view notifications, and leave feedback. |
+
+### 🔑 `super_admin` is a single fixed identity — `sa@desk.com` only
+
+The platform has exactly **one** super_admin account, `sa@desk.com`
+(`app/core/config.py` → `SUPER_ADMIN_ALLOWED_EMAIL`). This is enforced in code,
+not just convention: `AuthService.register_user`, `AuthService.assign_user_role`,
+and `TenantService.update_tenant_user_permissions` all reject granting
+`super_admin` to any other email, regardless of bootstrap code, invitation, or
+caller role.
+
+**Why this exists:** an unrestricted `super_admins` control-plane row never
+expires and bypasses every tenant boundary and policy check in the app. Before
+this rule, `AuthService.register_user`'s bootstrap-code path let *anyone* who
+had the code mint a permanent super_admin for *any* email. The QA e2e suite
+(`back/tests/e2e/test_qa_random_journeys.py`) did exactly that once per test
+run — 71 stray super_admin rows and matching Keycloak accounts accumulated in
+the shared dev database before anyone noticed (incident: 2026-09-07).
+
+**Agent rule — applies to every session, task, and test run:**
+- Never register, promote, or otherwise create a `super_admin` account for any
+  email other than `sa@desk.com` — not for a quick manual test, not inside a
+  new test file, not as a fixture. The app will now refuse it anyway, but
+  don't attempt it and don't work around the refusal.
+- If a task needs a super_admin actor (to create a tenant, bypass the
+  tenant-live gate, etc.), **log in as `sa@desk.com`** rather than registering
+  a new one. See `get_super_admin_token()` in `back/tests/integration/_helpers.py`
+  and the `school` fixture in `test_qa_random_journeys.py` for the pattern.
+- If you ever find a `super_admins` row or Keycloak user other than
+  `sa@desk.com`, that is drift from this rule — flag it and clean it up
+  (Postgres `public.super_admins` **and** the matching Keycloak user both;
+  a Postgres-only cleanup leaves an orphaned Keycloak account behind).
 
 ### 🔮 Phase 2 roles — PLANNED, NOT IN SCOPE. Do NOT build on these.
 
@@ -269,4 +309,6 @@ For tables containing sensitive records (National IDs, emergency contacts, medic
 
 ## 🌐 10. NETWORK ARCHITECTURE (DMZ & GATEWAY)
 - **Nginx DMZ**: Outer edge proxy connecting to browser.
-- **Apache APISIX**: Private internal Docker network API Gateway, routing traffic between Nginx and Python microservices.
+- **Apache APISIX**: Internal API Gateway (publishes no proxy port; nginx is the sole ingress),
+  routing `/api/v1/*` to the FastAPI backend. Note there are no custom Docker networks — every
+  container sits on the default compose bridge, so the DMZ/private split is conceptual, not enforced.

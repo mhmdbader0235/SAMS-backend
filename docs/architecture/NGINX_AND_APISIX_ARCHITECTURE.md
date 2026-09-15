@@ -2,6 +2,29 @@
 
 This document provides a comprehensive explanation of how **Nginx**, **Apache APISIX**, **Keycloak**, and the **FastAPI Backend** work together in the SAMS application.
 
+> ## ⚠️ Read this first — much of what follows is TARGET DESIGN, not shipped behaviour
+>
+> Reconciled against the code on **2026-09-08**. For what actually runs, see
+> [`PROJECT_UNDERSTANDING.md`](../../../PROJECT_UNDERSTANDING.md) §4 and
+> [`adr/0004-apisix-as-defense-in-depth-not-auth-authority.md`](adr/0004-apisix-as-defense-in-depth-not-auth-authority.md).
+>
+> Specifically, this document describes as present several things that **do not exist**:
+>
+> | Claim below | Reality |
+> |---|---|
+> | APISIX validates JWT signatures at the edge | **It does not, and by decision never will** — two token issuers make it impossible (ADR-0004). It *does* require an `Authorization: Bearer` header to be present, which is not the same thing. |
+> | APISIX is "backed by `etcd`" | Standalone YAML mode (`config_provider: yaml`), no etcd, Admin API disabled. A stray `example-etcd-1` container from an old experiment is not part of this stack. |
+> | APISIX gateway on `:9080` | `:9080` is **nginx**. APISIX listens on `:9180` and publishes no proxy port at all; only `127.0.0.1:9091` (Prometheus metrics) is published. |
+> | `gateway/apisix_proxy_route.json` maps the routes | That file does not exist. Routes live in `gateway/apisix/apisix.yaml`. |
+> | Nginx serves the Vue build (`dist/`) with `try_files` and Gzip/Brotli | `gateway/nginx.conf` has no `root`, no `try_files`, and no compression — it proxies `/` to the Vite **dev server** on `:3000`. A correct production config exists at `front/nginx.conf` (used by `front/Dockerfile`) but **no compose service references it**. |
+> | Nginx terminates SSL/TLS | No SSL config anywhere; the stack is plain HTTP on `:9080`. |
+> | Prometheus (`:9090`) + Grafana (`:3005`) integration | The `prometheus` **plugin** is now enabled and exports on `127.0.0.1:9091`, but there is no Prometheus server and no Grafana in this stack. Scrape it manually. |
+> | Nginx routes `/auth/*` to Keycloak | Only `/realms/*` is routed. `/api/v1/auth/*` is the **backend's** auth router, not Keycloak. |
+> | "DMZ vs private network" separation | There are no custom Docker networks; every container is on the default compose bridge. Conceptual only. |
+>
+> The §3 "Functional Audit" table further below marks several of these as ✅ Correct. Those
+> verdicts are wrong; treat this banner as authoritative over them.
+
 ---
 
 ## 🏛️ 1. Architecture Overview & High-Level Flow
@@ -14,21 +37,28 @@ The application uses a **defense-in-depth, 4-tier microservices & gateway archit
                                               │ (HTTP/HTTPS)
                                               ▼
                          ┌─────────────────────────────────────────┐
-                         │   Nginx Edge Server (Static & Proxy)    │
-                         │   - Serves Vue 3 SPA (dist/)            │
-                         │   - Handles SSL/TLS Termination         │
-                         │   - Fallback routing: try_files         │
+                         │   Nginx Edge Server (:9080, proxy only) │
+                         │   - Proxies / to Vite dev server :3000  │
+                         │     (does NOT serve dist/ — aspirational)│
+                         │   - No SSL termination today            │
+                         │   - No try_files today                  │
                          └────────────┬──────────────────┬─────────┘
                                       │                  │
-                         /auth/* /realms/*          /api/v1/*
+                            /realms/*               /api/v1/*
                                       │                  │
                                       ▼                  ▼
                          ┌─────────────────┐    ┌───────────────────┐
                          │ Keycloak OIDC   │    │ Apache APISIX     │
-                         │ Server (:8000)  │    │ Gateway (:9080)   │
-                         │ - Realm: SAMS   │    │ - Dynamic Routing │
+                         │ Server (:8000)  │    │ Gateway (:9180)   │
+                         │ - Realm: SAMS   │    │ - Routing         │
                          │ - Organizations │    │ - Rate Limiting   │
-                         └─────────────────┘    │ - JWT Validation  │
+                         └─────────────────┘    │ - Request-ID      │
+                                                │ - Metrics         │
+                                                │ - Body caps       │
+                                                │ - Bearer PRESENT  │
+                                                │   (no signature   │
+                                                │    check — see    │
+                                                │    ADR-0004)      │
                                                 └─────────┬─────────┘
                                                           │
                                                     Proxy Pass
@@ -55,7 +85,7 @@ The application uses a **defense-in-depth, 4-tier microservices & gateway archit
   4. **SSL/TLS Termination**: Manages HTTPS certificates (Let's Encrypt / Certbot) in one single place.
 
 ### 🔹 Apache APISIX (API Gateway)
-* **Primary Role**: Enterprise API Gateway (built on OpenResty / Nginx + Lua and backed by `etcd`).
+* **Primary Role**: Enterprise API Gateway (built on OpenResty / Nginx + Lua). **Note:** run here in *standalone YAML mode* — no `etcd`, Admin API disabled, config is the git-tracked `gateway/apisix/apisix.yaml`.
 * **Key Functions**:
   1. **Dynamic Routing**: Maps incoming requests (`/api/v1/*`) to backend upstream instances (`host.docker.internal:8001`) dynamically without restarting the server.
   2. **API Traffic Management**: Handles Rate-Limiting, IP Whitelisting/Blacklisting, Circuit Breaking, and Health Checks.

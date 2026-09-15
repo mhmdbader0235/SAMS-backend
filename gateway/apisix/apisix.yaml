@@ -1,11 +1,138 @@
+# APISIX standalone data-plane config (config_provider: yaml -- see config.yaml).
+# Reloaded by restarting the container; a malformed file fails at LOAD and is
+# reported only in `docker logs doumind-apisix`, so always read the log after
+# editing rather than assuming a change took effect.
+#
+# Why edge JWT validation is NOT here: this app has two token issuers. The local
+# email+password path (POST /api/v1/auth/login) mints its own HS256 JWT via
+# AuthService.create_access_token, which is tried FIRST in dependencies.py and is
+# never registered with Keycloak; Keycloak SSO tokens are RS256. No single APISIX
+# auth plugin accepts both -- `openid-connect` cannot, and `multi-auth` explicitly
+# refuses `openid-connect` as a sub-plugin (apache/apisix#11514). Phase 2 of
+# docs/architecture/GATEWAY_AUTH_HARDENING_PLAN.md was applied and rolled back on
+# 2026-09-08 for exactly this reason. FastAPI's KeycloakVerifier.verify() and
+# AuthService.decode_access_token() remain the checks that actually enforce
+# tenant/role logic. APISIX is defense-in-depth here, not the authority; see
+# docs/architecture/adr/0004-apisix-gateway-posture.md.
+
+global_rules:
+  -
+    id: 1
+    plugins:
+      # Nginx is the ONLY client APISIX ever sees (APISIX publishes no host port),
+      # so without this every IP-keyed plugin buckets the entire app together
+      # under nginx's container IP. X-Real-IP is safe to trust because
+      # gateway/nginx.conf sets it with $remote_addr, which OVERWRITES any
+      # client-supplied value; X-Forwarded-For is NOT, because it uses
+      # $proxy_add_x_forwarded_for, which APPENDS to whatever the caller sent.
+      # Keying limit-count on X-Forwarded-For (as this file did until 2026-09-08)
+      # let a caller rotate a fake prefix for a fresh bucket per request --
+      # reproduced: 30 login attempts, zero 429s.
+      real-ip:
+        source: http_x_real_ip
+        trusted_addresses:
+          - 172.16.0.0/12   # Docker's default bridge range (this compose net: 172.24.0.0/16)
+
+      # The backend was already written to consume this: CorrelationIdMiddleware
+      # in app/core/observability.py prefers an inbound X-Request-ID and only
+      # generates its own when absent -- its docstring notes "it does not today".
+      # With this, one id spans gateway access log, backend JSON log
+      # (correlation_id), and error response bodies.
+      request-id:
+        header_name: X-Request-ID
+        include_in_response: true
+        algorithm: uuid
+
+      # Per-route latency/status/QPS counters. The app has no metrics of any
+      # kind (observability.py: "Metrics/tracing are a separate, larger
+      # concern"), so this is the only place golden signals exist. Scrape at
+      # 127.0.0.1:9091/apisix/prometheus/metrics -- export address is set in
+      # config.yaml, and the port is published to LOOPBACK ONLY in
+      # docker-compose.yml because the endpoint is unauthenticated.
+      prometheus: {}
+
+      # No Cache-Control exists anywhere in this app, which serves encrypted
+      # health records and student PII. no-store keeps those responses out of
+      # browser and intermediary caches. Add HSTS only once TLS terminates at
+      # nginx -- it is meaningless over plain HTTP.
+      response-rewrite:
+        headers:
+          set:
+            Cache-Control: "no-store"
+            X-Content-Type-Options: "nosniff"
+            Referrer-Policy: "no-referrer"
+
 routes:
+  -
+    # The only file uploads in the app. Both handlers do `raw_bytes = await
+    # file.read()` with NO size limit and then parse XLSX with openpyxl --
+    # CPU-bound work on the event loop. Nothing in the application enforces a
+    # body size, so this cap is the only one that exists. Scoped to POST so the
+    # CORS preflight falls through to the OPTIONS route below.
+    uri: /api/v1/students/structure/import/*
+    methods: ["POST"]
+    priority: 15
+    plugins:
+      client-control:
+        max_body_size: 5242880   # 5 MB
+      limit-count:
+        count: 20
+        time_window: 60
+        rejected_code: 429
+        key_type: "var"
+        key: "remote_addr"
+      request-validation:
+        header_schema:
+          type: object
+          required: ["authorization"]
+          properties:
+            authorization:
+              type: string
+              pattern: "^Bearer .+"
+        rejected_code: 401
+        rejected_msg: "Missing or malformed Authorization header."
+    upstream:
+      nodes:
+        "host.docker.internal:8001": 1
+      type: roundrobin
+  -
+    # GET /api/v1/auth/invitations/{code} is the FOURTH public endpoint under
+    # /api/v1/* (the others are login, register, tenants above) and was sitting
+    # on the 3000/min general budget -- 150x looser than its three peers. An
+    # invite code locks tenant, role and email, so it is an enumeration target.
+    # Scoped to GET on purpose: POST /api/v1/auth/invitations is invite CREATION
+    # and is authenticated, so it must fall through to the wildcard instead.
+    uri: /api/v1/auth/invitations/*
+    methods: ["GET"]
+    priority: 12
+    plugins:
+      limit-count:
+        count: 30
+        time_window: 60
+        rejected_code: 429
+        key_type: "var"
+        key: "remote_addr"
+    upstream:
+      nodes:
+        "host.docker.internal:8001": 1
+      type: roundrobin
   -
     # Stricter bucket for the unauthenticated auth endpoints -- credential
     # stuffing / registration-spam / tenant-creation abuse must not share the
     # generous general-API budget below. Higher priority so it wins over the
-    # broad /api/v1/* route for these three exact paths.
+    # broad /api/v1/* route for these exact paths.
+    #
+    # /auth/login/redeem belongs here too, not just /auth/login: it is the
+    # second half of the same unauthenticated flow (AuthService.login_redeem),
+    # called with a selection_token instead of a password, before the caller
+    # has any JWT to send as a Bearer header. `uris` below is exact-match, not
+    # a prefix, so leaving this path off the list let it fall through to the
+    # generic /api/v1/* route's Authorization-header requirement and 401 on
+    # every attempt -- every auth_selection_challenges row this produced sat
+    # with consumed_at NULL, never reaching AuthService.login_redeem at all.
     uris:
       - /api/v1/auth/login
+      - /api/v1/auth/login/redeem
       - /api/v1/auth/register
       - /api/v1/auth/tenants
     priority: 10
@@ -15,20 +142,50 @@ routes:
         time_window: 60
         rejected_code: 429
         key_type: "var"
-        key: "http_x_forwarded_for"
+        key: "remote_addr"
     upstream:
       nodes:
         "host.docker.internal:8001": 1
       type: roundrobin
   -
+    # A CORS preflight NEVER carries an Authorization header, and the frontend is
+    # cross-origin in dev (Vite :3000 -> nginx :9080; there is no Vite proxy), so
+    # preflights MUST skip the token requirement below or every browser request
+    # breaks. FastAPI's CORSMiddleware answers them.
     uri: /api/v1/*
+    methods: ["OPTIONS"]
+    priority: 5
+    upstream:
+      nodes:
+        "host.docker.internal:8001": 1
+      type: roundrobin
+  -
+    # Defense-in-depth, NOT authorization: APISIX cannot verify a signature it
+    # has no single key for (two issuers -- see the header comment), but it can
+    # refuse traffic carrying no credential at all. That is worth more here than
+    # usual because the app caches nothing -- every authenticated request re-runs
+    # the full 9-step tenant cascade, whose step 9 opens one connection pool PER
+    # TENANT. Unauthenticated scanner traffic is disproportionately expensive.
+    # The four genuinely public endpoints are carved out onto the routes above.
+    uri: /api/v1/*
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
     plugins:
       limit-count:
         count: 3000
         time_window: 60
         rejected_code: 429
         key_type: "var"
-        key: "http_x_forwarded_for"
+        key: "remote_addr"
+      request-validation:
+        header_schema:
+          type: object
+          required: ["authorization"]
+          properties:
+            authorization:
+              type: string
+              pattern: "^Bearer .+"
+        rejected_code: 401
+        rejected_msg: "Missing or malformed Authorization header."
     upstream:
       nodes:
         "host.docker.internal:8001": 1

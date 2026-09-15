@@ -1,11 +1,14 @@
 """
-AnalyticsService — coordinates platform-wide analytics for Super-Admins.
+AnalyticsService — coordinates platform-wide analytics for Super-Admins, and
+the single-school report school_admin/manager use day to day.
 
 Implements scatter-gather pattern fetching aggregated data from all tenants.
 Does not import FastAPI or asyncpg directly.
 """
 
 import asyncio
+import csv
+import io
 
 from app.core.database import get_control_plane_pool, get_db_pool
 from app.domains.tenant.control_plane_repository import ControlPlaneRepository
@@ -85,3 +88,46 @@ class AnalyticsService:
             },
             "tenants": summaries,
         }
+
+    @staticmethod
+    async def get_school_report(tenant_id: str) -> dict:
+        """The single-school report school_admin/manager see day to day --
+        enrollment, trip participation, and payment status for the active
+        academic year. Distinct from get_platform_analytics above: this
+        reads one tenant's own pool directly, no scatter-gather, since a
+        school report never crosses a tenant boundary."""
+        pool = await get_db_pool(tenant_id)
+        repo = TenantRepository(pool)
+
+        active_year_name, enrollment_by_class, event_participation, payment_status = (
+            await asyncio.gather(
+                repo.get_active_academic_year_name(),
+                repo.get_enrollment_by_class(),
+                repo.get_event_participation_report(),
+                repo.get_payment_status_report(),
+            )
+        )
+        return {
+            "active_year_name": active_year_name,
+            "enrollment_by_class": enrollment_by_class,
+            "event_participation": event_participation,
+            "payment_status": payment_status,
+        }
+
+    @staticmethod
+    async def get_school_report_csv(tenant_id: str) -> str:
+        """The enrollment-by-class table as CSV -- the one export the report
+        page offers today. A separate query rather than reusing
+        get_school_report's result: the export button works even if a future
+        change adds fields to the JSON response that don't belong in this CSV."""
+        pool = await get_db_pool(tenant_id)
+        rows = await TenantRepository(pool).get_enrollment_by_class()
+
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        writer.writerow(["level_name", "class_name", "student_count", "capacity"])
+        for row in rows:
+            writer.writerow(
+                [row["level_name"], row["class_name"], row["student_count"], row["capacity"]]
+            )
+        return buffer.getvalue()

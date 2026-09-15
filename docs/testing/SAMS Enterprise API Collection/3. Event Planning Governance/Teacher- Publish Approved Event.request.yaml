@@ -1,0 +1,8 @@
+$kind: http-request
+name: "Teacher: Publish Approved Event"
+description: Teacher publishes approved event to target students and parents (status=published).
+url: "{{baseUrl}}/api/v1/events/{{eventId}}/publish"
+method: POST
+headers:
+  Authorization: Bearer {{teacherToken}}
+order: 7000

@@ -1,0 +1,8 @@
+$kind: http-request
+name: Get Current User Details (/me)
+description: Return claims and roles for the currently authenticated JWT bearer token.
+url: "{{baseUrl}}/api/v1/auth/me"
+method: GET
+headers:
+  Authorization: Bearer {{teacherToken}}
+order: 5000

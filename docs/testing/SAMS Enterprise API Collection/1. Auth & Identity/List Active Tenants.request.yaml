@@ -1,0 +1,5 @@
+$kind: http-request
+description: Fetch all registered school tenants (e.g., tenant_a, tenant_b, tenant_c).
+url: "{{baseUrl}}/api/v1/auth/tenants"
+method: GET
+order: 1000

@@ -2,7 +2,43 @@
 
 from httpx import AsyncClient
 
-from app.core.config import SUPER_ADMIN_BOOTSTRAP_CODE
+from app.core.config import SUPER_ADMIN_ALLOWED_EMAIL, SUPER_ADMIN_BOOTSTRAP_CODE
+
+# The platform allows exactly one super_admin identity (SUPER_ADMIN_ALLOWED_EMAIL);
+# register_user rejects any other email regardless of bootstrap code. Every test
+# helper/file that needs a super_admin actor must go through get_super_admin_token
+# below and share this password, rather than registering its own with a throwaway
+# email — the whole point of the lockdown this enforces.
+SUPER_ADMIN_TEST_PASSWORD = "sapass123"
+
+
+async def get_super_admin_token(test_client: AsyncClient) -> str:
+    """Return an access token for the platform's one super_admin account.
+
+    clean_db truncates super_admins before every test, so the first call in a
+    test registers it fresh; a test that needs the token more than once (e.g.
+    via register_school_admin below, then again for its own use) would hit
+    "Email already registered" on the second register — fall back to login
+    instead, since by then the account already exists for this test.
+    """
+    resp = await test_client.post(
+        "/api/v1/auth/register",
+        json={
+            "email": SUPER_ADMIN_ALLOWED_EMAIL,
+            "password": SUPER_ADMIN_TEST_PASSWORD,
+            "role": "super_admin",
+            "invite_code": SUPER_ADMIN_BOOTSTRAP_CODE,
+        },
+    )
+    if resp.status_code == 200:
+        return resp.json()["access_token"]
+
+    login_resp = await test_client.post(
+        "/api/v1/auth/login",
+        json={"email": SUPER_ADMIN_ALLOWED_EMAIL, "password": SUPER_ADMIN_TEST_PASSWORD},
+    )
+    assert login_resp.status_code == 200, (resp.text, login_resp.text)
+    return login_resp.json()["access_token"]
 
 
 async def register_school_admin(
@@ -16,17 +52,7 @@ async def register_school_admin(
     passphrase (AuthService.register_user rejects school_admin registration
     without a matched invitation record). Returns the resulting access token.
     """
-    sa_reg = await test_client.post(
-        "/api/v1/auth/register",
-        json={
-            "email": f"bootstrap_sa_{email}",
-            "password": "sapass123",
-            "role": "super_admin",
-            "invite_code": SUPER_ADMIN_BOOTSTRAP_CODE,
-        },
-    )
-    assert sa_reg.status_code == 200, sa_reg.text
-    sa_token = sa_reg.json()["access_token"]
+    sa_token = await get_super_admin_token(test_client)
 
     invite_resp = await test_client.post(
         "/api/v1/auth/invitations",

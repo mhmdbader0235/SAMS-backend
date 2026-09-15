@@ -59,6 +59,28 @@ The second command applies the tenant branch to every tenant already
 registered in the control plane, not just one. New tenants created later
 already get migrated automatically as part of their normal provisioning.
 
+### One-off live data migrations
+Schema changes go through Alembic (above). Occasional **data** migrations —
+rewriting rows already in place, not changing the schema — live in
+`scripts/`, not `tests/`, so a wildcard `pytest` run can never trigger them.
+`scripts/live_data_migration.py` is the current example: it collapses the
+three unreachable `event_status` values across every tenant.
+
+Because `--apply` mutates every tenant's database, it's guarded twice:
+
+```bash
+# Dry run — read-only, no guard needed
+python -m scripts.live_data_migration --dry-run
+
+# Apply — requires the env var AND a typed confirmation
+ALLOW_LIVE_MIGRATION=true python -m scripts.live_data_migration --apply
+# WARNING: This mutates the live database. Type 'CONFIRM' to proceed:
+```
+Without `ALLOW_LIVE_MIGRATION=true` set, `--apply` refuses to run before it
+ever prompts. New one-off data migrations should follow this pattern: live in
+`scripts/`, default to a read-only `--dry-run`, and gate any mutating path
+behind both an explicit environment variable and an interactive confirmation.
+
 ### 6. Run without Docker (development)
 ```bash
 # Start Postgres separately, then:

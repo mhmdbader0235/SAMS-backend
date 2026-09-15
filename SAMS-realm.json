@@ -2271,7 +2271,8 @@
         "useJwksUrl": "true",
         "syncMode": "IMPORT",
         "clientAuthMethod": "client_secret_post",
-        "defaultScope": "openid email profile"
+        "defaultScope": "openid email profile",
+        "prompt": "select_account"
       }
     }
   ]

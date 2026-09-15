@@ -741,3 +741,247 @@ test_user_with_cleared_permissions_denied if {
         "resource": {"tenant_id": "tenant_a"}
     }
 }
+
+# =============================================================================
+# 9. router_gated MIGRATION BATCH: level:read, teacher:read, parent:read,
+#    class:read, user:view -- the inline has_role()/has_any_role() checks
+#    these five router.py endpoints used are being replaced with
+#    Depends(require_permission(...)). These pin down that the existing
+#    granular permission sets already grant exactly the same roles the old
+#    inline checks did, so the migration is a like-for-like swap.
+# =============================================================================
+
+# --- level:read (students/router.py list_levels) ---
+
+test_school_admin_level_read_allowed if {
+    authz.allow with input as {
+        "user": {"id": "sa1", "tenant_id": "tenant_a", "roles": ["school_admin"]},
+        "action": "level:read",
+        "resource": {"tenant_id": "tenant_a"}
+    }
+}
+
+test_manager_level_read_allowed if {
+    authz.allow with input as {
+        "user": {"id": "m1", "tenant_id": "tenant_a", "roles": ["manager"]},
+        "action": "level:read",
+        "resource": {"tenant_id": "tenant_a"}
+    }
+}
+
+test_teacher_level_read_allowed if {
+    authz.allow with input as {
+        "user": {"id": "t1", "tenant_id": "tenant_a", "roles": ["teacher"]},
+        "action": "level:read",
+        "resource": {"tenant_id": "tenant_a"}
+    }
+}
+
+test_parent_level_read_denied if {
+    not authz.allow with input as {
+        "user": {"id": "p1", "tenant_id": "tenant_a", "roles": ["parent"]},
+        "action": "level:read",
+        "resource": {"tenant_id": "tenant_a"}
+    }
+}
+
+test_student_level_read_denied if {
+    not authz.allow with input as {
+        "user": {"id": "s1", "tenant_id": "tenant_a", "roles": ["student"]},
+        "action": "level:read",
+        "resource": {"tenant_id": "tenant_a"}
+    }
+}
+
+test_teacher_level_read_cross_tenant_denied if {
+    not authz.allow with input as {
+        "user": {"id": "t1", "tenant_id": "tenant_a", "roles": ["teacher"]},
+        "action": "level:read",
+        "resource": {"tenant_id": "tenant_b"}
+    }
+}
+
+# --- teacher:read (students/router.py list_teachers) ---
+
+test_school_admin_teacher_read_allowed if {
+    authz.allow with input as {
+        "user": {"id": "sa1", "tenant_id": "tenant_a", "roles": ["school_admin"]},
+        "action": "teacher:read",
+        "resource": {"tenant_id": "tenant_a"}
+    }
+}
+
+test_manager_teacher_read_allowed if {
+    authz.allow with input as {
+        "user": {"id": "m1", "tenant_id": "tenant_a", "roles": ["manager"]},
+        "action": "teacher:read",
+        "resource": {"tenant_id": "tenant_a"}
+    }
+}
+
+test_teacher_teacher_read_allowed if {
+    authz.allow with input as {
+        "user": {"id": "t1", "tenant_id": "tenant_a", "roles": ["teacher"]},
+        "action": "teacher:read",
+        "resource": {"tenant_id": "tenant_a"}
+    }
+}
+
+test_parent_teacher_read_denied if {
+    not authz.allow with input as {
+        "user": {"id": "p1", "tenant_id": "tenant_a", "roles": ["parent"]},
+        "action": "teacher:read",
+        "resource": {"tenant_id": "tenant_a"}
+    }
+}
+
+test_student_teacher_read_denied if {
+    not authz.allow with input as {
+        "user": {"id": "s1", "tenant_id": "tenant_a", "roles": ["student"]},
+        "action": "teacher:read",
+        "resource": {"tenant_id": "tenant_a"}
+    }
+}
+
+# --- parent:read (students/router.py list_parents) ---
+
+test_school_admin_parent_read_allowed if {
+    authz.allow with input as {
+        "user": {"id": "sa1", "tenant_id": "tenant_a", "roles": ["school_admin"]},
+        "action": "parent:read",
+        "resource": {"tenant_id": "tenant_a"}
+    }
+}
+
+test_manager_parent_read_allowed if {
+    authz.allow with input as {
+        "user": {"id": "m1", "tenant_id": "tenant_a", "roles": ["manager"]},
+        "action": "parent:read",
+        "resource": {"tenant_id": "tenant_a"}
+    }
+}
+
+# Unlike level:read/teacher:read, teacher is NOT in the parent:read set --
+# list_parents' old inline check never granted bare teachers this one.
+test_teacher_parent_read_denied if {
+    not authz.allow with input as {
+        "user": {"id": "t1", "tenant_id": "tenant_a", "roles": ["teacher"]},
+        "action": "parent:read",
+        "resource": {"tenant_id": "tenant_a"}
+    }
+}
+
+test_student_parent_read_denied if {
+    not authz.allow with input as {
+        "user": {"id": "s1", "tenant_id": "tenant_a", "roles": ["student"]},
+        "action": "parent:read",
+        "resource": {"tenant_id": "tenant_a"}
+    }
+}
+
+# --- class:read (students/router.py get_class) ---
+
+test_school_admin_class_read_allowed if {
+    authz.allow with input as {
+        "user": {"id": "sa1", "tenant_id": "tenant_a", "roles": ["school_admin"]},
+        "action": "class:read",
+        "resource": {"tenant_id": "tenant_a"}
+    }
+}
+
+test_manager_class_read_allowed if {
+    authz.allow with input as {
+        "user": {"id": "m1", "tenant_id": "tenant_a", "roles": ["manager"]},
+        "action": "class:read",
+        "resource": {"tenant_id": "tenant_a"}
+    }
+}
+
+test_teacher_class_read_allowed if {
+    authz.allow with input as {
+        "user": {"id": "t1", "tenant_id": "tenant_a", "roles": ["teacher"]},
+        "action": "class:read",
+        "resource": {"tenant_id": "tenant_a"}
+    }
+}
+
+test_parent_class_read_denied if {
+    not authz.allow with input as {
+        "user": {"id": "p1", "tenant_id": "tenant_a", "roles": ["parent"]},
+        "action": "class:read",
+        "resource": {"tenant_id": "tenant_a"}
+    }
+}
+
+test_student_class_read_denied if {
+    not authz.allow with input as {
+        "user": {"id": "s1", "tenant_id": "tenant_a", "roles": ["student"]},
+        "action": "class:read",
+        "resource": {"tenant_id": "tenant_a"}
+    }
+}
+
+test_class_read_cross_tenant_denied if {
+    not authz.allow with input as {
+        "user": {"id": "sa1", "tenant_id": "tenant_a", "roles": ["school_admin"]},
+        "action": "class:read",
+        "resource": {"tenant_id": "tenant_b"}
+    }
+}
+
+# --- user:view (auth/router.py list_users_permissions) ---
+#
+# The old inline check was has_any_role("school_admin","super_admin","admin")
+# OR has_role("user:view"). has_role() falls through to
+# COMPOSITE_ROLE_PERMISSIONS, which already lists "user:view" for manager AND
+# teacher (app/core/permissions_catalog.json) -- so both of those roles could
+# already reach this endpoint before this migration. These tests pin that
+# pre-existing (if broad) behaviour down rather than silently narrowing it.
+
+test_school_admin_user_view_allowed if {
+    authz.allow with input as {
+        "user": {"id": "sa1", "tenant_id": "tenant_a", "roles": ["school_admin"]},
+        "action": "user:view",
+        "resource": {"tenant_id": "tenant_a"}
+    }
+}
+
+test_manager_user_view_allowed if {
+    authz.allow with input as {
+        "user": {"id": "m1", "tenant_id": "tenant_a", "roles": ["manager"]},
+        "action": "user:view",
+        "resource": {"tenant_id": "tenant_a"}
+    }
+}
+
+test_teacher_user_view_allowed if {
+    authz.allow with input as {
+        "user": {"id": "t1", "tenant_id": "tenant_a", "roles": ["teacher"]},
+        "action": "user:view",
+        "resource": {"tenant_id": "tenant_a"}
+    }
+}
+
+test_parent_user_view_denied if {
+    not authz.allow with input as {
+        "user": {"id": "p1", "tenant_id": "tenant_a", "roles": ["parent"]},
+        "action": "user:view",
+        "resource": {"tenant_id": "tenant_a"}
+    }
+}
+
+test_student_user_view_denied if {
+    not authz.allow with input as {
+        "user": {"id": "s1", "tenant_id": "tenant_a", "roles": ["student"]},
+        "action": "user:view",
+        "resource": {"tenant_id": "tenant_a"}
+    }
+}
+
+test_user_view_cross_tenant_denied if {
+    not authz.allow with input as {
+        "user": {"id": "sa1", "tenant_id": "tenant_a", "roles": ["school_admin"]},
+        "action": "user:view",
+        "resource": {"tenant_id": "tenant_b"}
+    }
+}

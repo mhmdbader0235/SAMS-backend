@@ -9,30 +9,21 @@ truncated by the clean_db fixture and would otherwise leak into other tests.
 import asyncpg
 from httpx import AsyncClient
 
-from tests.integration._helpers import register_school_admin
+from tests.integration._helpers import get_super_admin_token, register_school_admin
 
 
-async def _register_super_admin(test_client: AsyncClient, email: str) -> dict:
-    from app.core.config import SUPER_ADMIN_BOOTSTRAP_CODE
-
-    resp = await test_client.post(
-        "/api/v1/auth/register",
-        json={
-            "email": email,
-            "password": "pass1234",
-            "role": "super_admin",
-            "tenant_id": "tenant_a",
-            "invite_code": SUPER_ADMIN_BOOTSTRAP_CODE,
-        },
-    )
-    assert resp.status_code == 200, resp.text
-    return {"Authorization": f"Bearer {resp.json()['access_token']}"}
+async def _register_super_admin(test_client: AsyncClient) -> dict:
+    # Shared helper, not a fresh registration: register_school_admin (called
+    # later in some of these tests) also needs the platform's one super_admin
+    # identity, and a second /register attempt for the same email 400s.
+    token = await get_super_admin_token(test_client)
+    return {"Authorization": f"Bearer {token}"}
 
 
 async def test_super_admin_can_change_currency_on_a_clean_activated_tenant(
     test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
 ):
-    headers = await _register_super_admin(test_client, "sa_currency_ok@school.com")
+    headers = await _register_super_admin(test_client)
     try:
         resp = await test_client.put(
             "/api/v1/school/profile", json={"currency": "USD"}, headers=headers
@@ -46,7 +37,7 @@ async def test_super_admin_can_change_currency_on_a_clean_activated_tenant(
 async def test_currency_change_blocked_once_money_is_recorded(
     test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
 ):
-    sa_headers = await _register_super_admin(test_client, "sa_currency_blocked@school.com")
+    sa_headers = await _register_super_admin(test_client)
     try:
         # Build a minimal level -> class -> event chain with a non-zero
         # ticket price, i.e. real money recorded via the normal API path
@@ -106,7 +97,7 @@ async def test_school_admin_cannot_change_currency_after_activation(
 async def test_invalid_currency_code_rejected(
     test_client: AsyncClient, db_pool: asyncpg.Pool, clean_db
 ):
-    headers = await _register_super_admin(test_client, "sa_currency_invalid@school.com")
+    headers = await _register_super_admin(test_client)
     resp = await test_client.put(
         "/api/v1/school/profile", json={"currency": "XYZ"}, headers=headers
     )

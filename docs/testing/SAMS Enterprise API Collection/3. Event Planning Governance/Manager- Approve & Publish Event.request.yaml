@@ -1,0 +1,16 @@
+$kind: http-request
+name: "Manager: Approve & Publish Event"
+description: Manager approves event proposal and publishes it (status=published).
+url: "{{baseUrl}}/api/v1/events/{{eventId}}/manager-decision"
+method: POST
+headers:
+  Content-Type: application/json
+  Authorization: Bearer {{managerToken}}
+body:
+  type: text
+  content: |-
+    {
+      "decision": "approve",
+      "reason": null
+    }
+order: 6000

@@ -93,16 +93,8 @@ async def create_level(
 
 @router_gated.get("/levels", response_model=list[LevelResponse], summary="List all school levels")
 async def list_levels(
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_permission("level:read")),
 ) -> list[LevelResponse]:
-    if not (
-        current_user.has_any_role("school_admin", "super_admin", "manager", "teacher")
-        or current_user.has_role("level:read")
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail="Forbidden: Students and unauthorized users cannot list school levels",
-        )
     results = await TenantService.get_all_levels(current_user.tenant_id)
     return [LevelResponse(**r) for r in results]
 
@@ -342,31 +334,16 @@ async def create_school_admin(
 
 @router_gated.get("/teachers", response_model=list[TeacherResponse], summary="List all teachers")
 async def list_teachers(
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_permission("teacher:read")),
 ) -> list[TeacherResponse]:
-    if not (
-        current_user.has_any_role("school_admin", "super_admin", "manager", "teacher")
-        or current_user.has_role("teacher:read")
-    ):
-        raise HTTPException(
-            status_code=403,
-            detail="Forbidden: Students and unauthorized users cannot list teachers",
-        )
     results = await TenantService.get_all_teachers(current_user.tenant_id)
     return [TeacherResponse(**r) for r in results]
 
 
 @router_gated.get("/parents", response_model=list[ParentResponse], summary="List all parents")
 async def list_parents(
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_permission("parent:read")),
 ) -> list[ParentResponse]:
-    if not (
-        current_user.has_any_role("school_admin", "super_admin", "manager")
-        or current_user.has_role("parent:read")
-    ):
-        raise HTTPException(
-            status_code=403, detail="Forbidden: Students and unauthorized users cannot list parents"
-        )
     results = await TenantService.get_all_parents(current_user.tenant_id)
     return [ParentResponse(**r) for r in results]
 
@@ -518,13 +495,8 @@ async def list_classes(
 )
 async def get_class(
     class_id: int,
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_permission("class:read")),
 ) -> ClassResponse:
-    if not (
-        current_user.has_any_role("school_admin", "super_admin", "manager", "teacher")
-        or current_user.has_role("class:read")
-    ):
-        raise HTTPException(status_code=403, detail="Forbidden: cannot view this class")
     pool = await get_db_pool(current_user.tenant_id)
     repo = TenantRepository(pool)
     c_info = await repo.get_class_by_id(class_id)
@@ -801,6 +773,11 @@ async def update_enrollment_approval(
             )
     elif current_user.has_role("teacher"):
         teacher_id = parse_id(current_user.id)
+        if teacher_id != parse_id(details["event_created_by"]):
+            raise HTTPException(
+                status_code=403,
+                detail="Only the trip's creator may approve or reject its enrollments",
+            )
         if current_state == "requested_by_student":
             raise HTTPException(
                 status_code=400,

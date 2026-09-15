@@ -48,6 +48,22 @@ services:
     image: apache/apisix:3.8.0-debian
     container_name: doumind-apisix
     restart: always
+    environment:
+      # CURRENTLY UNUSED -- nothing in apisix.yaml consumes this any more. It existed for the
+      # openid-connect plugin, which was rolled back on 2026-09-08 because this app has two
+      # token issuers and no APISIX auth plugin accepts both (see
+      # docs/architecture/adr/0004-apisix-as-defense-in-depth-not-auth-authority.md).
+      # Kept, rather than deleted, only so the "apisix" Keycloak client stays wired if edge
+      # verification is ever revisited -- which requires unifying token issuance first, not a
+      # config change here. The real value comes from the "apisix" client's Credentials tab in
+      # the Keycloak admin console; SAMS-realm.json ships only a placeholder.
+      APISIX_KC_CLIENT_SECRET: ${APISIX_KC_CLIENT_SECRET:-}
+    ports:
+      # Prometheus metrics only (APISIX's proxy port 9180 stays unpublished --
+      # nginx is the sole ingress). Bound to host LOOPBACK because
+      # /apisix/prometheus/metrics is unauthenticated; do not publish it on
+      # 0.0.0.0 or in production -- scrape it from inside the network instead.
+      - "127.0.0.1:9091:9091"
     volumes:
       - ./gateway/apisix/config.yaml:/usr/local/apisix/conf/config.yaml
       - ./gateway/apisix/apisix.yaml:/usr/local/apisix/conf/apisix.yaml

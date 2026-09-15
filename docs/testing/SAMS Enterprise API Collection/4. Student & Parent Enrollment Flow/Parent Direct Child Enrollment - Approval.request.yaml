@@ -1,0 +1,14 @@
+$kind: http-request
+name: Parent Direct Child Enrollment / Approval
+url: "{{baseUrl}}/api/v1/students/enrollments/{{enrollmentId}}/approve"
+method: POST
+headers:
+  Content-Type: application/json
+  Authorization: Bearer {{parentToken}}
+body:
+  type: text
+  content: |-
+    {
+      "state": "approved_by_parent"
+    }
+order: 3000

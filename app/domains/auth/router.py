@@ -14,6 +14,7 @@ from app.core.dependencies import (
     require_tenant_live,
 )
 from app.core.schemas import (
+    ChangePasswordRequest,
     LoginRedeemRequest,
     LoginSelectionRequiredResponse,
     RefreshTokenRequest,
@@ -53,9 +54,18 @@ class CreateInvitationRequest(BaseModel):
     valid_days: int = 7
 
 
-@router.get("/tenants", summary="List available tenant IDs")
-async def list_tenants() -> dict:
-    """Return the list of registered tenant (school) identifiers."""
+@router.get("/tenants", summary="List every tenant on the platform (Super Admin)")
+async def list_tenants(
+    current_user: CurrentUser = Depends(require_permission("tenant:manage")),
+) -> dict:
+    """Return every registered tenant (school) identifier.
+
+    This is the platform-wide list, not "my schools" -- it used to be
+    unauthenticated, which handed any caller a full enumeration of every
+    school on SchoolDesk. Ordinary users (including multi-school members)
+    get their own membership set from GET /me instead; only a super_admin
+    has a legitimate reason to see every tenant that exists.
+    """
     try:
         tenants = await AuthService.list_tenants()
         return {"tenants": [t["tenant_id"] for t in tenants]}
@@ -497,6 +507,32 @@ async def update_profile(
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+@router_gated.put("/me/password", summary="Change the caller's own password")
+async def change_my_password(
+    payload: ChangePasswordRequest,
+    current_user: CurrentUser = Depends(get_current_user),
+) -> dict:
+    """Self-service only: always changes current_user's own account, never
+    another user's — there is no user_id in this request. Ownership is the
+    request shape itself, not a separate check."""
+    try:
+        sso_synced = await AuthService.change_password(
+            user_id=current_user.id,
+            email=current_user.email,
+            role=current_user.role,
+            tenant_id=current_user.tenant_id,
+            current_password=payload.current_password,
+            new_password=payload.new_password,
+        )
+        return {"status": "success", "sso_synced": sso_synced}
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
 @router_gated.get(
     "/parent-profile", response_model=ProfileResponse, summary="Get parent profile by email"
 )
@@ -560,16 +596,8 @@ class UserPermissionsUpdateRequest(BaseModel):
     summary="List all users and permissions (admin only)",
 )
 async def list_users_permissions(
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: CurrentUser = Depends(require_permission("user:view")),
 ) -> list[UserPermissionsResponse]:
-    if not (
-        current_user.has_any_role("school_admin", "super_admin", "admin")
-        or current_user.has_role("user:view")
-    ):
-        raise HTTPException(
-            status_code=403, detail="Only school administrators can access user permissions"
-        )
-
     # current_user.tenant_id is already the security-checked value (only
     # super_admin can influence it via X-Tenant-ID -- see get_current_user) --
     # re-reading the raw header here would let ANY caller silently retarget

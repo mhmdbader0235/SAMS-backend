@@ -1,0 +1,13 @@
+$kind: http-request
+url: "{{baseUrl}}/api/v1/students/levels"
+method: POST
+headers:
+  Content-Type: application/json
+  Authorization: Bearer {{teacherToken}}
+body:
+  type: text
+  content: |-
+    {
+      "name": "Grade 7"
+    }
+order: 2000

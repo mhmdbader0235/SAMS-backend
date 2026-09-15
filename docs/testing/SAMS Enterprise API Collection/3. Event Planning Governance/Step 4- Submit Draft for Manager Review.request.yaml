@@ -1,0 +1,8 @@
+$kind: http-request
+name: "Step 4: Submit Draft for Manager Review"
+description: Transitions event from status=draft to status=proposed.
+url: "{{baseUrl}}/api/v1/events/{{eventId}}/submit"
+method: POST
+headers:
+  Authorization: Bearer {{teacherToken}}
+order: 4000

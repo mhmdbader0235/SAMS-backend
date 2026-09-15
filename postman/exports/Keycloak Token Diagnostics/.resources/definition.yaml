@@ -1,0 +1,17 @@
+$kind: collection
+description: |-
+  Portable Postman version of back/check_token.py. Gets a real Keycloak access token and checks its iss/aud/kid against this backend's configured KEYCLOAK_ISSUER / KEYCLOAK_AUDIENCE / KEYCLOAK_JWKS_URL (see back/app/core/keycloak_jwt.py). Read-only diagnostic only — decodes without verifying the signature, purely to inspect claims. Run request 1 then request 2, in order.
+
+  Before running: set `username` / `password` to a real, already-registered user's Keycloak credentials (collection variables below, or override them in a Postman Environment so you don't have to edit this file with real creds). Set `expected_issuer` / `expected_audience` to match this backend's .env (KEYCLOAK_ISSUER / KEYCLOAK_AUDIENCE) if you've changed them from the defaults.
+variables:
+  keycloak_url: http://localhost:8000
+  realm: SAMS
+  client_id: frontend
+  username: ""
+  password: ""
+  expected_issuer: http://localhost:8000/realms/SAMS
+  expected_audience: account,apisix,frontend
+  access_token: ""
+  token_kid: ""
+  token_iss_ok: ""
+  token_aud_ok: ""

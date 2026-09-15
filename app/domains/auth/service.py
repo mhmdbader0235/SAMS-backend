@@ -29,6 +29,7 @@ from app.core.database import get_control_plane_pool, get_db_pool
 from app.core.keycloak_admin import (
     create_keycloak_organization,
     sync_user_to_keycloak,
+    update_user_password_in_keycloak,
 )
 from app.domains.tenant.control_plane_repository import ControlPlaneRepository
 from app.domains.tenant.tenant_repository import TenantRepository
@@ -396,6 +397,17 @@ class AuthService:
         password_hash = await AuthService.hash_password_async(password)
 
         if role == "super_admin":
+            from app.core.config import SUPER_ADMIN_ALLOWED_EMAIL
+
+            # The platform has exactly one super_admin identity. This check runs
+            # unconditionally -- ahead of, and independent from, the bootstrap-code
+            # and invitation checks below -- so neither a leaked/shared bootstrap
+            # code nor a super_admin-role invitation can mint a second one.
+            if email.strip().lower() != SUPER_ADMIN_ALLOWED_EMAIL.strip().lower():
+                raise PermissionError(
+                    "super_admin registration is restricted to the platform's single "
+                    "designated operator account."
+                )
             if not invitation:
                 from app.core.config import SUPER_ADMIN_BOOTSTRAP_CODE
 
@@ -971,6 +983,99 @@ class AuthService:
         return {"access_token": access_token, "refresh_token": refresh_token}
 
     @staticmethod
+    async def change_password(
+        user_id,
+        email: str,
+        role: str,
+        tenant_id: str | None,
+        current_password: str,
+        new_password: str,
+    ) -> bool:
+        """Self-service password change: verify current_password against the
+        SAME record login_user reads for this role, then overwrite it there.
+
+        There are three disjoint password stores depending on role (mirroring
+        login_user's own branching): public.super_admins, the global
+        public.parents row, and each tenant's own users table. Writing to the
+        wrong one would let the change "succeed" while login keeps checking
+        the untouched hash -- so which store to hit is dictated by role, not
+        by which schema happens to be on the connection's search_path.
+
+        Returns whether the Keycloak SSO credential was also updated, so the
+        caller can tell an account with no Keycloak record (or a Keycloak
+        that's temporarily unreachable) from a fully-synced one -- the local
+        change always succeeds or raises before this matters, this return
+        value only distinguishes "SSO login has the new password too" from
+        "SSO login still has the old one, try again shortly."
+        """
+        if new_password == current_password:
+            raise ValueError("New password must be different from the current password")
+
+        managed_placeholders = {"managed", "keycloak_managed"}
+        sso_managed_message = (
+            "This account's password is managed by single sign-on and cannot " "be changed here."
+        )
+
+        cp_pool = await get_control_plane_pool()
+        cp_repo = ControlPlaneRepository(cp_pool)
+
+        if role == "super_admin":
+            record = await cp_repo.get_super_admin_by_email(email)
+            if not record:
+                raise ValueError("Account not found")
+            stored_hash = record["password_hash"]
+            if stored_hash in managed_placeholders:
+                raise PermissionError(sso_managed_message)
+            if not await AuthService.verify_password_async(current_password, stored_hash):
+                raise ValueError("Current password is incorrect")
+            await cp_repo.update_super_admin_password(
+                record["id"], await AuthService.hash_password_async(new_password)
+            )
+            return update_user_password_in_keycloak(email, new_password)
+
+        if role == "parent":
+            record = await cp_repo.get_parent_by_email(email)
+            if not record:
+                raise ValueError("Account not found")
+            stored_hash = record["password_hash"]
+            if stored_hash in managed_placeholders:
+                raise PermissionError(sso_managed_message)
+            if not await AuthService.verify_password_async(current_password, stored_hash):
+                raise ValueError("Current password is incorrect")
+            new_hash = await AuthService.hash_password_async(new_password)
+            await cp_repo.update_parent_password(record["id"], new_hash)
+            # Best-effort: keep the tenant-local mirror row (created at first
+            # login/registration into this school) from drifting, even though
+            # login_user's parent branch never reads it for authentication.
+            if tenant_id:
+                tenant_pool = await get_db_pool(tenant_id)
+                user_repo = UserRepository(tenant_pool)
+                local_user = await user_repo.get_user_by_email(email)
+                if local_user:
+                    await user_repo.update_user_password_hash(local_user["id"], new_hash)
+            return update_user_password_in_keycloak(email, new_password)
+
+        # Every other tenant-scoped role (school_admin, teacher, student,
+        # manager, event_teacher, pending) authenticates against the tenant's
+        # own users table.
+        if not tenant_id:
+            raise ValueError("Account not found")
+        tenant_pool = await get_db_pool(tenant_id)
+        user_repo = UserRepository(tenant_pool)
+        user = await user_repo.get_user_by_email(email)
+        if not user:
+            raise ValueError("Account not found")
+        stored_hash = user["password_hash"]
+        if stored_hash in managed_placeholders:
+            raise PermissionError(sso_managed_message)
+        if not await AuthService.verify_password_async(current_password, stored_hash):
+            raise ValueError("Current password is incorrect")
+        await user_repo.update_user_password_hash(
+            user["id"], await AuthService.hash_password_async(new_password)
+        )
+        return update_user_password_in_keycloak(email, new_password)
+
+    @staticmethod
     async def list_tenants() -> list[dict]:
         """Fetch list of all tenants from control plane DB."""
         cp_pool = await get_control_plane_pool()
@@ -1142,6 +1247,17 @@ class AuthService:
             )
             if "super_admin" not in caller_roles:
                 raise PermissionError("Only a super_admin can grant the super_admin role")
+
+            from app.core.config import SUPER_ADMIN_ALLOWED_EMAIL
+
+            # Same single-identity invariant as AuthService.register_user: an
+            # existing super_admin granting the role through the Permission
+            # Matrix editor must not be able to mint a second one either.
+            if email.strip().lower() != SUPER_ADMIN_ALLOWED_EMAIL.strip().lower():
+                raise PermissionError(
+                    "super_admin is restricted to the platform's single designated "
+                    "operator account and cannot be granted to another email."
+                )
 
         # 1. Update the user in the tenant DB
         db_pool = await get_db_pool(tenant_id)
