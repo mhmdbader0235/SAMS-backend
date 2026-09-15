@@ -5,8 +5,15 @@ schema" half of schema-per-tenant migrations that plain `alembic upgrade`
 can't do on its own (it has no concept of "for each tenant").
 
 Usage (from back/):
-    python -m alembic.apply_all_tenants
-    python -m alembic.apply_all_tenants --only tenant_a tenant_b
+    python alembic/apply_all_tenants.py
+    python alembic/apply_all_tenants.py --only tenant_a tenant_b
+
+Run as a script by path, NOT as `python -m alembic.apply_all_tenants` --
+alembic is a real installed pip package (see requirements.txt), and a regular
+installed package always wins name resolution over this same-named local
+directory (which has no __init__.py), so `-m alembic.apply_all_tenants`
+raises "ModuleNotFoundError: No module named 'alembic.apply_all_tenants'"
+instead of running this file. Verified 2026-09-15 against back/.venv.
 
 Tenant IDs come from the control-plane `tenants` table — the same registry
 app/core/database.py's get_pool() uses to decide what should exist. A tenant

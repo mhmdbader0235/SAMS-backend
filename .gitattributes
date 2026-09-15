@@ -1,0 +1,4 @@
+# entrypoint.sh runs as the Docker CMD inside a Linux container -- CRLF line
+# endings would corrupt its #!/bin/sh shebang and fail the container on
+# startup. Force LF regardless of a Windows checkout's core.autocrlf setting.
+*.sh text eol=lf

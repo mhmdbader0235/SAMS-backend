@@ -93,7 +93,7 @@ routes:
         rejected_msg: "Missing or malformed Authorization header."
     upstream:
       nodes:
-        "host.docker.internal:8001": 1
+        "backend:8001": 1
       type: roundrobin
   -
     # GET /api/v1/auth/invitations/{code} is the FOURTH public endpoint under
@@ -114,7 +114,7 @@ routes:
         key: "remote_addr"
     upstream:
       nodes:
-        "host.docker.internal:8001": 1
+        "backend:8001": 1
       type: roundrobin
   -
     # Stricter bucket for the unauthenticated auth endpoints -- credential
@@ -145,7 +145,7 @@ routes:
         key: "remote_addr"
     upstream:
       nodes:
-        "host.docker.internal:8001": 1
+        "backend:8001": 1
       type: roundrobin
   -
     # A CORS preflight NEVER carries an Authorization header, and the frontend is
@@ -157,7 +157,7 @@ routes:
     priority: 5
     upstream:
       nodes:
-        "host.docker.internal:8001": 1
+        "backend:8001": 1
       type: roundrobin
   -
     # Defense-in-depth, NOT authorization: APISIX cannot verify a signature it
@@ -188,6 +188,6 @@ routes:
         rejected_msg: "Missing or malformed Authorization header."
     upstream:
       nodes:
-        "host.docker.internal:8001": 1
+        "backend:8001": 1
       type: roundrobin
 #END

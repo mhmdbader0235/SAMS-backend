@@ -83,7 +83,19 @@ TENANT_POOL_MAX: int = int(os.getenv("TENANT_POOL_MAX", "5"))
 TENANT_POOL_ACQUIRE_TIMEOUT: float = float(os.getenv("TENANT_POOL_ACQUIRE_TIMEOUT", "5.0"))
 
 # ─── OPA AuthZ ───────────────────────────────────────────────────────────────
-# The backend always runs on the host (see run.py / docker-compose.yml — there
-# is no FastAPI service inside the compose network), so this must be a
-# host-reachable address like KEYCLOAK_URL, not the in-Docker "opa" hostname.
+# This default (host-reachable localhost) is for running the backend bare on
+# the host via `python run.py`, per the "Working rhythm" section of
+# CLAUDE.md — still a supported dev path. When the backend runs as the
+# `backend` service in docker-compose.yml instead, that file sets OPA_URL to
+# the in-Docker "opa" hostname explicitly, overriding this default.
 OPA_URL: str = os.getenv("OPA_URL", "http://localhost:8181/v1/data/school/authz/allow")
+
+# ─── CORS ────────────────────────────────────────────────────────────────────
+# Extra browser origins allowed on top of the fixed localhost/127.0.0.1 dev
+# ports app/main.py's CORSMiddleware always allows. Comma-separated, e.g.
+# "https://sams.example.com,http://203.0.113.10:9080". Empty by default —
+# set this once the real production frontend URL is known, otherwise every
+# browser request from that origin is CORS-blocked before it reaches a route.
+CORS_EXTRA_ORIGINS: list[str] = [
+    origin.strip() for origin in os.getenv("CORS_EXTRA_ORIGINS", "").split(",") if origin.strip()
+]
